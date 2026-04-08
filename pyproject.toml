@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "browser-cli"
+version = "0.1.0"
+description = "CLI-first browser reader for rendered HTML and page snapshots"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "playwright>=1.52,<2",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+]
+
+[project.scripts]
+browser-cli = "browser_cli.cli.main:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+  "integration: tests that use a real browser runtime",
+  "smoke: tests or checks intended for manual smoke validation",
+]
+

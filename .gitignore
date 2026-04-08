@@ -1,0 +1,15 @@
+.pytest_cache/
+.ruff_cache/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.coverage
+coverage.xml
+dist/
+build/
+*.egg-info/
+playwright-report/
+test-results/
+
