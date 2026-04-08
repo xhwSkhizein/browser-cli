@@ -22,8 +22,8 @@ The following decisions are currently fixed unless explicitly revised in a later
 - Default output is rendered DOM HTML.
 - Alternate output is `--snapshot`.
 - The only extra `v1` read flag is `--scroll-bottom`.
-- The tool must reuse an existing local Chrome profile.
-- The normal Chrome instance is expected to be closed before a run.
+- The tool should prefer the existing local Chrome profile, but may fall back to `~/.browser-cli/default-profile`.
+- If the primary Chrome profile is busy or unavailable, fallback is acceptable; if both primary and fallback are unavailable, fail explicitly.
 - `v1` targets stable Google Chrome first and should not silently swap browser families.
 - `v1` must support macOS and Linux.
 - Future workflow support should use a new Python-first DSL, not `opencli` YAML compatibility.
@@ -46,7 +46,7 @@ Keep these boundaries intact. Do not push browser internals into the CLI layer o
 
 If a feature request makes `read` look like a mini scripting language, that feature likely belongs in the future workflow layer instead.
 
-Prefer explicit failure over invisible fallback. A successful run should mean the tool truly used the intended profile and produced the intended output mode.
+Prefer explicit failure over invisible browser-family fallback. A successful run should mean the tool used either the preferred Chrome profile or the documented Browser CLI fallback profile and produced the intended output mode.
 
 Prefer keeping default behavior inside the command contract over adding user-tunable flags. If a behavior is needed for nearly every read, make it the default. If it is rare or site-specific, it likely belongs in the future workflow layer.
 

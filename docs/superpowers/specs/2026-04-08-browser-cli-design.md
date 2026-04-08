@@ -6,7 +6,7 @@ Repo: `/Users/hongv/workspace/m-projects/browser-cli`
 
 ## Summary
 
-Browser CLI is a new `CLI-first`, `Python-first` browser automation project for turning websites into reliable command-line readable surfaces and, later, scriptable workflows. The first release focuses on a narrow, opinionated `read` command that reuses an existing local Chrome profile, applies Playwright-based browser control with stealth protections, and returns either rendered DOM HTML or a bridgic-style accessibility snapshot.
+Browser CLI is a new `CLI-first`, `Python-first` browser automation project for turning websites into reliable command-line readable surfaces and, later, scriptable workflows. The first release focuses on a narrow, opinionated `read` command that prefers an existing local Chrome profile, falls back to a Browser CLI-managed default profile when needed, applies Playwright-based browser control with stealth protections, and returns either rendered DOM HTML or a bridgic-style accessibility snapshot.
 
 This project does not depend on `opencli` or the published `bridgic-browser` package. Instead, it will internalize selected browser-core techniques from `bridgic-browser` and explicitly track provenance and license information in-repo. `opencli` is treated as an architectural reference for future workflow and explore-to-script concepts, not as a compatibility target.
 
@@ -24,7 +24,7 @@ The user goal is not to merge those repositories directly. The goal is to create
 - Build a new repository instead of extending `opencli` or `bridgic-browser` directly.
 - Make the primary interface a CLI because it is easier to test and easier for agents to understand.
 - Keep the implementation Python-first and Playwright-first.
-- Reuse an existing local Chrome user profile instead of requiring a separate browser session.
+- Prefer reusing an existing local Chrome user profile, with fallback to a Browser CLI-managed default profile when the primary profile is unavailable.
 - Return rendered DOM HTML by default.
 - Support `--snapshot` output using a bridgic-style tree representation.
 - Support macOS and Linux from the first version.
@@ -37,7 +37,7 @@ The user goal is not to merge those repositories directly. The goal is to create
 - No daemon-first or session-first interaction model.
 - No generalized click chains, multi-step browser scripting, or mini-DSL embedded into `read`.
 - No `explore`, `record`, or `synthesize` command in `v1`.
-- No silent fallback to temporary or unauthenticated browser profiles.
+- No silent fallback to a different browser family or an undocumented profile path.
 
 ## Chosen Direction
 
@@ -84,8 +84,8 @@ browser-cli read <url> --scroll-bottom
 
 Without extra flags, `read`:
 
-1. resolves the configured browser/profile environment
-2. launches a controlled browser using the existing local Chrome profile
+1. resolves the browser/profile environment, preferring the local Chrome profile and falling back to `~/.browser-cli/default-profile` when needed
+2. launches a controlled browser using the selected profile
 3. navigates to the URL
 4. waits for the initial page render to stabilize
 5. captures the rendered DOM HTML
@@ -227,9 +227,11 @@ third_party/
 
 ### Profile Reuse Model
 
-`v1` reuses an existing local Chrome profile by launching a controlled browser process against that profile's user data directory.
+`v1` prefers an existing local Chrome profile by launching a controlled browser process against that profile's user data directory.
 
-The user must close the normal Chrome instance before running `read`. The tool does not attempt to piggyback on an actively running Chrome process.
+If the primary Chrome profile is unavailable, missing, or locked, the tool falls back to a Browser CLI-managed default profile rooted at `~/.browser-cli/default-profile`.
+
+The tool does not attempt to piggyback on an actively running Chrome process.
 
 ### Supported Platforms
 
@@ -242,7 +244,7 @@ The profile-resolution and browser-launch logic should be explicitly abstracted 
 
 ### Browser Target
 
-`v1` targets the locally installed stable Google Chrome layout first because the product requirement is reuse of an existing real user profile.
+`v1` targets the locally installed stable Google Chrome layout first because the product requirement is reuse of an existing real user profile when available.
 
 The launch path should:
 
@@ -254,13 +256,14 @@ It should not silently substitute another browser family in `v1`.
 
 ### Failure Policy
 
-If the desired profile cannot be used, Browser CLI fails explicitly. It does not silently fall back to:
+If the primary Chrome profile cannot be used, Browser CLI falls back to its managed default profile. It does not silently fall back to:
 
-- a temporary profile
-- a fresh logged-out browser context
 - a different installed browser
+- an undocumented profile path
 
-This preserves the core guarantee that a successful run truly reflects the user's existing authenticated state.
+If both the primary profile and the managed fallback profile are unavailable, the command fails explicitly.
+
+This preserves a narrower but practical guarantee: a successful run uses either the preferred real Chrome profile or the documented Browser CLI fallback profile.
 
 ## Output Contract
 
@@ -284,7 +287,7 @@ The CLI should use stable exit categories that distinguish at least:
 
 - argument and usage errors
 - browser executable or launch errors
-- profile discovery or profile lock errors
+- profile discovery or profile lock errors after fallback has been exhausted
 - page navigation or timeout errors
 - successful command with empty resulting content
 
@@ -383,7 +386,7 @@ The following decisions are fixed by this design:
 - Default output: rendered DOM HTML
 - Alternate output: `--snapshot`
 - Extra `v1` flag: `--scroll-bottom`
-- Profile model: reuse existing Chrome user data, requiring normal Chrome to be closed
+- Profile model: prefer existing Chrome user data, with fallback to `~/.browser-cli/default-profile`
 - Platforms in `v1`: macOS and Linux
 - Workflow DSL: future Python-first redesign, not `opencli` compatibility
 - Third-party reuse: internalize selected browser-core implementation with explicit provenance and license tracking

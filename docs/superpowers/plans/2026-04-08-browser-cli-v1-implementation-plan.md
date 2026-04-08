@@ -20,8 +20,8 @@ browser-cli read <url> --scroll-bottom
 
 `v1` must:
 
-- reuse an existing local stable Google Chrome profile
-- require the user's normal Chrome instance to be closed
+- prefer an existing local stable Google Chrome profile
+- fall back to `~/.browser-cli/default-profile` when the primary profile is unavailable
 - support macOS and Linux
 - output rendered DOM HTML by default
 - output a bridgic-style snapshot with `--snapshot`
@@ -36,7 +36,7 @@ The following are explicitly excluded from this implementation plan:
 - daemon-first command model
 - direct compatibility with `opencli` YAML
 - arbitrary action chains or custom waits in `read`
-- fallback to temporary browser profiles
+- fallback to undocumented browser profiles or alternate browser families
 
 ## Delivery Strategy
 
@@ -122,6 +122,7 @@ docs/
 - browser executable discovery for stable Google Chrome
 - user data directory discovery on macOS and Linux
 - default profile selection (`Default`)
+- fallback profile root selection under `~/.browser-cli/default-profile`
 - explicit lock/conflict detection
 - structured profile errors mapped to CLI exit codes
 
@@ -138,6 +139,7 @@ docs/
    `v1` behavior:
    - default to `Default`
    - no user-facing profile flag is required unless implementation proves it is necessary later
+   - if the primary profile is unavailable, fall back to `~/.browser-cli/default-profile`
 
 4. Implement conflict detection for active profile locks or running Chrome ownership conflicts.
 
@@ -153,8 +155,8 @@ docs/
 
 - macOS and Linux path resolution are test-covered.
 - Missing Chrome produces the browser-unavailable exit category.
-- Locked or missing profile produces the profile-unavailable exit category.
-- No fallback path launches a fresh temporary profile.
+- Locked or missing primary profile uses the managed fallback profile.
+- If both primary and fallback profiles are unavailable, return the profile-unavailable exit category.
 
 ## Milestone 3: Internal Browser Core and Provenance Tracking
 

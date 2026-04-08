@@ -11,6 +11,7 @@ from browser_cli.errors import BrowserUnavailableError, ProfileUnavailableError
 
 DEFAULT_PROFILE_DIRECTORY = "Default"
 LOCK_FILES = ("SingletonLock", "SingletonCookie", "SingletonSocket")
+DEFAULT_FALLBACK_ROOT = Path(".browser-cli") / "default-profile"
 
 
 @dataclass(slots=True, frozen=True)
@@ -18,10 +19,34 @@ class ChromeEnvironment:
     executable_path: Path
     user_data_dir: Path
     profile_directory: str = DEFAULT_PROFILE_DIRECTORY
+    source: str = "chrome"
+    fallback_reason: str | None = None
 
 
-def discover_chrome_environment(profile_directory: str = DEFAULT_PROFILE_DIRECTORY) -> ChromeEnvironment:
+def discover_chrome_environment(
+    profile_directory: str = DEFAULT_PROFILE_DIRECTORY,
+    *,
+    allow_default_fallback: bool = True,
+    fallback_home: Path | None = None,
+) -> ChromeEnvironment:
     executable_path = discover_chrome_executable()
+    try:
+        return _discover_primary_environment(executable_path, profile_directory)
+    except ProfileUnavailableError as exc:
+        if not allow_default_fallback:
+            raise
+        return _discover_fallback_environment(
+            executable_path,
+            profile_directory,
+            fallback_home=fallback_home,
+            fallback_reason=str(exc),
+        )
+
+
+def _discover_primary_environment(
+    executable_path: Path,
+    profile_directory: str,
+) -> ChromeEnvironment:
     user_data_dir = discover_user_data_dir()
     profile_path = user_data_dir / profile_directory
 
@@ -43,6 +68,36 @@ def discover_chrome_environment(profile_directory: str = DEFAULT_PROFILE_DIRECTO
         executable_path=executable_path,
         user_data_dir=user_data_dir,
         profile_directory=profile_directory,
+    )
+
+
+def _discover_fallback_environment(
+    executable_path: Path,
+    profile_directory: str,
+    *,
+    fallback_home: Path | None,
+    fallback_reason: str,
+) -> ChromeEnvironment:
+    user_data_dir = discover_default_profile_dir(home=fallback_home)
+    profile_path = user_data_dir / profile_directory
+    user_data_dir.mkdir(parents=True, exist_ok=True)
+    profile_path.mkdir(parents=True, exist_ok=True)
+
+    lock_files = [str(user_data_dir / name) for name in LOCK_FILES if (user_data_dir / name).exists()]
+    if lock_files:
+        joined = ", ".join(lock_files)
+        raise ProfileUnavailableError(
+            "Primary Chrome profile is unavailable "
+            f"({fallback_reason}) and fallback profile is in use. "
+            f"Lock files: {joined}"
+        )
+
+    return ChromeEnvironment(
+        executable_path=executable_path,
+        user_data_dir=user_data_dir,
+        profile_directory=profile_directory,
+        source="fallback",
+        fallback_reason=fallback_reason,
     )
 
 
@@ -87,3 +142,7 @@ def discover_user_data_dir(platform: str | None = None, home: Path | None = None
         return home_dir / ".config" / "google-chrome"
     raise ProfileUnavailableError(f"Unsupported platform for profile discovery: {resolved_platform}")
 
+
+def discover_default_profile_dir(home: Path | None = None) -> Path:
+    home_dir = home or Path.home()
+    return home_dir / DEFAULT_FALLBACK_ROOT

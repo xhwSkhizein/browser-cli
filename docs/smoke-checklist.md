@@ -5,8 +5,8 @@ Use this checklist before calling `v1` done on a real workstation.
 ## Environment
 
 - Stable Google Chrome is installed.
-- Regular Chrome is fully closed.
 - The target profile exists under the Chrome user data directory.
+- `~/.browser-cli/default-profile` is available as the fallback profile root.
 
 ## Basic Checks
 
@@ -24,7 +24,8 @@ Use this checklist before calling `v1` done on a real workstation.
 
 ## Failure Checks
 
-- Start normal Chrome and keep it open.
+- Start normal Chrome and keep it open so the primary profile is locked.
 - Run `browser-cli read https://example.com`.
-- Confirm the command fails with a profile-unavailable error rather than silently using a new profile.
-
+- Confirm the command succeeds with a fallback-profile notice on `stderr`.
+- Create a lock under `~/.browser-cli/default-profile`.
+- Confirm the command now fails with a profile-unavailable error.

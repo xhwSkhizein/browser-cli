@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 from argparse import Namespace
 
 from browser_cli.outputs.render import render_output
@@ -23,4 +24,12 @@ def run_read_command(args: Namespace) -> str:
     )
     runner = ReadRunner()
     result = asyncio.run(runner.run(request))
+    if result.used_fallback_profile and result.fallback_profile_dir:
+        message = (
+            "Info: primary Chrome profile unavailable; using fallback profile at "
+            f"{result.fallback_profile_dir}"
+        )
+        if result.fallback_reason:
+            message += f". Reason: {result.fallback_reason}"
+        sys.stderr.write(message + "\n")
     return render_output(result.body)

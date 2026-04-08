@@ -20,6 +20,9 @@ class ReadRequest:
 @dataclass(slots=True)
 class ReadResult:
     body: str
+    used_fallback_profile: bool = False
+    fallback_profile_dir: str | None = None
+    fallback_reason: str | None = None
 
 
 class ReadRunner:
@@ -49,5 +52,10 @@ class ReadRunner:
 
         if not body.strip():
             raise EmptyContentError()
-        return ReadResult(body=body)
-
+        used_fallback = getattr(chrome_environment, "source", "chrome") == "fallback"
+        return ReadResult(
+            body=body,
+            used_fallback_profile=used_fallback,
+            fallback_profile_dir=str(chrome_environment.user_data_dir) if used_fallback else None,
+            fallback_reason=getattr(chrome_environment, "fallback_reason", None),
+        )
