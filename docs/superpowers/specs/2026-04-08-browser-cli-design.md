@@ -1,12 +1,12 @@
-# SiteCLI Design
+# Browser CLI Design
 
 Date: 2026-04-08
 Status: Approved for planning
-Repo: `/Users/hongv/workspace/m-projects/sitecli`
+Repo: `/Users/hongv/workspace/m-projects/browser-cli`
 
 ## Summary
 
-SiteCLI is a new `CLI-first`, `Python-first` browser automation project for turning websites into reliable command-line readable surfaces and, later, scriptable workflows. The first release focuses on a narrow, opinionated `read` command that reuses an existing local Chrome profile, applies Playwright-based browser control with stealth protections, and returns either rendered DOM HTML or a bridgic-style accessibility snapshot.
+Browser CLI is a new `CLI-first`, `Python-first` browser automation project for turning websites into reliable command-line readable surfaces and, later, scriptable workflows. The first release focuses on a narrow, opinionated `read` command that reuses an existing local Chrome profile, applies Playwright-based browser control with stealth protections, and returns either rendered DOM HTML or a bridgic-style accessibility snapshot.
 
 This project does not depend on `opencli` or the published `bridgic-browser` package. Instead, it will internalize selected browser-core techniques from `bridgic-browser` and explicitly track provenance and license information in-repo. `opencli` is treated as an architectural reference for future workflow and explore-to-script concepts, not as a compatibility target.
 
@@ -61,9 +61,9 @@ The product shape is:
 This keeps the first feature simple for both humans and agents:
 
 ```bash
-sitecli read <url>
-sitecli read <url> --snapshot
-sitecli read <url> --scroll-bottom
+browser-cli read <url>
+browser-cli read <url> --snapshot
+browser-cli read <url> --scroll-bottom
 ```
 
 ## v1 Command Contract
@@ -75,9 +75,9 @@ sitecli read <url> --scroll-bottom
 `v1` supports:
 
 ```bash
-sitecli read <url>
-sitecli read <url> --snapshot
-sitecli read <url> --scroll-bottom
+browser-cli read <url>
+browser-cli read <url> --snapshot
+browser-cli read <url> --scroll-bottom
 ```
 
 ### Default Behavior
@@ -118,7 +118,7 @@ The system is split into stable module boundaries from day one.
 
 ### 1. CLI Surface
 
-`sitecli.cli`
+`browser_cli.cli`
 
 Responsibilities:
 
@@ -131,7 +131,7 @@ This layer contains no browser logic.
 
 ### 2. Command Layer
 
-`sitecli.commands.read`
+`browser_cli.commands.read`
 
 Responsibilities:
 
@@ -144,7 +144,7 @@ This layer performs orchestration only.
 
 ### 3. Read Runner
 
-`sitecli.runtime.read_runner`
+`browser_cli.runtime.read_runner`
 
 Responsibilities:
 
@@ -160,7 +160,7 @@ This is the main `v1` workflow engine, but it remains single-purpose.
 
 ### 4. Browser Core
 
-`sitecli.browser`
+`browser_cli.browser`
 
 Responsibilities:
 
@@ -175,7 +175,7 @@ This layer is where selected `bridgic-browser` ideas or code may be internalized
 
 ### 5. Profile Resolution
 
-`sitecli.profiles`
+`browser_cli.profiles`
 
 Responsibilities:
 
@@ -189,7 +189,7 @@ This is a dedicated module because profile handling is a core product requiremen
 
 ### 6. Output Rendering
 
-`sitecli.outputs`
+`browser_cli.outputs`
 
 Responsibilities:
 
@@ -199,7 +199,7 @@ Responsibilities:
 
 ### 7. Reserved Future Layer
 
-`sitecli.workflow`
+`browser_cli.workflow`
 
 This namespace is reserved for `v2` and later. It is not implemented in `v1`, but the package boundary exists so the browser core and read runner do not need to be restructured later.
 
@@ -209,13 +209,13 @@ The repository layout should stay minimal:
 
 ```text
 src/
-  sitecli/cli/
-  sitecli/commands/
-  sitecli/runtime/
-  sitecli/browser/
-  sitecli/profiles/
-  sitecli/outputs/
-  sitecli/workflow/
+  browser_cli/cli/
+  browser_cli/commands/
+  browser_cli/runtime/
+  browser_cli/browser/
+  browser_cli/profiles/
+  browser_cli/outputs/
+  browser_cli/workflow/
 tests/
 docs/
 third_party/
@@ -254,7 +254,7 @@ It should not silently substitute another browser family in `v1`.
 
 ### Failure Policy
 
-If the desired profile cannot be used, SiteCLI fails explicitly. It does not silently fall back to:
+If the desired profile cannot be used, Browser CLI fails explicitly. It does not silently fall back to:
 
 - a temporary profile
 - a fresh logged-out browser context
@@ -339,7 +339,7 @@ These tests should remain outside the main CI critical path because they are inh
 
 ### v2: Workflow Execution
 
-After `read` is stable, SiteCLI should add a new Python-first workflow layer. This is not `opencli` YAML compatibility. It is a new DSL and runtime shaped around the internal browser core.
+After `read` is stable, Browser CLI should add a new Python-first workflow layer. This is not `opencli` YAML compatibility. It is a new DSL and runtime shaped around the internal browser core.
 
 The workflow layer should own:
 
@@ -350,13 +350,13 @@ The workflow layer should own:
 
 ### v3: Explore to Workflow
 
-After workflow execution exists, SiteCLI should add exploration and synthesis tooling inspired by `opencli`:
+After workflow execution exists, Browser CLI should add exploration and synthesis tooling inspired by `opencli`:
 
 - guided exploration
 - action recording or semi-structured traces
 - conversion into durable workflow definitions
 
-That later system should build on top of the `sitecli.browser` core and the `sitecli.workflow` runtime instead of bypassing them.
+That later system should build on top of the `browser_cli.browser` core and the `browser_cli.workflow` runtime instead of bypassing them.
 
 ## Provenance and Licensing
 
@@ -375,7 +375,7 @@ No code will be copied from `opencli` or `bridgic-browser` during the design pha
 The following decisions are fixed by this design:
 
 - New repo: yes
-- Working repo name: `sitecli`
+- Working repo name: `browser-cli`
 - CLI-first: yes
 - Python-first: yes
 - `v1` focus: universal reading

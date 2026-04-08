@@ -1,8 +1,8 @@
-# SiteCLI v1 Implementation Plan
+# Browser CLI v1 Implementation Plan
 
 Date: 2026-04-08
 Status: Ready for implementation
-Related spec: `/Users/hongv/workspace/m-projects/sitecli/docs/superpowers/specs/2026-04-08-sitecli-design.md`
+Related spec: `/Users/hongv/workspace/m-projects/browser-cli/docs/superpowers/specs/2026-04-08-browser-cli-design.md`
 
 ## Planning Note
 
@@ -10,12 +10,12 @@ The expected `writing-plans` skill was not available in the current environment.
 
 ## Objective
 
-Build `v1` of SiteCLI as a `CLI-first`, `Python-first`, one-shot browser reader with the following supported interface:
+Build `v1` of Browser CLI as a `CLI-first`, `Python-first`, one-shot browser reader with the following supported interface:
 
 ```bash
-sitecli read <url>
-sitecli read <url> --snapshot
-sitecli read <url> --scroll-bottom
+browser-cli read <url>
+browser-cli read <url> --snapshot
+browser-cli read <url> --scroll-bottom
 ```
 
 `v1` must:
@@ -56,7 +56,7 @@ The implementation order is important. Browser-core porting should not start bef
 Implement the spec's logical layers as concrete Python packages under a single installable package root:
 
 ```text
-src/sitecli/
+src/browser_cli/
   cli/
   commands/
   runtime/
@@ -80,7 +80,7 @@ docs/
 
 - Python package scaffolding
 - packaging metadata and console entrypoint
-- minimal `sitecli read` command shell
+- minimal `browser-cli read` command shell
 - shared exit-code constants
 - top-level test runner configuration
 
@@ -92,17 +92,17 @@ docs/
    - `.gitignore`
    - optional formatter/linter config if chosen
 
-2. Create package skeleton under `src/sitecli/`.
+2. Create package skeleton under `src/browser_cli/`.
    Expected directories:
-   - `src/sitecli/cli/`
-   - `src/sitecli/commands/`
-   - `src/sitecli/runtime/`
-   - `src/sitecli/browser/`
-   - `src/sitecli/profiles/`
-   - `src/sitecli/outputs/`
-   - `src/sitecli/workflow/`
+   - `src/browser_cli/cli/`
+   - `src/browser_cli/commands/`
+   - `src/browser_cli/runtime/`
+   - `src/browser_cli/browser/`
+   - `src/browser_cli/profiles/`
+   - `src/browser_cli/outputs/`
+   - `src/browser_cli/workflow/`
 
-3. Add a console entrypoint for `sitecli`.
+3. Add a console entrypoint for `browser-cli`.
 
 4. Implement a placeholder `read` command path that validates arguments and returns a not-yet-implemented runtime error while preserving the intended command shape.
 
@@ -110,8 +110,8 @@ docs/
 
 ### Acceptance Criteria
 
-- `sitecli --help` works.
-- `sitecli read --help` shows the intended contract.
+- `browser-cli --help` works.
+- `browser-cli read --help` shows the intended contract.
 - The package installs in editable mode.
 - Exit code constants are centralized rather than scattered through command handlers.
 
@@ -182,7 +182,7 @@ docs/
 3. Port only the minimum code required for `v1`.
    Exclude unrelated tools such as tabs, mouse, keyboard, network capture, or daemon transport.
 
-4. Implement a thin browser-session wrapper for SiteCLI:
+4. Implement a thin browser-session wrapper for Browser CLI:
    - launch browser with resolved executable and user data dir
    - navigate to URL
    - expose DOM HTML capture
@@ -249,9 +249,9 @@ docs/
 
 ### Acceptance Criteria
 
-- `sitecli read <url>` returns only rendered HTML on stdout.
-- `sitecli read <url> --snapshot` returns only snapshot text on stdout.
-- `sitecli read <url> --scroll-bottom` performs an additional bottom-load pass before capture.
+- `browser-cli read <url>` returns only rendered HTML on stdout.
+- `browser-cli read <url> --snapshot` returns only snapshot text on stdout.
+- `browser-cli read <url> --scroll-bottom` performs an additional bottom-load pass before capture.
 - Error messages go to stderr and preserve stable exit categories.
 
 ## Milestone 5: Automated Tests with Local Fixtures
@@ -314,7 +314,7 @@ docs/
 
 ### Acceptance Criteria
 
-- A new user can install and run `sitecli read <url>` from docs alone.
+- A new user can install and run `browser-cli read <url>` from docs alone.
 - The closed-Chrome and profile-lock requirements are clearly documented.
 - The distinction between `v1` read and future workflow features is explicit.
 
@@ -353,7 +353,7 @@ Mitigation:
 
 - port only the `v1` minimum subset
 - document provenance before merging
-- keep adapted code isolated under `sitecli.browser`
+- keep adapted code isolated under `browser_cli.browser`
 
 ### Risk: Render-stability timing is flaky across sites
 
@@ -374,9 +374,9 @@ Mitigation:
 
 `v1` is complete when all of the following are true:
 
-- `sitecli read <url>` works on macOS and Linux for supported Chrome setups
-- `sitecli read <url> --snapshot` works
-- `sitecli read <url> --scroll-bottom` works
+- `browser-cli read <url>` works on macOS and Linux for supported Chrome setups
+- `browser-cli read <url> --snapshot` works
+- `browser-cli read <url> --scroll-bottom` works
 - rendered DOM HTML is the default output
 - browser/profile failures map to stable CLI exit codes
 - no hidden fallback to temporary profiles exists
@@ -390,7 +390,7 @@ The first coding slice after this plan should be:
 
 1. scaffold package and console entrypoint
 2. add exit code constants
-3. implement `sitecli read --help`
+3. implement `browser-cli read --help`
 4. implement profile discovery stubs plus unit tests
 
 This slice is intentionally small and creates the foundation needed before porting any browser-core code.

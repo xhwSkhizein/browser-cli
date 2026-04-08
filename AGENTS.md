@@ -2,7 +2,7 @@
 
 ## Project Mission
 
-SiteCLI is a `CLI-first`, `Python-first` browser tool for turning websites into reliable command-line readable surfaces first, then durable workflows later.
+Browser CLI is a `CLI-first`, `Python-first` browser tool for turning websites into reliable command-line readable surfaces first, then durable workflows later.
 
 The repository starts with a narrow `read` command and is intentionally designed to grow into workflow execution and explore-to-workflow tooling without changing the browser core boundary.
 
@@ -30,13 +30,13 @@ The following decisions are currently fixed unless explicitly revised in a later
 
 ## Architectural Boundaries
 
-- `sitecli.cli` parses commands and owns help text and exit code behavior.
-- `sitecli.commands.read` owns the user-facing read contract.
-- `sitecli.runtime.read_runner` owns the one-shot reading lifecycle.
-- `sitecli.browser` owns Playwright launch, stealth, HTML capture, and snapshot/ref capture.
-- `sitecli.profiles` owns browser executable discovery, user data directories, profile names, and lock detection.
-- `sitecli.outputs` owns final body rendering to stdout.
-- `sitecli.workflow` is reserved for later phases and should not leak into `v1` command complexity.
+- `browser_cli.cli` parses commands and owns help text and exit code behavior.
+- `browser_cli.commands.read` owns the user-facing read contract.
+- `browser_cli.runtime.read_runner` owns the one-shot reading lifecycle.
+- `browser_cli.browser` owns Playwright launch, stealth, HTML capture, and snapshot/ref capture.
+- `browser_cli.profiles` owns browser executable discovery, user data directories, profile names, and lock detection.
+- `browser_cli.outputs` owns final body rendering to stdout.
+- `browser_cli.workflow` is reserved for later phases and should not leak into `v1` command complexity.
 
 Keep these boundaries intact. Do not push browser internals into the CLI layer or profile logic into random utility modules.
 
@@ -82,4 +82,6 @@ Before significant scope changes:
 
 ## Naming Note
 
-The working repository name is currently `sitecli`. Renaming is allowed later if the project direction stays the same.
+- Repository name: `browser-cli`
+- CLI command name: `browser-cli`
+- Python package root: `browser_cli`
