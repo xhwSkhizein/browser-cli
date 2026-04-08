@@ -30,13 +30,13 @@ The following decisions are currently fixed unless explicitly revised in a later
 
 ## Architectural Boundaries
 
-- `app.cli` parses commands and owns help text and exit code behavior.
-- `app.commands.read` owns the user-facing read contract.
-- `app.runtime.read_runner` owns the one-shot reading lifecycle.
-- `app.browser` owns Playwright launch, stealth, HTML capture, and snapshot/ref capture.
-- `app.profiles` owns browser executable discovery, user data directories, profile names, and lock detection.
-- `app.outputs` owns final body rendering to stdout.
-- `app.workflow` is reserved for later phases and should not leak into `v1` command complexity.
+- `sitecli.cli` parses commands and owns help text and exit code behavior.
+- `sitecli.commands.read` owns the user-facing read contract.
+- `sitecli.runtime.read_runner` owns the one-shot reading lifecycle.
+- `sitecli.browser` owns Playwright launch, stealth, HTML capture, and snapshot/ref capture.
+- `sitecli.profiles` owns browser executable discovery, user data directories, profile names, and lock detection.
+- `sitecli.outputs` owns final body rendering to stdout.
+- `sitecli.workflow` is reserved for later phases and should not leak into `v1` command complexity.
 
 Keep these boundaries intact. Do not push browser internals into the CLI layer or profile logic into random utility modules.
 

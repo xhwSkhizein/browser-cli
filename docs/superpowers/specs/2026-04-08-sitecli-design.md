@@ -118,7 +118,7 @@ The system is split into stable module boundaries from day one.
 
 ### 1. CLI Surface
 
-`app.cli`
+`sitecli.cli`
 
 Responsibilities:
 
@@ -131,7 +131,7 @@ This layer contains no browser logic.
 
 ### 2. Command Layer
 
-`app.commands.read`
+`sitecli.commands.read`
 
 Responsibilities:
 
@@ -144,7 +144,7 @@ This layer performs orchestration only.
 
 ### 3. Read Runner
 
-`app.runtime.read_runner`
+`sitecli.runtime.read_runner`
 
 Responsibilities:
 
@@ -160,7 +160,7 @@ This is the main `v1` workflow engine, but it remains single-purpose.
 
 ### 4. Browser Core
 
-`app.browser`
+`sitecli.browser`
 
 Responsibilities:
 
@@ -175,7 +175,7 @@ This layer is where selected `bridgic-browser` ideas or code may be internalized
 
 ### 5. Profile Resolution
 
-`app.profiles`
+`sitecli.profiles`
 
 Responsibilities:
 
@@ -189,7 +189,7 @@ This is a dedicated module because profile handling is a core product requiremen
 
 ### 6. Output Rendering
 
-`app.outputs`
+`sitecli.outputs`
 
 Responsibilities:
 
@@ -199,7 +199,7 @@ Responsibilities:
 
 ### 7. Reserved Future Layer
 
-`app.workflow`
+`sitecli.workflow`
 
 This namespace is reserved for `v2` and later. It is not implemented in `v1`, but the package boundary exists so the browser core and read runner do not need to be restructured later.
 
@@ -209,13 +209,13 @@ The repository layout should stay minimal:
 
 ```text
 src/
-  app/cli/
-  app/commands/
-  app/runtime/
-  app/browser/
-  app/profiles/
-  app/outputs/
-  app/workflow/
+  sitecli/cli/
+  sitecli/commands/
+  sitecli/runtime/
+  sitecli/browser/
+  sitecli/profiles/
+  sitecli/outputs/
+  sitecli/workflow/
 tests/
 docs/
 third_party/
@@ -356,7 +356,7 @@ After workflow execution exists, SiteCLI should add exploration and synthesis to
 - action recording or semi-structured traces
 - conversion into durable workflow definitions
 
-That later system should build on top of the `app.browser` core and the `app.workflow` runtime instead of bypassing them.
+That later system should build on top of the `sitecli.browser` core and the `sitecli.workflow` runtime instead of bypassing them.
 
 ## Provenance and Licensing
 
