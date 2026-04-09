@@ -6,7 +6,9 @@ import argparse
 import sys
 from collections.abc import Sequence
 
+from browser_cli.actions import get_action_specs
 from browser_cli import __version__, exit_codes
+from browser_cli.commands.action import run_action_command
 from browser_cli.commands.read import run_read_command
 from browser_cli.errors import BrowserCliError
 
@@ -34,6 +36,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="Scroll to the bottom before capture to trigger lazy-loaded content.",
     )
     read_parser.set_defaults(handler=run_read_command)
+
+    for spec in get_action_specs():
+        action_parser = subparsers.add_parser(
+            spec.name,
+            help=spec.help,
+            description=spec.description,
+        )
+        spec.add_arguments(action_parser)
+        action_parser.set_defaults(
+            handler=run_action_command,
+            action_name=spec.name,
+            action_request_builder=spec.build_request,
+            action_start_if_needed=spec.start_if_needed,
+        )
     return parser
 
 
@@ -68,4 +84,3 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(main())
-

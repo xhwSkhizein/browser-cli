@@ -7,7 +7,7 @@ from types import TracebackType
 from typing import Any
 
 from browser_cli.browser.models import BrowserLaunchConfig
-from browser_cli.browser.snapshot import SNAPSHOT_SCRIPT
+from browser_cli.browser.snapshot import capture_snapshot
 from browser_cli.browser.stealth import STEALTH_INIT_SCRIPT, build_launch_args
 from browser_cli.errors import BrowserUnavailableError, ProfileUnavailableError, TemporaryReadError
 
@@ -109,7 +109,8 @@ class BrowserSession:
 
     async def capture_snapshot(self) -> str:
         self._ensure_started()
-        return await self._page.evaluate(SNAPSHOT_SCRIPT)
+        snapshot = await capture_snapshot(self._page)
+        return snapshot.tree
 
     def _ensure_started(self) -> None:
         if self._page is None:
@@ -123,4 +124,3 @@ class BrowserSession:
         if "executable" in lowered or "browser" in lowered or "failed to launch" in lowered:
             raise BrowserUnavailableError(message) from exc
         raise TemporaryReadError(message) from exc
-

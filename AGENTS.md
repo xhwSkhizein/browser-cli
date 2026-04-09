@@ -4,13 +4,13 @@
 
 Browser CLI is a `CLI-first`, `Python-first` browser tool for turning websites into reliable command-line readable surfaces first, then durable workflows later.
 
-The repository starts with a narrow `read` command and is intentionally designed to grow into workflow execution and explore-to-workflow tooling without changing the browser core boundary.
+The repository started with a narrow `read` command and now also includes a daemon-backed browser action layer for agents. Future exploration and workflow tooling must build on that action layer rather than bypass it.
 
 ## Current Phase
 
-Current phase: design and planning.
+Current phase: implemented `v1 read` plus `v2` daemon-backed agent actions.
 
-Do not start implementing workflow engines, explorers, or generated site adapters before the `v1` read path is specified, planned, and reviewed.
+Do not start implementing workflow engines, explorers, or generated site adapters before changes are aligned with the approved `v2` action-layer direction.
 
 ## Frozen Product Decisions
 
@@ -26,6 +26,10 @@ The following decisions are currently fixed unless explicitly revised in a later
 - If the primary Chrome profile is busy or unavailable, fallback is acceptable; if both primary and fallback are unavailable, fail explicitly.
 - `v1` targets stable Google Chrome first and should not silently swap browser families.
 - `v1` must support macOS and Linux.
+- `v2` uses one daemon-managed browser instance.
+- `v2` command output is JSON-first.
+- `v2` uses `X_AGENT_ID` to isolate tab visibility and active-tab state.
+- `v2` must not expose session concepts or global `--page` targeting flags.
 - Future workflow support should use a new Python-first DSL, not `opencli` YAML compatibility.
 
 ## Architectural Boundaries
@@ -34,8 +38,12 @@ The following decisions are currently fixed unless explicitly revised in a later
 - `browser_cli.commands.read` owns the user-facing read contract.
 - `browser_cli.runtime.read_runner` owns the one-shot reading lifecycle.
 - `browser_cli.browser` owns Playwright launch, stealth, HTML capture, and snapshot/ref capture.
+- `browser_cli.daemon` owns the long-lived daemon, transport, and browser lifecycle.
+- `browser_cli.actions` owns the daemon-backed action registry and CLI command metadata.
+- `browser_cli.agent_scope` owns `X_AGENT_ID` resolution.
+- `browser_cli.tabs` owns tab visibility, active-tab tracking, and busy-state conflict rules.
 - `browser_cli.profiles` owns browser executable discovery, user data directories, profile names, and lock detection.
-- `browser_cli.outputs` owns final body rendering to stdout.
+- `browser_cli.outputs` owns final rendering for both content-first and JSON-first surfaces.
 - `browser_cli.workflow` is reserved for later phases and should not leak into `v1` command complexity.
 
 Keep these boundaries intact. Do not push browser internals into the CLI layer or profile logic into random utility modules.
@@ -45,6 +53,8 @@ Keep these boundaries intact. Do not push browser internals into the CLI layer o
 `read` should stay opinionated and small.
 
 If a feature request makes `read` look like a mini scripting language, that feature likely belongs in the future workflow layer instead.
+
+The daemon-backed command surface should stay explicit and help-driven. Avoid hiding operational complexity behind magical behavior, but also do not expose session management or lock protocols to callers. Prefer optimistic behavior with explicit conflict errors.
 
 Prefer explicit failure over invisible browser-family fallback. A successful run should mean the tool used either the preferred Chrome profile or the documented Browser CLI fallback profile and produced the intended output mode.
 
@@ -64,10 +74,11 @@ Rules:
 
 ## Testing Expectations
 
-Prefer three layers:
+Prefer four layers:
 
 - unit tests for profile resolution, output selection, and error mapping
-- integration tests against local fixture sites for render and scroll behavior
+- unit tests for `X_AGENT_ID`, tab ownership, and busy-state conflict rules
+- integration tests against local fixture sites for render, scroll behavior, daemon lifecycle, and action commands
 - smoke tests against a small set of real sites for profile reuse and authenticated reads
 
 Do not make CI depend primarily on unstable real websites.

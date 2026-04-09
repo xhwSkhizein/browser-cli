@@ -54,6 +54,30 @@ LAZY_PAGE = """<!doctype html>
 </html>
 """
 
+INTERACTIVE_PAGE = """<!doctype html>
+<html>
+  <body>
+    <main>
+      <h1>Interactive Fixture</h1>
+      <button id="reveal" aria-label="Reveal Message">Reveal</button>
+      <input id="name" type="text" aria-label="Name Input" placeholder="Your name">
+      <select id="color" aria-label="Color Select">
+        <option>Red</option>
+        <option>Blue</option>
+      </select>
+      <p id="message">Waiting</p>
+    </main>
+    <script>
+      document.querySelector('#reveal').addEventListener('click', async () => {
+        console.log('reveal-clicked');
+        await fetch('/api/ping');
+        document.querySelector('#message').textContent = 'Revealed';
+      });
+    </script>
+  </body>
+</html>
+"""
+
 
 class FixtureHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
@@ -63,6 +87,16 @@ class FixtureHandler(BaseHTTPRequestHandler):
             body = DYNAMIC_PAGE
         elif self.path == "/lazy":
             body = LAZY_PAGE
+        elif self.path == "/interactive":
+            body = INTERACTIVE_PAGE
+        elif self.path == "/api/ping":
+            encoded = b'{"ok":true}'
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+            return
         else:
             self.send_response(404)
             self.end_headers()
@@ -93,4 +127,3 @@ def run_fixture_server():
     finally:
         server.shutdown()
         thread.join(timeout=5)
-

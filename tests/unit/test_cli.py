@@ -13,6 +13,8 @@ def test_top_level_help(capsys) -> None:
     assert exit_code == 0
     assert "browser-cli" in captured.out
     assert "read" in captured.out
+    assert "open" in captured.out
+    assert "click" in captured.out
 
 
 def test_read_help(capsys) -> None:
@@ -21,6 +23,13 @@ def test_read_help(capsys) -> None:
     assert exit_code == 0
     assert "--snapshot" in captured.out
     assert "--scroll-bottom" in captured.out
+
+
+def test_click_help(capsys) -> None:
+    exit_code = main(["click", "--help"])
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "Element ref" in captured.out
 
 
 def test_missing_command_returns_usage_error(capsys) -> None:
