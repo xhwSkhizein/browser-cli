@@ -74,6 +74,9 @@ class BrowserDaemonApp:
             "network-start": self._handle_network_start,
             "network": self._handle_network,
             "network-stop": self._handle_network_stop,
+            "dialog-setup": self._handle_dialog_setup,
+            "dialog": self._handle_dialog,
+            "dialog-remove": self._handle_dialog_remove,
             "cookies": self._handle_cookies,
             "cookie-set": self._handle_cookie_set,
             "cookies-clear": self._handle_cookies_clear,
@@ -85,6 +88,12 @@ class BrowserDaemonApp:
             "verify-title": self._handle_verify_title,
             "verify-state": self._handle_verify_state,
             "verify-value": self._handle_verify_value,
+            "trace-start": self._handle_trace_start,
+            "trace-chunk": self._handle_trace_chunk,
+            "trace-stop": self._handle_trace_stop,
+            "video-start": self._handle_video_start,
+            "video-stop": self._handle_video_stop,
+            "resize": self._handle_resize,
         }
 
     @property
@@ -129,9 +138,9 @@ class BrowserDaemonApp:
         )
 
     async def _handle_stop(self, request: DaemonRequest) -> dict[str, Any]:
-        await self._state.browser_service.stop()
+        shutdown = await self._state.browser_service.stop()
         self._state.shutdown_event.set()
-        return {"stopped": True}
+        return {"stopped": True, **shutdown}
 
     async def _handle_open(self, request: DaemonRequest) -> dict[str, Any]:
         url = self._require_str(request.args, "url")
@@ -268,6 +277,16 @@ class BrowserDaemonApp:
     async def _handle_forward(self, request: DaemonRequest) -> dict[str, Any]:
         payload = await self._run_active_page_action(request, self._state.browser_service.go_forward)
         return {"page": payload}
+
+    async def _handle_resize(self, request: DaemonRequest) -> dict[str, Any]:
+        width = int(request.args.get("width") or 0)
+        height = int(request.args.get("height") or 0)
+        if width <= 0 or height <= 0:
+            raise InvalidInputError("width and height must be positive integers.")
+        return await self._run_active_page_action(
+            request,
+            lambda page_id: self._state.browser_service.resize(page_id, width=width, height=height),
+        )
 
     async def _handle_click(self, request: DaemonRequest) -> dict[str, Any]:
         ref = self._require_str(request.args, "ref")
@@ -481,6 +500,33 @@ class BrowserDaemonApp:
     async def _handle_network_stop(self, request: DaemonRequest) -> dict[str, Any]:
         return await self._run_active_page_action(request, self._state.browser_service.stop_network_capture)
 
+    async def _handle_dialog_setup(self, request: DaemonRequest) -> dict[str, Any]:
+        action = str(request.args.get("action") or "accept")
+        if action not in {"accept", "dismiss"}:
+            raise InvalidInputError("action must be accept or dismiss.")
+        return await self._run_active_page_action(
+            request,
+            lambda page_id: self._state.browser_service.setup_dialog_handler(
+                page_id,
+                default_action=action,
+                default_prompt_text=self._optional_str(request.args, "text"),
+            ),
+        )
+
+    async def _handle_dialog(self, request: DaemonRequest) -> dict[str, Any]:
+        accept = not bool(request.args.get("dismiss"))
+        return await self._run_active_page_action(
+            request,
+            lambda page_id: self._state.browser_service.handle_dialog(
+                page_id,
+                accept=accept,
+                prompt_text=self._optional_str(request.args, "text"),
+            ),
+        )
+
+    async def _handle_dialog_remove(self, request: DaemonRequest) -> dict[str, Any]:
+        return await self._run_active_page_action(request, self._state.browser_service.remove_dialog_handler)
+
     async def _handle_cookies(self, request: DaemonRequest) -> dict[str, Any]:
         return await self._run_active_page_action(
             request,
@@ -580,6 +626,53 @@ class BrowserDaemonApp:
         return await self._run_active_page_action(
             request,
             lambda page_id: self._state.browser_service.verify_value(page_id, ref=ref, expected=expected),
+        )
+
+    async def _handle_trace_start(self, request: DaemonRequest) -> dict[str, Any]:
+        screenshots = not bool(request.args.get("no_screenshots"))
+        snapshots = not bool(request.args.get("no_snapshots"))
+        sources = bool(request.args.get("sources"))
+        return await self._run_active_page_action(
+            request,
+            lambda page_id: self._state.browser_service.start_tracing(
+                page_id,
+                screenshots=screenshots,
+                snapshots=snapshots,
+                sources=sources,
+            ),
+        )
+
+    async def _handle_trace_chunk(self, request: DaemonRequest) -> dict[str, Any]:
+        title = self._optional_str(request.args, "title")
+        return await self._run_active_page_action(
+            request,
+            lambda page_id: self._state.browser_service.add_trace_chunk(page_id, title=title),
+        )
+
+    async def _handle_trace_stop(self, request: DaemonRequest) -> dict[str, Any]:
+        path = self._optional_str(request.args, "path")
+        return await self._run_active_page_action(
+            request,
+            lambda page_id: self._state.browser_service.stop_tracing(page_id, path=path),
+        )
+
+    async def _handle_video_start(self, request: DaemonRequest) -> dict[str, Any]:
+        width = request.args.get("width")
+        height = request.args.get("height")
+        return await self._run_active_page_action(
+            request,
+            lambda page_id: self._state.browser_service.start_video(
+                page_id,
+                width=int(width) if width is not None else None,
+                height=int(height) if height is not None else None,
+            ),
+        )
+
+    async def _handle_video_stop(self, request: DaemonRequest) -> dict[str, Any]:
+        path = self._optional_str(request.args, "path")
+        return await self._run_active_page_action(
+            request,
+            lambda page_id: self._state.browser_service.stop_video(page_id, path=path),
         )
 
     async def _run_active_page_action(

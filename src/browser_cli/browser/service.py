@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import tempfile
 import urllib.parse
 from pathlib import Path
@@ -43,6 +44,10 @@ class BrowserService:
         self._console_handlers: dict[str, Any] = {}
         self._network_requests: dict[str, list[dict[str, Any]]] = {}
         self._network_handlers: dict[str, Any] = {}
+        self._dialog_handlers: dict[str, Any] = {}
+        self._tracing_active = False
+        self._video_started: set[str] = set()
+        self._pending_video_save_paths: dict[str, str | None] = {}
         self._start_lock = asyncio.Lock()
         self._page_create_lock = asyncio.Lock()
 
@@ -76,11 +81,18 @@ class BrowserService:
         try:
             self._playwright = await async_playwright().start()
             chromium = self._playwright.chromium
+            video_dir = get_app_paths().artifacts_dir / "playwright-video"
+            video_dir.mkdir(parents=True, exist_ok=True)
             self._context = await chromium.launch_persistent_context(
                 user_data_dir=str(launch_config.user_data_dir),
                 executable_path=str(launch_config.executable_path) if launch_config.executable_path else None,
                 headless=launch_config.headless,
                 viewport={
+                    "width": launch_config.viewport_width,
+                    "height": launch_config.viewport_height,
+                },
+                record_video_dir=str(video_dir),
+                record_video_size={
                     "width": launch_config.viewport_width,
                     "height": launch_config.viewport_height,
                 },
@@ -94,11 +106,21 @@ class BrowserService:
             await self.stop()
             self._raise_launch_error(exc)
 
-    async def stop(self) -> None:
-        pages = list(self._pages.values())
-        for page in pages:
+    async def stop(self) -> dict[str, Any]:
+        trace_path: str | None = None
+        if self._tracing_active and self._context is not None:
             try:
-                await page.close()
+                trace_path = await self._stop_tracing_impl(path=None)
+            except Exception:
+                trace_path = None
+        closed_pages: list[str] = []
+        video_paths: list[str] = []
+        for page_id in list(self._pages.keys()):
+            try:
+                result = await self._close_page(page_id)
+                closed_pages.append(page_id)
+                if result.get("video_path"):
+                    video_paths.append(str(result["video_path"]))
             except Exception:
                 pass
         self._pages.clear()
@@ -107,12 +129,21 @@ class BrowserService:
         self._console_handlers.clear()
         self._network_requests.clear()
         self._network_handlers.clear()
+        self._dialog_handlers.clear()
+        self._video_started.clear()
+        self._pending_video_save_paths.clear()
+        self._tracing_active = False
         if self._context is not None:
             await self._context.close()
             self._context = None
         if self._playwright is not None:
             await self._playwright.stop()
             self._playwright = None
+        return {
+            "closed_pages": closed_pages,
+            "video_paths": video_paths,
+            "trace_path": trace_path,
+        }
 
     async def new_tab(
         self,
@@ -136,12 +167,7 @@ class BrowserService:
             return await self.get_page_summary(page_id)
 
     async def close_tab(self, page_id: str) -> dict[str, Any]:
-        page = self._require_page(page_id)
-        await page.close()
-        self._pages.pop(page_id, None)
-        self._snapshot_refs_by_page.pop(page_id, None)
-        self._remove_page_handlers(page_id)
-        return {"page_id": page_id, "closed": True}
+        return await self._close_page(page_id)
 
     async def get_page_summary(self, page_id: str) -> dict[str, Any]:
         page = self._require_page(page_id)
@@ -233,6 +259,11 @@ class BrowserService:
         page = self._require_page(page_id)
         await page.go_forward()
         return await self.get_page_summary(page_id)
+
+    async def resize(self, page_id: str, *, width: int, height: int) -> dict[str, Any]:
+        page = self._require_page(page_id)
+        await page.set_viewport_size({"width": width, "height": height})
+        return {"page_id": page_id, "width": width, "height": height}
 
     async def click_ref(self, page_id: str, ref: str) -> dict[str, Any]:
         locator = await self._get_locator_by_ref(page_id, ref)
@@ -498,6 +529,150 @@ class BrowserService:
                 pass
         return {"page_id": page_id, "capturing": False}
 
+    async def setup_dialog_handler(
+        self,
+        page_id: str,
+        *,
+        default_action: str = "accept",
+        default_prompt_text: str | None = None,
+    ) -> dict[str, Any]:
+        page = self._require_page(page_id)
+        existing = self._dialog_handlers.pop(page_id, None)
+        if existing is not None:
+            try:
+                page.remove_listener("dialog", existing)
+            except Exception:
+                pass
+
+        async def _handle_dialog(dialog: Any) -> None:
+            if default_action == "accept":
+                if dialog.type == "prompt" and default_prompt_text is not None:
+                    await dialog.accept(default_prompt_text)
+                else:
+                    await dialog.accept()
+            else:
+                await dialog.dismiss()
+
+        page.on("dialog", _handle_dialog)
+        self._dialog_handlers[page_id] = _handle_dialog
+        return {
+            "page_id": page_id,
+            "action": default_action,
+            "text": default_prompt_text,
+            "configured": True,
+        }
+
+    async def handle_dialog(
+        self,
+        page_id: str,
+        *,
+        accept: bool,
+        prompt_text: str | None = None,
+    ) -> dict[str, Any]:
+        page = self._require_page(page_id)
+        existing = self._dialog_handlers.pop(page_id, None)
+        if existing is not None:
+            try:
+                page.remove_listener("dialog", existing)
+            except Exception:
+                pass
+
+        async def _handle_next_dialog(dialog: Any) -> None:
+            if accept:
+                if dialog.type == "prompt" and prompt_text is not None:
+                    await dialog.accept(prompt_text)
+                else:
+                    await dialog.accept()
+            else:
+                await dialog.dismiss()
+
+        page.once("dialog", _handle_next_dialog)
+        return {
+            "page_id": page_id,
+            "accept": accept,
+            "text": prompt_text,
+            "armed": True,
+        }
+
+    async def remove_dialog_handler(self, page_id: str) -> dict[str, Any]:
+        page = self._require_page(page_id)
+        existing = self._dialog_handlers.pop(page_id, None)
+        removed = existing is not None
+        if existing is not None:
+            try:
+                page.remove_listener("dialog", existing)
+            except Exception:
+                pass
+        return {"page_id": page_id, "removed": removed}
+
+    async def start_tracing(
+        self,
+        page_id: str,
+        *,
+        screenshots: bool = True,
+        snapshots: bool = True,
+        sources: bool = False,
+    ) -> dict[str, Any]:
+        _ = self._require_page(page_id)
+        if self._context is None:
+            raise OperationFailedError("Browser context is not available.")
+        if self._tracing_active:
+            raise OperationFailedError("Tracing is already active. Stop the current trace first.")
+        await self._context.tracing.start(
+            screenshots=screenshots,
+            snapshots=snapshots,
+            sources=sources,
+        )
+        self._tracing_active = True
+        return {
+            "page_id": page_id,
+            "tracing": True,
+            "screenshots": screenshots,
+            "snapshots": snapshots,
+            "sources": sources,
+        }
+
+    async def add_trace_chunk(self, page_id: str, *, title: str | None = None) -> dict[str, Any]:
+        _ = self._require_page(page_id)
+        if self._context is None or not self._tracing_active:
+            raise OperationFailedError("No active tracing session. Start tracing first.")
+        await self._context.tracing.start_chunk(title=title)
+        return {"page_id": page_id, "chunk_started": True, "title": title}
+
+    async def stop_tracing(self, page_id: str, *, path: str | None = None) -> dict[str, Any]:
+        _ = self._require_page(page_id)
+        saved_path = await self._stop_tracing_impl(path=path)
+        return {"page_id": page_id, "path": saved_path}
+
+    async def start_video(self, page_id: str, *, width: int | None = None, height: int | None = None) -> dict[str, Any]:
+        page = self._require_page(page_id)
+        if getattr(page, "video", None) is None:
+            raise OperationFailedError("No video recording is available for the active tab.")
+        self._video_started.add(page_id)
+        self._pending_video_save_paths.pop(page_id, None)
+        return {
+            "page_id": page_id,
+            "recording": True,
+            "width": width,
+            "height": height,
+        }
+
+    async def stop_video(self, page_id: str, *, path: str | None = None) -> dict[str, Any]:
+        page = self._require_page(page_id)
+        if getattr(page, "video", None) is None:
+            raise OperationFailedError("No video recording is available for the active tab.")
+        if page_id not in self._video_started:
+            raise OperationFailedError("No active video recording. Use video-start first.")
+        resolved_path = self._resolve_video_output_path(path, page_id=page_id)
+        self._video_started.discard(page_id)
+        self._pending_video_save_paths[page_id] = str(resolved_path) if resolved_path else None
+        return {
+            "page_id": page_id,
+            "recording": False,
+            "path": str(resolved_path) if resolved_path else None,
+            "deferred": True,
+        }
+
     async def get_cookies(
         self,
         page_id: str,
@@ -664,10 +839,29 @@ class BrowserService:
         return locator.first
 
     def _remove_page_handlers(self, page_id: str) -> None:
+        page = self._pages.get(page_id)
         self._console_messages.pop(page_id, None)
-        self._console_handlers.pop(page_id, None)
+        console_handler = self._console_handlers.pop(page_id, None)
+        if page is not None and console_handler is not None:
+            try:
+                page.remove_listener("console", console_handler)
+            except Exception:
+                pass
         self._network_requests.pop(page_id, None)
-        self._network_handlers.pop(page_id, None)
+        network_handler = self._network_handlers.pop(page_id, None)
+        if page is not None and network_handler is not None:
+            try:
+                page.remove_listener("request", network_handler)
+            except Exception:
+                pass
+        dialog_handler = self._dialog_handlers.pop(page_id, None)
+        if page is not None and dialog_handler is not None:
+            try:
+                page.remove_listener("dialog", dialog_handler)
+            except Exception:
+                pass
+        self._video_started.discard(page_id)
+        self._pending_video_save_paths.pop(page_id, None)
 
     def _require_page(self, page_id: str) -> Any:
         page = self._pages.get(page_id)
@@ -699,6 +893,9 @@ class BrowserService:
     @staticmethod
     def _build_search_url(query: str, engine: str) -> str:
         encoded = urllib.parse.quote_plus(query)
+        template = os.environ.get("BROWSER_CLI_SEARCH_URL_TEMPLATE")
+        if template:
+            return template.format(query=encoded, raw_query=query, engine=engine)
         if engine == "google":
             return f"https://www.google.com/search?q={encoded}&udm=14"
         if engine == "bing":
@@ -712,6 +909,72 @@ class BrowserService:
             candidate = (get_app_paths().artifacts_dir / candidate).resolve()
         candidate.parent.mkdir(parents=True, exist_ok=True)
         return candidate
+
+    async def _close_page(self, page_id: str) -> dict[str, Any]:
+        page = self._require_page(page_id)
+        video = getattr(page, "video", None)
+        sentinel = object()
+        pending = self._pending_video_save_paths.pop(page_id, sentinel)
+        has_pending = pending is not sentinel
+        video_requested = page_id in self._video_started or has_pending
+        self._video_started.discard(page_id)
+        self._remove_page_handlers(page_id)
+        await page.close()
+        self._pages.pop(page_id, None)
+        self._snapshot_refs_by_page.pop(page_id, None)
+        result: dict[str, Any] = {"page_id": page_id, "closed": True}
+        if video is not None and video_requested:
+            result["video_path"] = await self._save_video_artifact(
+                video,
+                None if pending is sentinel else pending,
+            )
+        return result
+
+    async def _stop_tracing_impl(self, *, path: str | None) -> str:
+        if self._context is None or not self._tracing_active:
+            raise OperationFailedError("No active tracing session. Start tracing first.")
+        if path:
+            output_path = self._resolve_output_path(path)
+            if output_path.suffix.lower() != ".zip":
+                output_path = output_path.with_suffix(".zip")
+        else:
+            artifacts_dir = get_app_paths().artifacts_dir
+            artifacts_dir.mkdir(parents=True, exist_ok=True)
+            fd, raw_path = tempfile.mkstemp(
+                suffix=".zip",
+                prefix="browser-cli-trace-",
+                dir=str(artifacts_dir),
+            )
+            os.close(fd)
+            output_path = Path(raw_path)
+        await self._context.tracing.stop(path=str(output_path))
+        self._tracing_active = False
+        return str(output_path)
+
+    async def _save_video_artifact(self, video: Any, requested_path: str | None) -> str:
+        if requested_path:
+            output_path = Path(requested_path)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            await video.save_as(str(output_path))
+            return str(output_path)
+        raw_path = await video.path()
+        return str(Path(str(raw_path)).resolve())
+
+    @staticmethod
+    def _resolve_video_output_path(path: str | None, *, page_id: str) -> Path | None:
+        if not path:
+            return None
+        raw = Path(path).expanduser()
+        if path.endswith(os.sep) or path.endswith("/") or raw.is_dir():
+            base_dir = raw if raw.is_absolute() else (get_app_paths().artifacts_dir / raw)
+            base_dir.mkdir(parents=True, exist_ok=True)
+            return (base_dir / f"{page_id}.webm").resolve()
+        if not raw.is_absolute():
+            raw = (get_app_paths().artifacts_dir / raw).resolve()
+        if raw.suffix.lower() != ".webm":
+            raw = raw.with_suffix(".webm")
+        raw.parent.mkdir(parents=True, exist_ok=True)
+        return raw
 
     @staticmethod
     def _raise_launch_error(exc: Exception) -> None:

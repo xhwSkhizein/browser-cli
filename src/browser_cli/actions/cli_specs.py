@@ -73,6 +73,9 @@ def get_action_specs() -> list[ActionSpec]:
         ActionSpec("network-start", "Start network capture.", "Start capturing network requests.", _no_arguments, _default_request),
         ActionSpec("network", "Read network requests.", "Read captured network requests.", _add_network_arguments, _default_request),
         ActionSpec("network-stop", "Stop network capture.", "Stop capturing network requests.", _no_arguments, _default_request),
+        ActionSpec("dialog-setup", "Configure automatic dialog handling.", "Automatically accept or dismiss future dialogs for the active tab.", _add_dialog_setup_arguments, _default_request),
+        ActionSpec("dialog", "Configure one-time dialog handling.", "Handle the next dialog shown by the active tab.", _add_dialog_arguments, _default_request),
+        ActionSpec("dialog-remove", "Remove automatic dialog handling.", "Remove the persistent dialog handler for the active tab.", _no_arguments, _default_request),
         ActionSpec("cookies", "List cookies.", "List cookies visible to the shared browser context.", _add_cookie_filter_arguments, _default_request),
         ActionSpec("cookie-set", "Set a cookie.", "Set a cookie on the shared browser context.", _add_cookie_set_arguments, _default_request),
         ActionSpec("cookies-clear", "Clear cookies.", "Clear cookies with optional filters.", _add_cookie_filter_arguments, _default_request),
@@ -84,6 +87,12 @@ def get_action_specs() -> list[ActionSpec]:
         ActionSpec("verify-title", "Verify the current title.", "Verify the current page title.", _add_verify_expected_arguments, _rename_expected_request),
         ActionSpec("verify-state", "Verify ref state.", "Verify state for an element ref.", _add_verify_state_arguments, _default_request),
         ActionSpec("verify-value", "Verify ref value.", "Verify input value for an element ref.", _add_verify_value_arguments, _default_request),
+        ActionSpec("trace-start", "Start browser tracing.", "Start Playwright tracing on the shared browser context.", _add_trace_start_arguments, _default_request),
+        ActionSpec("trace-chunk", "Add a trace chunk.", "Add a named trace chunk marker to the active trace.", _add_trace_chunk_arguments, _default_request),
+        ActionSpec("trace-stop", "Stop browser tracing.", "Stop tracing and save a trace archive.", _add_optional_path_arguments, _default_request),
+        ActionSpec("video-start", "Start page video capture.", "Mark the active tab video capture session as started.", _add_video_start_arguments, _default_request),
+        ActionSpec("video-stop", "Stop page video capture.", "Stop the active tab video capture session and choose an output path.", _add_optional_path_arguments, _default_request),
+        ActionSpec("resize", "Resize the active viewport.", "Resize the active tab viewport to WIDTH x HEIGHT.", _add_resize_arguments, _default_request),
         ActionSpec("stop", "Stop the daemon.", "Stop the browser daemon and the shared browser instance.", _no_arguments, _default_request, False),
     ]
 
@@ -239,6 +248,31 @@ def _add_optional_path_arguments(parser: ArgumentParser) -> None:
     parser.add_argument("path", nargs="?", help="Optional path.")
 
 
+def _add_dialog_setup_arguments(parser: ArgumentParser) -> None:
+    parser.add_argument(
+        "--action",
+        choices=["accept", "dismiss"],
+        default="accept",
+        help="Default action to take on future dialogs.",
+    )
+    parser.add_argument(
+        "--text",
+        help="Optional prompt text used when automatically accepting prompt dialogs.",
+    )
+
+
+def _add_dialog_arguments(parser: ArgumentParser) -> None:
+    parser.add_argument(
+        "--dismiss",
+        action="store_true",
+        help="Dismiss the next dialog instead of accepting it.",
+    )
+    parser.add_argument(
+        "--text",
+        help="Optional prompt text used when accepting the next prompt dialog.",
+    )
+
+
 def _add_console_arguments(parser: ArgumentParser) -> None:
     parser.add_argument(
         "--type",
@@ -300,6 +334,38 @@ def _add_verify_state_arguments(parser: ArgumentParser) -> None:
 def _add_verify_value_arguments(parser: ArgumentParser) -> None:
     parser.add_argument("ref", help="Element ref.")
     parser.add_argument("expected", help="Expected input value.")
+
+
+def _add_trace_start_arguments(parser: ArgumentParser) -> None:
+    parser.add_argument(
+        "--no-screenshots",
+        action="store_true",
+        help="Do not capture screenshots while tracing.",
+    )
+    parser.add_argument(
+        "--no-snapshots",
+        action="store_true",
+        help="Do not capture DOM snapshots while tracing.",
+    )
+    parser.add_argument(
+        "--sources",
+        action="store_true",
+        help="Include source files in the trace archive.",
+    )
+
+
+def _add_trace_chunk_arguments(parser: ArgumentParser) -> None:
+    parser.add_argument("title", nargs="?", help="Optional chunk title.")
+
+
+def _add_video_start_arguments(parser: ArgumentParser) -> None:
+    parser.add_argument("--width", type=int, help="Requested video width.")
+    parser.add_argument("--height", type=int, help="Requested video height.")
+
+
+def _add_resize_arguments(parser: ArgumentParser) -> None:
+    parser.add_argument("width", type=int, help="Viewport width in pixels.")
+    parser.add_argument("height", type=int, help="Viewport height in pixels.")
 
 
 def _default_request(args: Namespace) -> dict[str, Any]:
