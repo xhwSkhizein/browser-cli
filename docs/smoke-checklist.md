@@ -42,8 +42,19 @@ Use this checklist before calling Browser CLI done on a real workstation.
 - Run `browser-cli open <authenticated-url>`.
 - Run `browser-cli snapshot`.
 - Run `browser-cli html`.
+- Run `browser-cli info`.
+- Run `browser-cli resize 1200 800`.
 - Run `browser-cli stop`.
 - Confirm the first command starts the daemon automatically and `stop` tears it down cleanly.
+
+## Action Surface Checks
+
+- Exercise one ref-driven form flow: `snapshot`, then `fill`, `select`, `check`, `verify-value`, `verify-state`.
+- Exercise one keyboard/mouse flow: `focus`, `type`, `press`, `mouse-click`, `scroll`.
+- Exercise one observation flow: `console-start`, `network-start`, perform a click, then `console`, `network`, `console-stop`, `network-stop`.
+- Exercise one dialog flow: `dialog-setup` or `dialog`, then trigger `alert`, `confirm`, or `prompt`.
+- Exercise one artifact flow: `screenshot`, `pdf`, `trace-start`, `trace-chunk`, `trace-stop`, `video-start`, `video-stop`, then close the tab and confirm the trace/video artifacts exist.
+- Exercise one storage flow: `cookie-set`, `cookies`, `cookies-clear`, `storage-save`, `storage-load`.
 
 ## Failure Checks
 

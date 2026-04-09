@@ -83,13 +83,18 @@ Tabs are isolated by `X_AGENT_ID`, but cookies and local storage are still share
 Representative action families:
 
 - navigation and page state: `open`, `search`, `info`, `html`, `snapshot`, `reload`, `back`, `forward`
-- tab management: `tabs`, `new-tab`, `switch-tab`, `close-tab`, `close`, `stop`
+- tab management and lifecycle: `tabs`, `new-tab`, `switch-tab`, `close-tab`, `close`, `resize`, `stop`
 - ref actions: `click`, `double-click`, `hover`, `focus`, `fill`, `select`, `check`, `uncheck`, `scroll-to`, `drag`, `upload`
 - keyboard, mouse, script, waits: `type`, `press`, `key-down`, `key-up`, `scroll`, `mouse-*`, `eval`, `eval-on`, `wait`, `wait-network`
-- observation and state: `console-*`, `network-*`, `screenshot`, `pdf`, `cookies`, `cookie-set`, `cookies-clear`, `storage-save`, `storage-load`
+- observation and state: `console-*`, `network-*`, `dialog-*`, `trace-*`, `video-*`, `screenshot`, `pdf`, `cookies`, `cookie-set`, `cookies-clear`, `storage-save`, `storage-load`
 - verification: `verify-text`, `verify-visible`, `verify-url`, `verify-title`, `verify-state`, `verify-value`
 
 Use `browser-cli -h` and per-command help like `browser-cli click -h` to inspect the full surface.
+
+The daemon-backed action catalog is now kept in parity with the current `bridgic-browser` command surface. `browser-cli` intentionally adds two extra commands on top of that surface:
+
+- `html`: return rendered DOM HTML for the active tab
+- `stop`: stop the local daemon and shared browser instance
 
 ## Output Contracts
 
@@ -125,3 +130,23 @@ Exit codes:
 - If both the real profile and the fallback profile are unavailable, the command fails.
 - `read` is intentionally small. More complex flows belong in the daemon-backed action layer and future exploration/workflow layers.
 - The daemon uses one shared browser instance. `X_AGENT_ID` isolates tab visibility and active-tab state only, not storage.
+
+## Testing
+
+Run the full suite with:
+
+```bash
+pytest -q
+```
+
+The integration coverage is fixture-driven and local-first. The suite uses a local HTTP fixture app that exercises:
+
+- navigation, tabs, and history
+- snapshot and rendered HTML capture
+- ref-based element actions
+- keyboard and mouse actions
+- waits, eval, and verification
+- console, network, dialogs, trace, video, screenshot, and PDF
+- cookies, localStorage save/load, and `X_AGENT_ID` isolation
+
+The action catalog also has a parity test that fails if the daemon-backed command surface drops below the current `bridgic-browser` catalog.

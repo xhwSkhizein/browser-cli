@@ -77,11 +77,22 @@ Rules:
 Prefer four layers:
 
 - unit tests for profile resolution, output selection, and error mapping
+- unit tests for action-catalog parity against the adopted `bridgic-browser` command surface
 - unit tests for `X_AGENT_ID`, tab ownership, and busy-state conflict rules
-- integration tests against local fixture sites for render, scroll behavior, daemon lifecycle, and action commands
+- integration tests against local fixture sites for render, scroll behavior, daemon lifecycle, and every daemon-backed action family
 - smoke tests against a small set of real sites for profile reuse and authenticated reads
 
 Do not make CI depend primarily on unstable real websites.
+
+The local integration fixture should stay comprehensive enough to validate:
+
+- navigation, tabs, and history
+- snapshot and rendered HTML capture
+- ref-based click/fill/select/check/hover/focus/drag/upload flows
+- keyboard and mouse flows
+- waits, eval, and verification
+- console, network, dialog, trace, video, screenshot, and PDF flows
+- cookies, localStorage save/load, and `X_AGENT_ID` isolation
 
 ## Documentation Expectations
 
