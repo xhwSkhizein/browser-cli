@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from argparse import ArgumentParser, Namespace
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 

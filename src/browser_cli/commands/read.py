@@ -25,6 +25,8 @@ def run_read_command(args: Namespace) -> str:
     runner = ReadRunner()
     result = asyncio.run(runner.run(request))
     if result.used_fallback_profile and result.fallback_profile_dir:
+        # FIXME: This is a temporary fix to avoid printing the message when the primary profile is available
+        # TODO: Remove this fix when the profile discovery is improved
         message = (
             "Info: primary Chrome profile unavailable; using fallback profile at "
             f"{result.fallback_profile_dir}"
