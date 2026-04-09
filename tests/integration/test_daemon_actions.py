@@ -12,7 +12,7 @@ import pytest
 
 from browser_cli.cli.main import main
 from browser_cli.daemon.client import send_command
-from browser_cli.errors import BusyTabError
+from browser_cli.errors import AmbiguousRefError, BusyTabError, NoSnapshotContextError, StaleSnapshotError
 from browser_cli.profiles.discovery import discover_chrome_executable
 from tests.integration.fixture_server import run_fixture_server
 
@@ -93,14 +93,6 @@ def _find_ref(refs_summary: list[dict], *, role: str, name: str) -> str:
 
 def _snapshot_refs(capsys) -> list[dict]:
     return _run_cli_json(["snapshot"], capsys)["data"]["refs_summary"]
-
-
-def _ref_for_selector(capsys, selector: str) -> str:
-    payload = _run_cli_json(
-        ["eval", f"() => document.querySelector({json.dumps(selector)}).getAttribute('data-browser-cli-ref')"],
-        capsys,
-    )
-    return str(payload["data"]["result"])
 
 
 @pytest.mark.skipif(not _can_launch_daemon_browser(), reason="Stable Chrome runtime unavailable")
@@ -191,7 +183,7 @@ def test_snapshot_html_and_element_interaction_commands(monkeypatch, tmp_path: P
         focus_ref = _find_ref(refs_summary, role="textbox", name="Focus Input")
         double_click_ref = _find_ref(refs_summary, role="button", name="Double Click Button")
         hover_ref = _find_ref(refs_summary, role="button", name="Hover Target")
-        upload_ref = _ref_for_selector(capsys, "#upload-input")
+        upload_ref = _find_ref(refs_summary, role="button", name="Upload File")
         drag_source_ref = _find_ref(refs_summary, role="button", name="Drag Source")
         drag_target_ref = _find_ref(refs_summary, role="button", name="Drop Target")
         deep_target_ref = _find_ref(refs_summary, role="button", name="Deep Target")
@@ -282,6 +274,64 @@ def test_snapshot_html_and_element_interaction_commands(monkeypatch, tmp_path: P
 
         verify_value = _run_cli_json(["verify-value", name_ref, "Bob"], capsys)
         assert verify_value["data"]["passed"] is True
+
+        _stop_daemon(capsys)
+
+
+@pytest.mark.skipif(not _can_launch_daemon_browser(), reason="Stable Chrome runtime unavailable")
+def test_semantic_ref_recovers_after_rerender_and_iframe(monkeypatch, tmp_path: Path, capsys) -> None:
+    with run_fixture_server() as base_url:
+        _configure_runtime(monkeypatch, tmp_path)
+
+        _run_cli_json(["open", f"{base_url}/semantic"], capsys)
+        semantic_refs = _snapshot_refs(capsys)
+        target_ref = _find_ref(semantic_refs, role="button", name="Semantic Target")
+        rerender_ref = _find_ref(semantic_refs, role="button", name="Rerender Stable Target")
+
+        _run_cli_json(["click", target_ref], capsys)
+        first_status = _run_cli_json(["eval", "() => document.getElementById('semantic-status').textContent"], capsys)
+        assert first_status["data"]["result"] == "1"
+
+        _run_cli_json(["click", rerender_ref], capsys)
+        _run_cli_json(["click", target_ref], capsys)
+        second_status = _run_cli_json(["eval", "() => document.getElementById('semantic-status').textContent"], capsys)
+        assert second_status["data"]["result"] == "2"
+
+        _run_cli_json(["open", f"{base_url}/iframe"], capsys)
+        iframe_refs = _snapshot_refs(capsys)
+        frame_ref = _find_ref(iframe_refs, role="button", name="Frame Trigger")
+        _run_cli_json(["click", frame_ref], capsys)
+        frame_status = _run_cli_json(["eval", "() => document.getElementById('frame-status').textContent"], capsys)
+        assert frame_status["data"]["result"] == "clicked"
+
+        _stop_daemon(capsys)
+
+
+@pytest.mark.skipif(not _can_launch_daemon_browser(), reason="Stable Chrome runtime unavailable")
+def test_semantic_ref_errors_are_explicit(monkeypatch, tmp_path: Path, capsys) -> None:
+    with run_fixture_server() as base_url:
+        _configure_runtime(monkeypatch, tmp_path)
+        _run_cli_json(["open", f"{base_url}/semantic"], capsys)
+
+        with pytest.raises(NoSnapshotContextError):
+            send_command("click", {"ref": "aaaaaaaa"})
+
+        semantic_refs = _snapshot_refs(capsys)
+        target_ref = _find_ref(semantic_refs, role="button", name="Semantic Target")
+        duplicate_ref = _find_ref(semantic_refs, role="button", name="Duplicate Semantic Target")
+        rename_ref = _find_ref(semantic_refs, role="button", name="Rename Semantic Target")
+
+        _run_cli_json(["click", duplicate_ref], capsys)
+        with pytest.raises(AmbiguousRefError):
+            send_command("click", {"ref": target_ref})
+
+        _run_cli_json(["reload"], capsys)
+        semantic_refs = _snapshot_refs(capsys)
+        target_ref = _find_ref(semantic_refs, role="button", name="Semantic Target")
+        rename_ref = _find_ref(semantic_refs, role="button", name="Rename Semantic Target")
+        _run_cli_json(["click", rename_ref], capsys)
+        with pytest.raises(StaleSnapshotError):
+            send_command("click", {"ref": target_ref})
 
         _stop_daemon(capsys)
 

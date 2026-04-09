@@ -10,6 +10,7 @@ from browser_cli.actions import get_action_specs
 from browser_cli import __version__, exit_codes
 from browser_cli.commands.action import run_action_command
 from browser_cli.commands.read import run_read_command
+from browser_cli.commands.workflow import run_workflow_command
 from browser_cli.errors import BrowserCliError
 
 
@@ -36,6 +37,40 @@ def build_parser() -> argparse.ArgumentParser:
         help="Scroll to the bottom before capture to trigger lazy-loaded content.",
     )
     read_parser.set_defaults(handler=run_read_command)
+
+    workflow_parser = subparsers.add_parser(
+        "workflow",
+        help="Validate or run a published workflow wrapper.",
+        description="Run workflow.toml packaging around a task.py artifact.",
+    )
+    workflow_subparsers = workflow_parser.add_subparsers(dest="workflow_subcommand", metavar="WORKFLOW_COMMAND")
+
+    workflow_run_parser = workflow_subparsers.add_parser(
+        "run",
+        help="Run a workflow manifest.",
+        description="Load workflow.toml, merge inputs, and execute its task.",
+    )
+    workflow_run_parser.add_argument("path", help="Path to workflow.toml.")
+    workflow_run_parser.add_argument(
+        "--set",
+        dest="set_values",
+        action="append",
+        default=[],
+        help="Override one input as KEY=VALUE. Repeat as needed.",
+    )
+    workflow_run_parser.add_argument(
+        "--inputs-json",
+        help="JSON object with input overrides.",
+    )
+    workflow_run_parser.set_defaults(handler=run_workflow_command)
+
+    workflow_validate_parser = workflow_subparsers.add_parser(
+        "validate",
+        help="Validate a workflow manifest.",
+        description="Validate workflow.toml and the referenced task metadata.",
+    )
+    workflow_validate_parser.add_argument("path", help="Path to workflow.toml.")
+    workflow_validate_parser.set_defaults(handler=run_workflow_command)
 
     for spec in get_action_specs():
         action_parser = subparsers.add_parser(

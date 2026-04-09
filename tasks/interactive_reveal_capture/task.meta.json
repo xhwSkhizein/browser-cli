@@ -1,0 +1,82 @@
+{
+  "task": {
+    "id": "interactive_reveal_capture",
+    "name": "Interactive Reveal Capture",
+    "goal": "Open a page, reveal hidden content, and export HTML plus snapshot artifacts.",
+    "inputs": {
+      "url": {
+        "required": true,
+        "type": "string"
+      },
+      "timeout": {
+        "required": false,
+        "type": "number",
+        "default": 5.0
+      }
+    },
+    "expected_outputs": {
+      "html_path": "Rendered HTML artifact path",
+      "snapshot_path": "Snapshot text artifact path"
+    }
+  },
+  "environment": {
+    "site": "generic fixture",
+    "entry_url": "Provided at runtime",
+    "requires_login": false,
+    "agent_scope": "default or caller-provided X_AGENT_ID",
+    "profile_expectation": "Uses shared browser-cli daemon profile handling.",
+    "browser_assumptions": [
+      "Page exposes a button named Reveal Message.",
+      "Revealed text becomes visible in the DOM."
+    ]
+  },
+  "success_path": {
+    "steps": [
+      "Open the target URL.",
+      "Capture a semantic snapshot.",
+      "Locate the Reveal Message button by role/name.",
+      "Click the button and wait for Revealed text.",
+      "Capture rendered HTML and snapshot artifacts."
+    ],
+    "key_refs": [
+      {
+        "role": "button",
+        "name": "Reveal Message"
+      }
+    ],
+    "key_assertions": [
+      "Text Revealed must appear before exporting artifacts."
+    ],
+    "artifacts": [
+      "interactive.html",
+      "snapshot.txt"
+    ]
+  },
+  "recovery_hints": {
+    "retryable_steps": [
+      "Re-capture a snapshot if the Reveal Message ref becomes stale.",
+      "Increase timeout if the page renders slowly."
+    ],
+    "alternate_paths": [],
+    "stale_ref_strategy": "Capture a fresh snapshot and resolve the button by role/name again.",
+    "known_wait_points": [
+      "Wait for Revealed text after clicking the button."
+    ],
+    "anti_bot_recovery": []
+  },
+  "failures": [],
+  "knowledge": {
+    "stable_selectors_or_roles": [
+      "button[Reveal Message]"
+    ],
+    "semantic_ref_notes": [
+      "The task relies on semantic role/name lookup rather than DOM attributes."
+    ],
+    "pagination_pattern": null,
+    "lazy_load_pattern": null,
+    "anti_bot_notes": [],
+    "output_interpretation_notes": [
+      "interactive.html contains the post-click rendered DOM."
+    ]
+  }
+}

@@ -6,6 +6,7 @@ import asyncio
 import json
 import os
 import tempfile
+import time
 import urllib.parse
 from pathlib import Path
 from typing import Any
@@ -15,8 +16,10 @@ from browser_cli.browser.snapshot import SnapshotCapture, capture_snapshot
 from browser_cli.browser.stealth import STEALTH_INIT_SCRIPT, build_launch_args
 from browser_cli.constants import get_app_paths
 from browser_cli.errors import (
+    AmbiguousRefError,
     BrowserUnavailableError,
     InvalidInputError,
+    NoSnapshotContextError,
     OperationFailedError,
     ProfileUnavailableError,
     RefNotFoundError,
@@ -24,6 +27,8 @@ from browser_cli.errors import (
     TemporaryReadError,
 )
 from browser_cli.profiles.discovery import ChromeEnvironment, discover_chrome_environment
+from browser_cli.refs import SemanticRefResolver, SnapshotRegistry
+from browser_cli.refs.models import RefData, SemanticSnapshot, SnapshotMetadata
 
 
 class BrowserService:
@@ -39,7 +44,8 @@ class BrowserService:
         self._context: Any | None = None
         self._pages: dict[str, Any] = {}
         self._page_counter = 0
-        self._snapshot_refs_by_page: dict[str, set[str]] = {}
+        self._snapshot_registry = SnapshotRegistry()
+        self._ref_resolver = SemanticRefResolver()
         self._console_messages: dict[str, list[dict[str, Any]]] = {}
         self._console_handlers: dict[str, Any] = {}
         self._network_requests: dict[str, list[dict[str, Any]]] = {}
@@ -124,7 +130,7 @@ class BrowserService:
             except Exception:
                 pass
         self._pages.clear()
-        self._snapshot_refs_by_page.clear()
+        self._snapshot_registry.clear()
         self._console_messages.clear()
         self._console_handlers.clear()
         self._network_requests.clear()
@@ -157,7 +163,6 @@ class BrowserService:
             page = await self._context.new_page()
             page_id = self._next_page_id()
             self._pages[page_id] = page
-            self._snapshot_refs_by_page[page_id] = set()
             if url:
                 await page.goto(
                     self._normalize_url(url),
@@ -202,14 +207,10 @@ class BrowserService:
         page = self._require_page(page_id)
         html = await page.evaluate(
             """() => {
-                const clone = document.documentElement.cloneNode(true);
-                for (const node of clone.querySelectorAll('[data-browser-cli-ref]')) {
-                    node.removeAttribute('data-browser-cli-ref');
-                }
                 const doctype = document.doctype
                     ? `<!DOCTYPE ${document.doctype.name}>`
                     : '';
-                return `${doctype}${clone.outerHTML}`;
+                return `${doctype}${document.documentElement.outerHTML}`;
             }"""
         )
         return {
@@ -225,12 +226,15 @@ class BrowserService:
         full_page: bool = True,
     ) -> dict[str, Any]:
         page = self._require_page(page_id)
-        snapshot = await capture_snapshot(page, interactive=interactive, full_page=full_page)
-        refs = set(snapshot.refs.keys())
-        self._snapshot_refs_by_page[page_id] = refs
+        snapshot = await capture_snapshot(page, page_id=page_id, interactive=interactive, full_page=full_page)
+        semantic_snapshot = self._semantic_snapshot_from_capture(page_id, snapshot, interactive=interactive, full_page=full_page)
+        state = self._snapshot_registry.store(semantic_snapshot)
         return {
             "page_id": page_id,
             "tree": snapshot.tree,
+            "snapshot_id": snapshot.snapshot_id,
+            "captured_url": state.captured_url,
+            "captured_at": state.captured_at,
             "refs_summary": [
                 {
                     "ref": ref,
@@ -828,14 +832,22 @@ class BrowserService:
 
     async def _get_locator_by_ref(self, page_id: str, ref: str) -> Any:
         page = self._require_page(page_id)
-        normalized = ref.strip().removeprefix("@").removeprefix("ref=")
-        locator = page.locator(f'[data-browser-cli-ref="{normalized}"]')
+        state = self._snapshot_registry.get(page_id)
+        if state is None:
+            raise NoSnapshotContextError()
+        normalized = self._ref_resolver.parse_ref(ref)
+        if normalized is None:
+            raise InvalidInputError(f"Invalid ref: {ref}")
+        if normalized not in state.refs:
+            raise RefNotFoundError()
+        locator = self._ref_resolver.get_locator(page, normalized, state.refs)
+        if locator is None:
+            raise RefNotFoundError()
         count = await locator.count()
         if count == 0:
-            known_refs = self._snapshot_refs_by_page.get(page_id, set())
-            if normalized in known_refs:
-                raise StaleSnapshotError()
-            raise RefNotFoundError()
+            raise StaleSnapshotError()
+        if count > 1:
+            raise AmbiguousRefError()
         return locator.first
 
     def _remove_page_handlers(self, page_id: str) -> None:
@@ -921,7 +933,7 @@ class BrowserService:
         self._remove_page_handlers(page_id)
         await page.close()
         self._pages.pop(page_id, None)
-        self._snapshot_refs_by_page.pop(page_id, None)
+        self._snapshot_registry.clear_page(page_id)
         result: dict[str, Any] = {"page_id": page_id, "closed": True}
         if video is not None and video_requested:
             result["video_path"] = await self._save_video_artifact(
@@ -985,3 +997,43 @@ class BrowserService:
         if "executable" in lowered or "browser" in lowered or "failed to launch" in lowered:
             raise BrowserUnavailableError(message) from exc
         raise TemporaryReadError(message) from exc
+
+    def _semantic_snapshot_from_capture(
+        self,
+        page_id: str,
+        snapshot: SnapshotCapture,
+        *,
+        interactive: bool,
+        full_page: bool,
+    ) -> SemanticSnapshot:
+        page = self._require_page(page_id)
+        captured_at = time.time()
+        metadata = SnapshotMetadata(
+            snapshot_id=snapshot.snapshot_id,
+            page_id=page_id,
+            captured_url=str(page.url),
+            captured_at=captured_at,
+            interactive=interactive,
+            full_page=full_page,
+        )
+        refs = {
+            ref: RefData(
+                ref=str(ref),
+                role=str(data.get("role") or ""),
+                name=str(data["name"]) if data.get("name") is not None else None,
+                nth=int(data["nth"]) if data.get("nth") is not None else None,
+                text_content=str(data["text_content"]) if data.get("text_content") is not None else None,
+                tag=str(data["tag"]) if data.get("tag") is not None else None,
+                interactive=bool(data.get("interactive")),
+                parent_ref=str(data["parent_ref"]) if data.get("parent_ref") is not None else None,
+                frame_path=tuple(int(item) for item in (data.get("frame_path") or [])),
+                playwright_ref=str(data["playwright_ref"]) if data.get("playwright_ref") is not None else None,
+                selector_recipe=str(data["selector_recipe"]) if data.get("selector_recipe") is not None else None,
+                snapshot_id=snapshot.snapshot_id,
+                page_id=page_id,
+                captured_url=str(page.url),
+                captured_at=captured_at,
+            )
+            for ref, data in snapshot.refs.items()
+        }
+        return SemanticSnapshot(tree=snapshot.tree, refs=refs, metadata=metadata)

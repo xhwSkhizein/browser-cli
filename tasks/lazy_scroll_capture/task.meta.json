@@ -1,0 +1,76 @@
+{
+  "task": {
+    "id": "lazy_scroll_capture",
+    "name": "Lazy Scroll Capture",
+    "goal": "Scroll a lazy-loaded page until content stabilizes and export the final DOM plus scroll history.",
+    "inputs": {
+      "url": {
+        "required": true,
+        "type": "string"
+      },
+      "max_rounds": {
+        "required": false,
+        "type": "integer",
+        "default": 8
+      },
+      "wait_seconds": {
+        "required": false,
+        "type": "number",
+        "default": 0.3
+      }
+    },
+    "expected_outputs": {
+      "html_path": "Rendered HTML after lazy loading stabilizes",
+      "rounds_path": "JSON artifact with scroll rounds"
+    }
+  },
+  "environment": {
+    "site": "generic lazy-load page",
+    "entry_url": "Provided at runtime",
+    "requires_login": false,
+    "agent_scope": "default or caller-provided X_AGENT_ID",
+    "profile_expectation": "Uses shared browser-cli daemon profile handling.",
+    "browser_assumptions": [
+      "Page grows scrollHeight while more content loads.",
+      "Repeated bottom scrolling eventually stabilizes."
+    ]
+  },
+  "success_path": {
+    "steps": [
+      "Open the target URL.",
+      "Run bounded scroll-until-stable helper.",
+      "Capture final rendered HTML and scroll history artifacts."
+    ],
+    "key_refs": [],
+    "key_assertions": [
+      "Scroll helper should stop only after consecutive stable rounds."
+    ],
+    "artifacts": [
+      "lazy.html",
+      "scroll-rounds.json"
+    ]
+  },
+  "recovery_hints": {
+    "retryable_steps": [
+      "Increase wait_seconds if the site loads content slowly.",
+      "Increase max_rounds for deeper feeds."
+    ],
+    "alternate_paths": [],
+    "stale_ref_strategy": "Not ref-dependent; retry the helper with updated waits.",
+    "known_wait_points": [
+      "Each post-scroll stabilization wait."
+    ],
+    "anti_bot_recovery": []
+  },
+  "failures": [],
+  "knowledge": {
+    "stable_selectors_or_roles": [],
+    "semantic_ref_notes": [],
+    "pagination_pattern": "Infinite scroll",
+    "lazy_load_pattern": "ScrollHeight growth followed by stabilization",
+    "anti_bot_notes": [],
+    "output_interpretation_notes": [
+      "scroll-rounds.json records each before/after height pair."
+    ]
+  }
+}

@@ -109,7 +109,7 @@ class BrowserSession:
 
     async def capture_snapshot(self) -> str:
         self._ensure_started()
-        snapshot = await capture_snapshot(self._page)
+        snapshot = await capture_snapshot(self._page, page_id="read_page")
         return snapshot.tree
 
     def _ensure_started(self) -> None:

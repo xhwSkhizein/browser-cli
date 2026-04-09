@@ -1,0 +1,30 @@
+[workflow]
+id = "replace_me"
+name = "Replace Me"
+description = "Describe the workflow."
+version = "0.1.0"
+
+[task]
+path = "task.py"
+meta_path = "task.meta.json"
+entrypoint = "run"
+
+[inputs]
+
+[schedule]
+mode = "manual"
+timezone = "Asia/Shanghai"
+
+[outputs]
+artifact_dir = "artifacts"
+result_json_path = "artifacts/result.json"
+stdout = "json"
+
+[hooks]
+before_run = []
+after_success = []
+after_failure = []
+
+[runtime]
+retry_attempts = 0
+log_level = "info"

@@ -1,0 +1,31 @@
+[workflow]
+id = "interactive_reveal_capture"
+name = "Interactive Reveal Capture"
+description = "Open a page, reveal content, and export HTML plus snapshot artifacts."
+version = "0.1.0"
+
+[task]
+path = "task.py"
+meta_path = "task.meta.json"
+entrypoint = "run"
+
+[inputs]
+timeout = 5.0
+
+[schedule]
+mode = "manual"
+timezone = "Asia/Shanghai"
+
+[outputs]
+artifact_dir = "artifacts"
+result_json_path = "artifacts/result.json"
+stdout = "json"
+
+[hooks]
+before_run = []
+after_success = []
+after_failure = []
+
+[runtime]
+retry_attempts = 0
+log_level = "info"

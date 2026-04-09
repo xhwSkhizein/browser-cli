@@ -1,0 +1,39 @@
+{
+  "task": {
+    "id": "replace_me",
+    "name": "Replace Me",
+    "goal": "Describe the task goal.",
+    "inputs": {},
+    "expected_outputs": {}
+  },
+  "environment": {
+    "site": "",
+    "entry_url": "",
+    "requires_login": false,
+    "agent_scope": "",
+    "profile_expectation": "",
+    "browser_assumptions": []
+  },
+  "success_path": {
+    "steps": [],
+    "key_refs": [],
+    "key_assertions": [],
+    "artifacts": []
+  },
+  "recovery_hints": {
+    "retryable_steps": [],
+    "alternate_paths": [],
+    "stale_ref_strategy": "",
+    "known_wait_points": [],
+    "anti_bot_recovery": []
+  },
+  "failures": [],
+  "knowledge": {
+    "stable_selectors_or_roles": [],
+    "semantic_ref_notes": [],
+    "pagination_pattern": null,
+    "lazy_load_pattern": null,
+    "anti_bot_notes": [],
+    "output_interpretation_notes": []
+  }
+}

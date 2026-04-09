@@ -262,6 +262,13 @@ class BrowserDaemonApp:
             refs_summary = payload.get("refs_summary", [])
             ref_ids = {str(item.get("ref")) for item in refs_summary if item.get("ref")}
             await self._state.tabs.update_tab(page_id, last_snapshot_refs=ref_ids)
+            await self._state.tabs.update_tab(
+                page_id,
+                last_snapshot_id=str(payload.get("snapshot_id") or ""),
+                last_snapshot_ref_count=len(ref_ids),
+                last_snapshot_url=str(payload.get("captured_url") or ""),
+                last_snapshot_at=float(payload.get("captured_at") or 0.0),
+            )
             return payload
 
         return await self._run_active_page_action(request, _snapshot)

@@ -18,6 +18,7 @@ Use this checklist before calling Browser CLI done on a real workstation.
 - `browser-cli tabs`
 - `browser-cli snapshot`
 - `browser-cli html`
+- `browser-cli workflow validate tasks/interactive_reveal_capture/workflow.toml`
 - `browser-cli stop`
 
 ## Multi-Agent Checks
@@ -47,6 +48,16 @@ Use this checklist before calling Browser CLI done on a real workstation.
 - Run `browser-cli stop`.
 - Confirm the first command starts the daemon automatically and `stop` tears it down cleanly.
 
+## Semantic Ref Checks
+
+- Open a page that can re-render the same semantic target.
+- Capture `browser-cli snapshot`.
+- Click a ref, trigger a DOM re-render that preserves the role/name, then click the same ref again.
+- Confirm the second click still succeeds without a fresh snapshot.
+- Trigger a semantic rename and confirm the old ref now fails explicitly.
+- Trigger duplicate matching semantics and confirm the old ref fails with an ambiguity error.
+- Open a page with an iframe, capture `snapshot`, then click an iframe-local ref and confirm it resolves correctly.
+
 ## Action Surface Checks
 
 - Exercise one ref-driven form flow: `snapshot`, then `fill`, `select`, `check`, `verify-value`, `verify-state`.
@@ -55,6 +66,14 @@ Use this checklist before calling Browser CLI done on a real workstation.
 - Exercise one dialog flow: `dialog-setup` or `dialog`, then trigger `alert`, `confirm`, or `prompt`.
 - Exercise one artifact flow: `screenshot`, `pdf`, `trace-start`, `trace-chunk`, `trace-stop`, `video-start`, `video-stop`, then close the tab and confirm the trace/video artifacts exist.
 - Exercise one storage flow: `cookie-set`, `cookies`, `cookies-clear`, `storage-save`, `storage-load`.
+
+## Task And Workflow Checks
+
+- Run `browser-cli workflow validate tasks/interactive_reveal_capture/workflow.toml`.
+- Run `browser-cli workflow run tasks/interactive_reveal_capture/workflow.toml --set url=<fixture-url>`.
+- Confirm the workflow writes `artifacts/result.json`.
+- Confirm the workflow-created HTML artifact contains the expected rendered content.
+- Run the lazy-scroll task through Python or a temporary workflow and confirm it writes both HTML and round-history artifacts.
 
 ## Failure Checks
 

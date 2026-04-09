@@ -15,10 +15,12 @@ from typing import Any
 from browser_cli.agent_scope import resolve_agent_id
 from browser_cli.constants import get_app_paths
 from browser_cli.errors import (
+    AmbiguousRefError,
     BrowserCliError,
     BusyTabError,
     DaemonNotAvailableError,
     InvalidInputError,
+    NoSnapshotContextError,
     NoActiveTabError,
     NoVisibleTabsError,
     OperationFailedError,
@@ -126,6 +128,10 @@ def _error_from_payload(payload: dict[str, Any]) -> BrowserCliError:
         return TabNotFoundError(message)
     if error_code == "REF_NOT_FOUND":
         return RefNotFoundError(message)
+    if error_code == "NO_SNAPSHOT_CONTEXT":
+        return NoSnapshotContextError(message)
+    if error_code == "AMBIGUOUS_REF":
+        return AmbiguousRefError(message)
     if error_code == "STALE_SNAPSHOT":
         return StaleSnapshotError(message)
     if error_code == "DAEMON_NOT_AVAILABLE":

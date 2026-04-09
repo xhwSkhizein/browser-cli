@@ -288,6 +288,73 @@ NAV_TWO_PAGE = """<!doctype html>
 </html>
 """
 
+SEMANTIC_PAGE = """<!doctype html>
+<html>
+  <head><title>Semantic Fixture</title></head>
+  <body>
+    <main>
+      <h1>Semantic Fixture</h1>
+      <button id="rerender-stable" aria-label="Rerender Stable Target">Rerender Stable Target</button>
+      <button id="duplicate-target" aria-label="Duplicate Semantic Target">Duplicate Semantic Target</button>
+      <button id="rename-target" aria-label="Rename Semantic Target">Rename Semantic Target</button>
+      <div id="target-host"></div>
+      <p id="semantic-status">0</p>
+    </main>
+    <script>
+      const host = document.getElementById('target-host');
+      const setStatus = (value) => {
+        document.getElementById('semantic-status').textContent = String(value);
+      };
+      const bindTargets = () => {
+        document.querySelectorAll('[data-semantic-target]').forEach((node) => {
+          node.addEventListener('click', () => {
+            const current = Number(document.getElementById('semantic-status').textContent || '0');
+            setStatus(current + 1);
+          });
+        });
+      };
+      const renderStable = () => {
+        host.innerHTML = '<button data-semantic-target="1" aria-label="Semantic Target">Semantic Target</button>';
+        bindTargets();
+      };
+      const renderDuplicate = () => {
+        host.innerHTML = [
+          '<button data-semantic-target="1" aria-label="Semantic Target">Semantic Target</button>',
+          '<button data-semantic-target="1" aria-label="Semantic Target">Semantic Target</button>'
+        ].join('');
+        bindTargets();
+      };
+      const renderRenamed = () => {
+        host.innerHTML = '<button data-semantic-target="1" aria-label="Renamed Semantic Target">Renamed Semantic Target</button>';
+        bindTargets();
+      };
+
+      document.getElementById('rerender-stable').addEventListener('click', renderStable);
+      document.getElementById('duplicate-target').addEventListener('click', renderDuplicate);
+      document.getElementById('rename-target').addEventListener('click', renderRenamed);
+
+      renderStable();
+    </script>
+  </body>
+</html>
+"""
+
+IFRAME_PAGE = """<!doctype html>
+<html>
+  <head><title>Iframe Fixture</title></head>
+  <body>
+    <main>
+      <h1>Iframe Fixture</h1>
+      <p id="frame-status">idle</p>
+      <iframe
+        id="fixture-frame"
+        srcdoc='<!doctype html><html><body><button id="frame-trigger" aria-label="Frame Trigger">Frame Trigger</button><script>document.getElementById("frame-trigger").addEventListener("click", () => { parent.document.getElementById("frame-status").textContent = "clicked"; });</script></body></html>'
+      ></iframe>
+    </main>
+  </body>
+</html>
+"""
+
 
 def _build_search_page(query: str, engine: str) -> str:
     return f"""<!doctype html>
@@ -327,6 +394,12 @@ class FixtureHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/nav-two":
             self._send_html(NAV_TWO_PAGE)
+            return
+        if parsed.path == "/semantic":
+            self._send_html(SEMANTIC_PAGE)
+            return
+        if parsed.path == "/iframe":
+            self._send_html(IFRAME_PAGE)
             return
         if parsed.path == "/search":
             self._send_html(

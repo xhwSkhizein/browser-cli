@@ -1,13 +1,15 @@
 # browser-cli
 
-`browser-cli` is a `CLI-first`, `Python-first` browser tool with two surfaces:
+`browser-cli` is a `CLI-first`, `Python-first` browser tool with four connected layers:
 
 - `read`: one-shot rendered page reading
 - daemon-backed browser actions: long-lived browser control for agents
+- semantic refs: bridgic-style ref reconstruction for resilient replay
+- task/workflow runtime: reusable `task.py`, `task.meta.json`, and `workflow.toml`
 
 ## Status
 
-Current scope now has two layers:
+Current scope now has four layers:
 
 ```bash
 browser-cli read <url>
@@ -19,10 +21,13 @@ browser-cli tabs
 browser-cli snapshot
 browser-cli click @8d4b03a9
 browser-cli html
+
+browser-cli workflow validate tasks/interactive_reveal_capture/workflow.toml
+browser-cli workflow run tasks/interactive_reveal_capture/workflow.toml --set url=https://example.com
 browser-cli stop
 ```
 
-`read` stays content-first. The daemon-backed commands are JSON-first and are designed for agents.
+`read` stays content-first. The daemon-backed commands and workflow surface are JSON-first and are designed for agents and reusable delivery.
 
 ## Requirements
 
@@ -96,6 +101,70 @@ The daemon-backed action catalog is now kept in parity with the current `bridgic
 - `html`: return rendered DOM HTML for the active tab
 - `stop`: stop the local daemon and shared browser instance
 
+Semantic refs now use bridgic-style reconstruction rather than DOM-injected `data-*` markers. This means:
+
+- refs remain stable across DOM re-renders when page semantics stay the same
+- stale and ambiguous ref failures are explicit
+- iframe-local refs are reconstructed against the correct frame path
+
+## Task Runtime And Workflow Packaging
+
+Reusable task artifacts now live under [`tasks/`](/Users/hongv/workspace/m-projects/browser-cli/tasks).
+
+Representative layout:
+
+```text
+tasks/
+  interactive_reveal_capture/
+    task.py
+    task.meta.json
+    workflow.toml
+```
+
+`task.py` uses the thin Python runtime:
+
+```python
+from browser_cli.task_runtime.flow import Flow
+
+
+def run(flow: Flow, inputs: dict) -> dict:
+    flow.open(inputs["url"])
+    snapshot = flow.snapshot()
+    ref = snapshot.find_ref(role="button", name="Reveal Message")
+    flow.click(ref)
+    flow.wait_text("Revealed", timeout=5)
+    return {"html": flow.html()}
+```
+
+`workflow.toml` is the published wrapper around a task. Validate and run it with:
+
+```bash
+browser-cli workflow validate tasks/interactive_reveal_capture/workflow.toml
+browser-cli workflow run tasks/interactive_reveal_capture/workflow.toml --set url=https://example.com
+```
+
+The included reference tasks are:
+
+- [`interactive_reveal_capture`](/Users/hongv/workspace/m-projects/browser-cli/tasks/interactive_reveal_capture/task.py)
+- [`lazy_scroll_capture`](/Users/hongv/workspace/m-projects/browser-cli/tasks/lazy_scroll_capture/task.py)
+
+Reusable task scaffolds live under [`tasks/_templates/`](/Users/hongv/workspace/m-projects/browser-cli/tasks/_templates/task.py).
+
+## Explore Skill
+
+A reusable skill for agent-driven exploration now lives in:
+
+- repo source: [`skills/browser-cli-explore-delivery/SKILL.md`](/Users/hongv/workspace/m-projects/browser-cli/skills/browser-cli-explore-delivery/SKILL.md)
+- installed discovery path: `/Users/hongv/.agents/skills/browser-cli-explore-delivery`
+
+The skill standardizes:
+
+- preflight checks
+- install approval gating
+- Browser CLI-first exploration
+- convergence into `task.py + task.meta.json`
+- optional publish gating for `workflow.toml`
+
 ## Output Contracts
 
 ### `read`
@@ -121,8 +190,10 @@ Exit codes:
   - `NO_ACTIVE_TAB`
   - `AGENT_ACTIVE_TAB_BUSY`
   - `TAB_NOT_FOUND`
+  - `NO_SNAPSHOT_CONTEXT`
   - `REF_NOT_FOUND`
   - `STALE_SNAPSHOT`
+  - `AMBIGUOUS_REF`
 
 ## Notes
 
@@ -143,10 +214,14 @@ The integration coverage is fixture-driven and local-first. The suite uses a loc
 
 - navigation, tabs, and history
 - snapshot and rendered HTML capture
+- semantic ref reconstruction after DOM re-render
+- stale and ambiguous ref failure cases
+- iframe ref reconstruction
 - ref-based element actions
 - keyboard and mouse actions
 - waits, eval, and verification
 - console, network, dialogs, trace, video, screenshot, and PDF
 - cookies, localStorage save/load, and `X_AGENT_ID` isolation
+- task runtime, workflow validation, and workflow execution against local fixtures
 
 The action catalog also has a parity test that fails if the daemon-backed command surface drops below the current `bridgic-browser` catalog.

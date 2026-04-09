@@ -30,6 +30,10 @@ class TabRecord:
     title: str = ""
     busy: BusyState | None = None
     last_snapshot_refs: set[str] = field(default_factory=set)
+    last_snapshot_id: str | None = None
+    last_snapshot_ref_count: int = 0
+    last_snapshot_url: str = ""
+    last_snapshot_at: float | None = None
 
 
 class TabRegistry:
@@ -67,6 +71,10 @@ class TabRegistry:
         url: str | None = None,
         title: str | None = None,
         last_snapshot_refs: set[str] | None = None,
+        last_snapshot_id: str | None = None,
+        last_snapshot_ref_count: int | None = None,
+        last_snapshot_url: str | None = None,
+        last_snapshot_at: float | None = None,
     ) -> TabRecord:
         async with self._lock:
             record = self._tabs.get(page_id)
@@ -79,6 +87,14 @@ class TabRegistry:
                 record.title = title
             if last_snapshot_refs is not None:
                 record.last_snapshot_refs = set(last_snapshot_refs)
+            if last_snapshot_id is not None:
+                record.last_snapshot_id = last_snapshot_id
+            if last_snapshot_ref_count is not None:
+                record.last_snapshot_ref_count = last_snapshot_ref_count
+            if last_snapshot_url is not None:
+                record.last_snapshot_url = last_snapshot_url
+            if last_snapshot_at is not None:
+                record.last_snapshot_at = last_snapshot_at
             return record
 
     async def list_tabs(self, agent_id: str) -> list[TabRecord]:
@@ -231,4 +247,8 @@ class TabRegistry:
             title=record.title,
             busy=record.busy,
             last_snapshot_refs=set(record.last_snapshot_refs),
+            last_snapshot_id=record.last_snapshot_id,
+            last_snapshot_ref_count=record.last_snapshot_ref_count,
+            last_snapshot_url=record.last_snapshot_url,
+            last_snapshot_at=record.last_snapshot_at,
         )

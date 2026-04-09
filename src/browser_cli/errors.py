@@ -80,9 +80,19 @@ class RefNotFoundError(BrowserCliError):
         super().__init__(message, exit_codes.TEMPORARY_FAILURE, error_codes.REF_NOT_FOUND)
 
 
+class NoSnapshotContextError(BrowserCliError):
+    def __init__(self, message: str = "No snapshot context is available for the active tab. Capture a snapshot first.") -> None:
+        super().__init__(message, exit_codes.TEMPORARY_FAILURE, error_codes.NO_SNAPSHOT_CONTEXT)
+
+
 class StaleSnapshotError(BrowserCliError):
     def __init__(self, message: str = "The requested ref is stale. Capture a new snapshot and retry.") -> None:
         super().__init__(message, exit_codes.TEMPORARY_FAILURE, error_codes.STALE_SNAPSHOT)
+
+
+class AmbiguousRefError(BrowserCliError):
+    def __init__(self, message: str = "The requested ref resolved to multiple elements. Capture a new snapshot and retry.") -> None:
+        super().__init__(message, exit_codes.TEMPORARY_FAILURE, error_codes.AMBIGUOUS_REF)
 
 
 class OperationFailedError(BrowserCliError):

@@ -12,4 +12,4 @@ build/
 *.egg-info/
 playwright-report/
 test-results/
-
+tasks/**/artifacts/

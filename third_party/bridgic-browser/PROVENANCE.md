@@ -12,6 +12,11 @@ Current adapted areas:
 - `browser_cli.browser.stealth.STEALTH_INIT_SCRIPT`
   - adapted from `bridgic/browser/session/_stealth.py`
   - purpose: minimal anti-detection init script for `v1`
+- `browser_cli.refs.generator.SemanticSnapshotGenerator`
+  - adapted from `bridgic/browser/session/_snapshot.py`
+  - purpose: semantic snapshot capture built on Playwright `snapshotForAI`
+- `browser_cli.refs.resolver.SemanticRefResolver`
+  - adapted from `bridgic/browser/session/_snapshot.py`
+  - purpose: semantic ref reconstruction across rerenders and iframes
 
-No daemon transport, CLI catalog, or broad browser tool surface was copied into this repository.
-
+No daemon transport, workflow runtime, or broad browser tool surface was copied into this repository.
