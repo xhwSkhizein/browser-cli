@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
-import tomllib
 from pathlib import Path
 from typing import Any
+
+import tomllib
 
 from browser_cli.errors import InvalidInputError
 from browser_cli.task_runtime.models import validate_task_metadata
