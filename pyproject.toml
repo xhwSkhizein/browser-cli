@@ -11,6 +11,7 @@ requires-python = ">=3.10"
 dependencies = [
   "playwright>=1.52,<2",
   "websockets>=12,<16",
+  "tomli>=1.2.0; python_version<'3.11'",
 ]
 
 [project.optional-dependencies]

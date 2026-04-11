@@ -6,7 +6,12 @@ import json
 from pathlib import Path
 from typing import Any
 
-import tomllib
+import sys
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
 
 from browser_cli.errors import InvalidInputError
 from browser_cli.task_runtime.models import validate_task_metadata
