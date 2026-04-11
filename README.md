@@ -14,14 +14,30 @@
 
 ---
 
-`browser-cli` is a browser automation tool designed for **AI agents** and **developers** who need reliable, scriptable browser control from the command line. It provides four integrated layers:
+`browser-cli` is a browser automation tool designed for **AI agents** and **developers** who need reliable, scriptable browser control from the command line.
 
-| Layer | Purpose |
-|-------|---------|
-| **`read`** | One-shot rendered page reading for quick content extraction |
-| **Daemon Actions** | Long-lived browser control for complex agent workflows |
-| **Semantic Refs** | Resilient element identification using bridgic-style ref reconstruction |
-| **Task/Workflow** | Reusable automation packages via `task.py` + `task.meta.json` + `workflow.toml` |
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Task/Workflow Layer  (task.py + task.meta.json + workflow.toml)  │
+├─────────────────────────────────────────────────────────────┤
+│  Browser Daemon  ──►  60+ commands  ──►  Semantic Ref System       │
+│  ├─ read: one-shot page capture                                  │
+│  ├─ open/snapshot/click/fill: interactive control                │
+│  ├─ console/network/trace: observation & debugging             │
+│  ├─ verify-*: assertions                                         │
+│  └─ ... 60+ commands total                                      │
+├─────────────────────────────────────────────────────────────┤
+│  Dual Backend: Playwright (default) ◄──► Chrome Extension (opt)    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+| Component | Purpose |
+|-----------|---------|
+| **Browser Daemon** | Long-lived browser instance with 60+ CLI commands |
+| **Semantic Refs** | Stable element identifiers using bridgic-style reconstruction |
+| **Task/Workflow** | Reusable automation packages for complex scenarios |
 
 ## Features
 
@@ -88,29 +104,64 @@ browser-cli read https://example.com --snapshot
 browser-cli read https://example.com --scroll-bottom
 ```
 
-### Daemon-Backed Browser Control
+### Interactive Browser Control
 
-The first daemon command auto-starts a persistent browser instance:
+The first command auto-starts a persistent browser daemon. Common workflows:
 
+**Navigation & Page State:**
 ```bash
-# Check daemon status
-browser-cli status
-
-# Open a URL
 browser-cli open https://example.com
-
-# Get page snapshot with refs
-browser-cli snapshot
-
-# Click an element by ref
-browser-cli click @8d4b03a9
-
-# Get rendered HTML
-browser-cli html
-
-# Stop the daemon
-browser-cli stop
+browser-cli snapshot                    # Get page with stable refs
+browser-cli click @8d4b03a9            # Click element by ref
+browser-cli fill @input_ref "value"    # Fill input
+browser-cli html                       # Get rendered HTML
 ```
+
+**Tab Management:**
+```bash
+browser-cli tabs                       # List visible tabs
+browser-cli new-tab https://example.org
+browser-cli switch-tab <page_id>
+browser-cli close-tab <page_id>
+```
+
+**Observation & Debugging:**
+```bash
+browser-cli console-start              # Start capturing console logs
+browser-cli network-start            # Start capturing network requests
+browser-cli trace-start              # Start performance tracing
+browser-cli screenshot page.png        # Save screenshot
+```
+
+**Verification:**
+```bash
+browser-cli verify-text "Expected text"
+browser-cli verify-url "https://example.com/*"
+browser-cli verify-visible --role button --name "Submit"
+```
+
+### Full Command Catalog
+
+| Category | Commands |
+|----------|----------|
+| **Navigation** | `open`, `search`, `info`, `back`, `forward`, `page-reload` |
+| **Page State** | `html`, `snapshot`, `screenshot`, `pdf` |
+| **Element Actions** | `click`, `double-click`, `hover`, `focus`, `fill`, `select`, `check`, `uncheck`, `scroll-to`, `drag`, `upload` |
+| **Tabs** | `tabs`, `new-tab`, `switch-tab`, `close-tab`, `close` |
+| **Input** | `type`, `press`, `key-down`, `key-up` |
+| **Mouse** | `scroll`, `mouse-click`, `mouse-move`, `mouse-drag`, `mouse-down`, `mouse-up` |
+| **Wait** | `wait`, `wait-network` |
+| **Script** | `eval`, `eval-on` |
+| **Console** | `console-start`, `console-stop`, `console` |
+| **Network** | `network-start`, `network-stop`, `network` |
+| **Dialog** | `dialog-setup`, `dialog`, `dialog-remove` |
+| **Storage** | `cookies`, `cookie-set`, `cookies-clear`, `storage-save`, `storage-load` |
+| **Verification** | `verify-text`, `verify-visible`, `verify-url`, `verify-title`, `verify-state`, `verify-value` |
+| **Trace** | `trace-start`, `trace-chunk`, `trace-stop` |
+| **Video** | `video-start`, `video-stop` |
+| **Lifecycle** | `status`, `reload`, `stop`, `resize` |
+
+Use `browser-cli <command> -h` for detailed help on any command.
 
 ### Multi-Agent Support
 
