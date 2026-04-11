@@ -53,6 +53,7 @@ REQUIRED_EXTENSION_CAPABILITIES = frozenset(
         "console-start",
         "console",
         "console-stop",
+        "network-wait",
         "network-start",
         "network",
         "network-stop",

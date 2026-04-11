@@ -284,7 +284,12 @@ class ExtensionHub:
         return upgrade.lower() == "websocket" and "upgrade" in connection.lower()
 
     @staticmethod
-    def _build_response(status: HTTPStatus, body: bytes, *, upgrade: str | None = None) -> Response:
+    def _build_response(
+        status: HTTPStatus,
+        body: bytes,
+        *,
+        upgrade: str | None = None,
+    ) -> Response:
         headers = Headers()
         headers["Content-Type"] = "text/plain; charset=utf-8"
         headers["Content-Length"] = str(len(body))
