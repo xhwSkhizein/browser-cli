@@ -1,0 +1,18 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.0
+    hooks:
+      - id: ruff
+        args: [--fix]
+        files: ^(src|tests|scripts)/
+      - id: ruff-format
+        files: ^(src|tests|scripts)/
+
+  - repo: local
+    hooks:
+      - id: guard-checks
+        name: Guard checks
+        entry: ./scripts/guard.sh
+        language: system
+        pass_filenames: false
+        always_run: true
