@@ -27,7 +27,9 @@ def test_parse_input_overrides_merges_json_and_set() -> None:
 
 
 def test_load_workflow_manifest_resolves_repo_examples() -> None:
-    manifest = load_workflow_manifest(REPO_ROOT / "tasks" / "interactive_reveal_capture" / "workflow.toml")
+    manifest = load_workflow_manifest(
+        REPO_ROOT / "tasks" / "interactive_reveal_capture" / "workflow.toml"
+    )
     assert manifest.workflow.id == "interactive_reveal_capture"
     assert manifest.task.path.name == "task.py"
     assert manifest.task.meta_path.name == "task.meta.json"
