@@ -1,38 +1,36 @@
 ---
 name: browser-cli-explore-delivery
-description: Use when an agent needs to explore a website with browser-cli and converge the result into reusable task.py, task.meta.json, and optionally workflow.toml artifacts.
+description: Use when website work must end as reusable browser-cli task artifacts rather than one-off chat notes, especially when success depends on validating runtime assumptions and choosing the right exploration mode.
 ---
 
 # Browser CLI Explore Delivery
 
 ## Overview
 
-Use this skill when browser automation work should end as reusable delivery
-artifacts instead of staying in chat history. The browser backend must be
-`browser-cli`; task logic must converge into `task.py`, metadata into
-`task.meta.json`, and workflow publication must stay separate from task logic.
+Use `browser-cli` as the browser backend and converge successful work into
+`task.py` plus `task.meta.json`. Keep workflow publication separate from task
+logic.
 
 ## When to Use
 
 Use this skill when:
 
-- the goal is to explore a site and turn the successful path into a reusable task
-- the work should use `browser-cli` rather than direct Playwright
-- the output should become `task.py` plus `task.meta.json`
-- a stable task may later be published as `workflow.toml`
+- the browser path should become a reusable task
+- the site depends on real browser execution, cookies, login context, or page state
+- the output should end as `task.py` plus `task.meta.json`
 
 Do not use this skill when:
 
-- the user only wants one-off browsing with no reusable artifact
-- the task is purely API/data work with no browser dependency
-- the environment is not allowed to install or use `browser-cli`
+- one-off browsing is enough
+- the task is pure API/data work with no browser dependency
+- `browser-cli` cannot be installed or used
 
 ## Phase Order
 
 Always follow this order:
 
 1. Preflight
-2. Install plan gate
+2. Choose task mode
 3. Explore with `browser-cli`
 4. Converge to `task.py`
 5. Distill `task.meta.json`
@@ -41,163 +39,80 @@ Always follow this order:
 
 Never skip from exploration straight to `workflow.toml`.
 
+## Quick Decisions
+
+- Need dependency, runtime, profile, or artifact checks first: read
+  [`references/preflight-and-runtime.md`](references/preflight-and-runtime.md)
+- Need to decide whether the task is content-first, browser-state-first, login-state-first,
+  or scroll-first: read
+  [`references/task-modes.md`](references/task-modes.md)
+- Need to decide which inputs users should actually see: read
+  [`references/task-input-design.md`](references/task-input-design.md)
+- If the task depends on response bodies, first verify whether the current
+  runtime exposes them inline or materializes them as artifacts before choosing
+  a fallback path.
+- If the task depends on another runtime feature that `browser-cli` still does
+  not expose, stop early and confirm instead of retrying blindly.
+
 ## 1. Preflight
 
-Check these items before exploring:
+- confirm `browser-cli`, `browser_cli`, Python, browser, and task-specific Python deps
+- confirm the task will run in the same Python environment you just validated
+- confirm profile assumptions such as login state, cookies, locale, and writable artifacts
+- if the advertised CLI surface and the live daemon disagree, do one
+  `browser-cli reload` before declaring a capability gap
+- if anything is missing, produce a short install/fix plan and ask before changing the environment
 
-- `browser-cli` command is available
-- `browser_cli` Python package is importable
-- Python version is compatible
-- Chrome is installed
-- Playwright dependencies are usable
-
-If all checks pass, continue.
-
-If anything is missing:
-
-- produce a short installation plan
-- ask the user for approval before executing it
-- if the user declines, stop
-
-Do not silently install `browser-cli` or browser dependencies.
+Do not silently install `browser-cli`, browser dependencies, or Python packages.
 
 ## 2. Browser CLI Rules
 
-These rules are strict:
-
-- use `browser-cli` as the only browser execution backend
-- prefer semantic refs and snapshots over brittle selectors
+- `browser-cli` is the only browser execution backend
 - do not switch to direct Playwright as the main path
-- do not invent a second runtime when `browser-cli` already exposes the action
-- keep exploration token usage low by using targeted checks and small snapshots
-
-Exploration can use raw CLI actions such as:
-
-- `browser-cli open`
-- `browser-cli snapshot`
-- `browser-cli click`
-- `browser-cli fill`
-- `browser-cli eval`
-- `browser-cli wait`
-- `browser-cli html`
-
-For reusable tasks, prefer the Python runtime API:
-
-```python
-from browser_cli.task_runtime.flow import Flow
-
-
-def run(flow: Flow, inputs: dict) -> dict:
-    flow.open(inputs["url"])
-    snapshot = flow.snapshot()
-    ref = snapshot.find_ref(role="button", name="Reveal Message")
-    flow.click(ref)
-    flow.wait_text("Revealed", timeout=5)
-    return {"html": flow.html()}
-```
+- use the smallest reliable signal for the current task mode
+- prefer direct response-body capture when the current runtime already exposes
+  it reliably; do not keep older fallback paths as the default
+- stop once the successful path is deterministic
+- stop once you hit a real capability gap; do not hide it behind retries
+- a single runtime reset is allowed when a command is documented by the current
+  CLI but rejected by the live daemon or backend
 
 ## 3. Explore
 
-Explore is an agent activity, not a `browser-cli` subcommand.
+- capture only observations that change the next decision
+- verify each critical step locally before assuming success
+- refresh snapshots only when semantics changed
+- keep exploration token usage low with targeted checks
 
-During exploration:
+## 4. Converge to `task.py`
 
-- state the goal clearly
-- capture only the observations needed to move forward
-- validate each critical step before assuming success
-- reuse semantic refs where possible
-- refresh snapshots when semantics change
-- stop exploring once the path is deterministic
-
-Prefer:
-
-- small snapshots
-- explicit waits
-- local verification after each important action
-
-Avoid:
-
-- repeated full-page snapshots with no hypothesis
-- relying on transient DOM attributes
-- leaving key waits or assertions implicit
-
-## 4. Converge To `task.py`
-
-`task.py` is the single source of execution logic.
-
-Requirements:
-
-- use free Python for control flow
+- `task.py` is the single source of execution logic
 - route browser actions through `browser_cli.task_runtime`
-- support structured external inputs
-- include only the stable success path and bounded recovery logic
-
-Allowed:
-
-- helper functions
-- retries
-- bounded loops
-- assertions
-
-Not allowed as the primary path:
-
-- direct Playwright
-- raw daemon protocol handling
-- copying workflow configuration into Python
+- helper functions, bounded retries, loops, and assertions are allowed
+- direct Playwright and raw daemon handling are not the primary path
+- keep exploration-only waits and retry knobs as internal defaults unless users benefit from controlling them
 
 ## 5. Distill `task.meta.json`
 
-`task.meta.json` must contain distilled knowledge, not transcripts.
-
-Keep these sections:
-
-- `task`
-- `environment`
-- `success_path`
-- `recovery_hints`
-- `failures`
-- `knowledge`
-
-Only preserve failures that teach something reusable, such as:
-
-- a stale-ref recovery pattern
-- a lazy-load wait point
-- a login assumption
-- an anti-bot workaround
-
-Do not dump raw logs or full chat history into metadata.
+- keep: `task`, `environment`, `success_path`, `recovery_hints`, `failures`, `knowledge`
+- record reusable environment assumptions, recovery patterns, and mode-specific lessons
+- preserve failures that teach something reusable
+- do not dump raw logs or chat transcripts
 
 ## 6. Publish Gate
 
-Do not publish a workflow automatically.
-
-Only move to `workflow.toml` when both are true:
+Move to `workflow.toml` only when both are true:
 
 - the task is already stable
-- the user approves publication
+- the user approved publication
 
-Before publishing, collect:
-
-- when it should run
-- where outputs should go
-- what hooks or notifications should run
-
-If the user has not approved publication, stop after `task.py` and
-`task.meta.json`.
+If not, stop after `task.py` and `task.meta.json`.
 
 ## 7. Publish `workflow.toml`
 
-`workflow.toml` is the user-facing wrapper around the task.
+`workflow.toml` wraps the task. It does not re-implement browser logic.
 
-Rules:
-
-- workflow config packages the task
-- workflow config does not re-implement browser logic
-- scheduling, outputs, runtime policy, and hooks live in TOML
-- task behavior stays in `task.py`
-
-Use `browser-cli workflow validate` and `browser-cli workflow run` to validate
-and execute published workflows.
+Use `browser-cli workflow validate` and `browser-cli workflow run` for published workflows.
 
 ## Done Criteria
 
@@ -209,8 +124,12 @@ Stop only when one of these states is true:
 
 ## Common Mistakes
 
-- Installing `browser-cli` without approval
-- Exploring with direct Playwright even though `browser-cli` is available
-- Leaving the successful path only in chat instead of `task.py`
-- Treating `task.meta.json` as a debug dump
-- Publishing `workflow.toml` before the task is stable
+- validating `browser-cli` in one Python environment and executing the task in another
+- choosing the wrong task mode and exploring the page with the wrong signal first
+- exposing exploration-only knobs as user-facing inputs
+- assuming network capture never includes response bodies without checking the
+  current runtime or artifact outputs
+- treating a stale daemon/runtime mismatch as a permanent missing feature before
+  trying one `browser-cli reload`
+- retrying around a missing capability instead of stopping to confirm
+- leaving the successful path only in chat instead of `task.py`
