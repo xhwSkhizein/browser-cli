@@ -75,6 +75,7 @@ class BrowserDaemonApp:
             "console-start": self._handle_console_start,
             "console": self._handle_console,
             "console-stop": self._handle_console_stop,
+            "network-wait": self._handle_network_wait,
             "network-start": self._handle_network_start,
             "network": self._handle_network,
             "network-stop": self._handle_network_stop,
@@ -551,12 +552,24 @@ class BrowserDaemonApp:
     async def _handle_network_start(self, request: DaemonRequest) -> dict[str, Any]:
         return await self._run_active_page_action(request, self._state.browser_service.start_network_capture)
 
+    async def _handle_network_wait(self, request: DaemonRequest) -> dict[str, Any]:
+        filters = self._network_filters_from_request(request.args)
+        timeout_seconds = float(request.args.get("timeout_seconds") or 30.0)
+        return await self._run_active_page_action(
+            request,
+            lambda page_id: self._state.browser_service.wait_for_network_record(
+                page_id,
+                **filters,
+                timeout_seconds=timeout_seconds,
+            ),
+        )
+
     async def _handle_network(self, request: DaemonRequest) -> dict[str, Any]:
-        include_static = bool(request.args.get("include_static"))
+        filters = self._network_filters_from_request(request.args)
         clear = not bool(request.args.get("no_clear"))
         return await self._run_active_page_action(
             request,
-            lambda page_id: self._state.browser_service.get_network_requests(page_id, include_static=include_static, clear=clear),
+            lambda page_id: self._state.browser_service.get_network_records(page_id, clear=clear, **filters),
         )
 
     async def _handle_network_stop(self, request: DaemonRequest) -> dict[str, Any]:
@@ -770,6 +783,19 @@ class BrowserDaemonApp:
     def _optional_str(args: dict[str, Any], key: str) -> str | None:
         value = str(args.get(key) or "").strip()
         return value or None
+
+    @classmethod
+    def _network_filters_from_request(cls, args: dict[str, Any]) -> dict[str, Any]:
+        status = args.get("status")
+        return {
+            "url_contains": cls._optional_str(args, "url_contains"),
+            "url_regex": cls._optional_str(args, "url_regex"),
+            "method": cls._optional_str(args, "method"),
+            "status": int(status) if status is not None else None,
+            "resource_type": cls._optional_str(args, "resource_type"),
+            "mime_contains": cls._optional_str(args, "mime_contains"),
+            "include_static": bool(args.get("include_static")),
+        }
 
     def _maybe_configure_browser_environment(self, args: dict[str, Any]) -> None:
         chrome_environment_payload = args.get("chrome_environment")

@@ -166,10 +166,31 @@ class BrowserDriver(ABC):
     async def start_network_capture(self, page_id: str) -> dict[str, Any]: ...
 
     @abstractmethod
-    async def get_network_requests(
+    async def wait_for_network_record(
         self,
         page_id: str,
         *,
+        url_contains: str | None = None,
+        url_regex: str | None = None,
+        method: str | None = None,
+        status: int | None = None,
+        resource_type: str | None = None,
+        mime_contains: str | None = None,
+        include_static: bool = False,
+        timeout_seconds: float = 30.0,
+    ) -> dict[str, Any]: ...
+
+    @abstractmethod
+    async def get_network_records(
+        self,
+        page_id: str,
+        *,
+        url_contains: str | None = None,
+        url_regex: str | None = None,
+        method: str | None = None,
+        status: int | None = None,
+        resource_type: str | None = None,
+        mime_contains: str | None = None,
         include_static: bool = False,
         clear: bool = True,
     ) -> dict[str, Any]: ...

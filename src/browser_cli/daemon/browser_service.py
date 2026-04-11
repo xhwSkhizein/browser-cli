@@ -394,8 +394,55 @@ class BrowserService:
     async def start_network_capture(self, page_id: str) -> dict[str, Any]:
         return await self._active_driver().start_network_capture(page_id)
 
-    async def get_network_requests(self, page_id: str, *, include_static: bool = False, clear: bool = True) -> dict[str, Any]:
-        return await self._active_driver().get_network_requests(page_id, include_static=include_static, clear=clear)
+    async def wait_for_network_record(
+        self,
+        page_id: str,
+        *,
+        url_contains: str | None = None,
+        url_regex: str | None = None,
+        method: str | None = None,
+        status: int | None = None,
+        resource_type: str | None = None,
+        mime_contains: str | None = None,
+        include_static: bool = False,
+        timeout_seconds: float = 30.0,
+    ) -> dict[str, Any]:
+        return await self._active_driver().wait_for_network_record(
+            page_id,
+            url_contains=url_contains,
+            url_regex=url_regex,
+            method=method,
+            status=status,
+            resource_type=resource_type,
+            mime_contains=mime_contains,
+            include_static=include_static,
+            timeout_seconds=timeout_seconds,
+        )
+
+    async def get_network_records(
+        self,
+        page_id: str,
+        *,
+        url_contains: str | None = None,
+        url_regex: str | None = None,
+        method: str | None = None,
+        status: int | None = None,
+        resource_type: str | None = None,
+        mime_contains: str | None = None,
+        include_static: bool = False,
+        clear: bool = True,
+    ) -> dict[str, Any]:
+        return await self._active_driver().get_network_records(
+            page_id,
+            url_contains=url_contains,
+            url_regex=url_regex,
+            method=method,
+            status=status,
+            resource_type=resource_type,
+            mime_contains=mime_contains,
+            include_static=include_static,
+            clear=clear,
+        )
 
     async def stop_network_capture(self, page_id: str) -> dict[str, Any]:
         return await self._active_driver().stop_network_capture(page_id)

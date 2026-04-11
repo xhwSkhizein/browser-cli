@@ -119,10 +119,10 @@ def wait_for_daemon_stop(*, timeout_seconds: float = TERMINATE_GRACE_SECONDS) ->
     return not probe_socket()
 
 
-def cleanup_runtime() -> bool:
+def cleanup_runtime(*, fast_kill: bool = False) -> bool:
     app_paths = get_app_paths()
     had_runtime_state = bool(read_run_info() is not None or app_paths.socket_path.exists())
-    _cleanup_stale_runtime()
+    _cleanup_stale_runtime(fast_kill=fast_kill)
     return had_runtime_state
 
 
@@ -174,12 +174,17 @@ def _wait_for_socket(*, timeout_seconds: float) -> bool:
     return False
 
 
-def _cleanup_stale_runtime() -> None:
+def _cleanup_stale_runtime(*, fast_kill: bool = False) -> None:
     run_info = read_run_info()
+    socket_reachable = probe_socket()
     if run_info is not None:
         pid = _coerce_pid(run_info.get("pid"))
         if pid is not None and _pid_exists(pid):
-            _terminate_process_tree(pid)
+            if fast_kill and not socket_reachable:
+                _signal_process_tree(pid, signal.SIGKILL)
+                _wait_for_pid_exit(pid, timeout_seconds=1.0)
+            else:
+                _terminate_process_tree(pid)
     remove_run_info()
     try:
         safe_remove_socket()

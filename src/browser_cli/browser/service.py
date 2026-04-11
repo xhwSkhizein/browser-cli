@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from browser_cli.browser.models import BrowserLaunchConfig, default_headless
+from browser_cli.browser.network_capture import PlaywrightNetworkObserver
 from browser_cli.browser.snapshot import SnapshotCapture, capture_snapshot
 from browser_cli.browser.stealth import (
     build_context_options,
@@ -32,6 +33,7 @@ from browser_cli.errors import (
     StaleSnapshotError,
     TemporaryReadError,
 )
+from browser_cli.network import NetworkRecordFilter
 from browser_cli.profiles.discovery import ChromeEnvironment, discover_chrome_environment
 from browser_cli.refs import SemanticRefResolver, SnapshotRegistry
 from browser_cli.refs.generator import SemanticSnapshotGenerator
@@ -61,8 +63,7 @@ class BrowserService:
         self._ref_resolver = SemanticRefResolver()
         self._console_messages: dict[str, list[dict[str, Any]]] = {}
         self._console_handlers: dict[str, Any] = {}
-        self._network_requests: dict[str, list[dict[str, Any]]] = {}
-        self._network_handlers: dict[str, Any] = {}
+        self._network_observers: dict[str, PlaywrightNetworkObserver] = {}
         self._dialog_handlers: dict[str, Any] = {}
         self._tracing_active = False
         self._video_started: set[str] = set()
@@ -169,8 +170,7 @@ class BrowserService:
         self._snapshot_registry.clear()
         self._console_messages.clear()
         self._console_handlers.clear()
-        self._network_requests.clear()
-        self._network_handlers.clear()
+        self._network_observers.clear()
         self._dialog_handlers.clear()
         self._video_started.clear()
         self._pending_video_save_paths.clear()
@@ -200,6 +200,7 @@ class BrowserService:
             page = await self._context.new_page()
             page_id = page_id or self._next_page_id()
             self._pages[page_id] = page
+            self._network_observers[page_id] = PlaywrightNetworkObserver(page_id=page_id, page=page)
             if url:
                 await page.goto(
                     self._normalize_url(url),
@@ -773,46 +774,76 @@ class BrowserService:
         return {"page_id": page_id, "capturing": False}
 
     async def start_network_capture(self, page_id: str) -> dict[str, Any]:
-        page = self._require_page(page_id)
-        if page_id in self._network_handlers:
-            try:
-                page.remove_listener("request", self._network_handlers[page_id])
-            except Exception:
-                pass
-        self._network_requests[page_id] = []
-
-        def _handle_request(request: Any) -> None:
-            self._network_requests.setdefault(page_id, []).append(
-                {
-                    "url": request.url,
-                    "method": request.method,
-                    "resource_type": request.resource_type,
-                    "headers": dict(request.headers) if request.headers else {},
-                    "post_data": request.post_data,
-                }
-            )
-
-        page.on("request", _handle_request)
-        self._network_handlers[page_id] = _handle_request
+        _ = self._require_page(page_id)
+        observer = self._require_network_observer(page_id)
+        observer.start_capture()
         return {"page_id": page_id, "capturing": True}
 
-    async def get_network_requests(self, page_id: str, *, include_static: bool = False, clear: bool = True) -> dict[str, Any]:
-        requests = list(self._network_requests.get(page_id, []))
-        if not include_static:
-            static_types = {"image", "stylesheet", "script", "font", "media"}
-            requests = [item for item in requests if item.get("resource_type") not in static_types]
-        if clear:
-            self._network_requests[page_id] = []
-        return {"page_id": page_id, "requests": requests}
+    async def wait_for_network_record(
+        self,
+        page_id: str,
+        *,
+        url_contains: str | None = None,
+        url_regex: str | None = None,
+        method: str | None = None,
+        status: int | None = None,
+        resource_type: str | None = None,
+        mime_contains: str | None = None,
+        include_static: bool = False,
+        timeout_seconds: float = 30.0,
+    ) -> dict[str, Any]:
+        _ = self._require_page(page_id)
+        observer = self._require_network_observer(page_id)
+        try:
+            record = await observer.wait_for_record(
+                record_filter=NetworkRecordFilter(
+                    url_contains=url_contains,
+                    url_regex=url_regex,
+                    method=method,
+                    status=status,
+                    resource_type=resource_type,
+                    mime_contains=mime_contains,
+                    include_static=include_static,
+                ),
+                timeout_seconds=timeout_seconds,
+            )
+        except asyncio.TimeoutError as exc:
+            raise OperationFailedError(f"Timed out waiting for a matching network record after {timeout_seconds:.1f}s.") from exc
+        return {"page_id": page_id, "record": record}
+
+    async def get_network_records(
+        self,
+        page_id: str,
+        *,
+        url_contains: str | None = None,
+        url_regex: str | None = None,
+        method: str | None = None,
+        status: int | None = None,
+        resource_type: str | None = None,
+        mime_contains: str | None = None,
+        include_static: bool = False,
+        clear: bool = True,
+    ) -> dict[str, Any]:
+        _ = self._require_page(page_id)
+        observer = self._require_network_observer(page_id)
+        records = observer.get_records(
+            record_filter=NetworkRecordFilter(
+                url_contains=url_contains,
+                url_regex=url_regex,
+                method=method,
+                status=status,
+                resource_type=resource_type,
+                mime_contains=mime_contains,
+                include_static=include_static,
+            ),
+            clear=clear,
+        )
+        return {"page_id": page_id, "records": records}
 
     async def stop_network_capture(self, page_id: str) -> dict[str, Any]:
-        page = self._require_page(page_id)
-        handler = self._network_handlers.pop(page_id, None)
-        if handler is not None:
-            try:
-                page.remove_listener("request", handler)
-            except Exception:
-                pass
+        _ = self._require_page(page_id)
+        observer = self._require_network_observer(page_id)
+        observer.stop_capture()
         return {"page_id": page_id, "capturing": False}
 
     async def setup_dialog_handler(
@@ -1144,7 +1175,7 @@ class BrowserService:
             raise AmbiguousRefError()
         return locator.first
 
-    def _remove_page_handlers(self, page_id: str) -> None:
+    async def _remove_page_handlers(self, page_id: str) -> None:
         page = self._pages.get(page_id)
         self._console_messages.pop(page_id, None)
         console_handler = self._console_handlers.pop(page_id, None)
@@ -1153,13 +1184,9 @@ class BrowserService:
                 page.remove_listener("console", console_handler)
             except Exception:
                 pass
-        self._network_requests.pop(page_id, None)
-        network_handler = self._network_handlers.pop(page_id, None)
-        if page is not None and network_handler is not None:
-            try:
-                page.remove_listener("request", network_handler)
-            except Exception:
-                pass
+        network_observer = self._network_observers.pop(page_id, None)
+        if network_observer is not None:
+            await network_observer.close()
         dialog_handler = self._dialog_handlers.pop(page_id, None)
         if page is not None and dialog_handler is not None:
             try:
@@ -1174,6 +1201,12 @@ class BrowserService:
         if page is None:
             raise OperationFailedError(f"Page {page_id} is not available anymore.")
         return page
+
+    def _require_network_observer(self, page_id: str) -> PlaywrightNetworkObserver:
+        observer = self._network_observers.get(page_id)
+        if observer is None:
+            raise OperationFailedError(f"Network capture is not available for page {page_id}.")
+        return observer
 
     def _next_page_id(self) -> str:
         self._page_counter += 1
@@ -1260,7 +1293,7 @@ class BrowserService:
         has_pending = pending is not sentinel
         video_requested = page_id in self._video_started or has_pending
         self._video_started.discard(page_id)
-        self._remove_page_handlers(page_id)
+        await self._remove_page_handlers(page_id)
         await page.close()
         self._pages.pop(page_id, None)
         self._snapshot_registry.clear_page(page_id)
