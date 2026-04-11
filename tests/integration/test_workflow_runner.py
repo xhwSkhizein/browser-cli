@@ -13,6 +13,8 @@ from tests.integration.fixture_server import run_fixture_server
 from browser_cli.cli.main import main
 from browser_cli.profiles.discovery import discover_chrome_executable
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
 
 def _can_launch_daemon_browser() -> bool:
     try:
@@ -81,9 +83,7 @@ def test_workflow_validate_and_run_against_local_fixture(
     monkeypatch, tmp_path: Path, capsys
 ) -> None:
     _configure_runtime(monkeypatch, tmp_path)
-    source_dir = Path(
-        "/Users/hongv/workspace/m-projects/browser-cli/tasks/interactive_reveal_capture"
-    )
+    source_dir = REPO_ROOT / "tasks" / "interactive_reveal_capture"
     copied_dir = tmp_path / "interactive_reveal_capture"
     shutil.copytree(source_dir, copied_dir)
     workflow_path = copied_dir / "workflow.toml"
