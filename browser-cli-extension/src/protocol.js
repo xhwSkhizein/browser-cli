@@ -47,6 +47,7 @@ export const REQUIRED_CAPABILITIES = [
   'trace-stop',
   'video-start',
   'video-stop',
+  'network-wait',
   'network',
   'network-start',
   'network-stop',

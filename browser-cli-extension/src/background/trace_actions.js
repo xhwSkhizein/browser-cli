@@ -1,10 +1,13 @@
 import {
   getConsoleMessagesJs,
-  getNetworkRequestsJs,
   installConsoleCaptureJs,
-  installNetworkCaptureJs,
 } from '../page_runtime.js';
-import { startTracing, stopTracing } from '../debugger.js';
+import {
+  startTraceNetworkCapture,
+  startTracing,
+  stopTraceNetworkCapture,
+  stopTracing,
+} from '../debugger.js';
 import {
   buildArtifactDescriptor,
   buildStoredZip,
@@ -23,7 +26,12 @@ function traceSessionFor(context, tabId) {
 }
 
 function filterEventsSince(items, startedAt) {
-  return Array.from(items || []).filter((item) => Number(item?.ts || 0) >= startedAt);
+  return Array.from(items || []).filter((item) => {
+    if (item?.ts) {
+      return Number(item.ts || 0) >= startedAt;
+    }
+    return Number(item?.ended_at || item?.started_at || 0) * 1000 >= startedAt;
+  });
 }
 
 export function createTraceHandlers(context) {
@@ -34,7 +42,7 @@ export function createTraceHandlers(context) {
         throw new Error('Tracing is already active. Stop the current trace first.');
       }
       const consoleState = await context.executeExpression(payload.tab_id, installConsoleCaptureJs());
-      const networkState = await context.executeExpression(payload.tab_id, installNetworkCaptureJs());
+      await startTraceNetworkCapture(payload.tab_id, 'trace');
       await startTracing(payload.tab_id, {
         screenshots: !!payload.screenshots,
         snapshots: !!payload.snapshots,
@@ -51,7 +59,7 @@ export function createTraceHandlers(context) {
         },
         markers: [],
         consoleAlreadyInstalled: !!consoleState?.already_installed,
-        networkAlreadyInstalled: !!networkState?.already_installed,
+        networkAlreadyInstalled: false,
       });
       return {
         tracing: true,
@@ -79,10 +87,7 @@ export function createTraceHandlers(context) {
         payload.tab_id,
         getConsoleMessagesJs({ clear: false }),
       );
-      const networkPayload = await context.executeExpression(
-        payload.tab_id,
-        getNetworkRequestsJs({ includeStatic: true, clear: false }),
-      );
+      const networkRecords = await stopTraceNetworkCapture(payload.tab_id, 'trace');
       context.state.traceSessions.delete(payload.tab_id);
 
       const metadata = {
@@ -100,7 +105,7 @@ export function createTraceHandlers(context) {
       };
       const traceBytes = textEncoder.encode(String(traceText || ''));
       const networkBytes = jsonBytes({
-        requests: filterEventsSince(networkPayload?.requests || [], session.startedAt),
+        records: filterEventsSince(networkRecords || [], session.startedAt),
       });
       const consoleBytes = jsonBytes({
         messages: filterEventsSince(consolePayload?.messages || [], session.startedAt),

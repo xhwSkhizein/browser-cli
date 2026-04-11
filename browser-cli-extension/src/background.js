@@ -7,7 +7,7 @@ import {
   buildWsUrl,
 } from './protocol.js';
 import { locatorActionJs } from './page_runtime.js';
-import { registerDebuggerListeners } from './debugger.js';
+import { disposeNetworkSession, ensureNetworkSession, registerDebuggerListeners } from './debugger.js';
 import { createArtifactHandlers } from './background/artifact_actions.js';
 import { createDialogHandlers } from './background/dialog_actions.js';
 import { createInputHandlers } from './background/input_actions.js';
@@ -279,28 +279,32 @@ async function waitForLoad(tabId, timeoutSeconds = 30) {
 
 async function openTab(url) {
   if (state.workspaceWindowId === null) {
-    await ensureWorkspaceWindow(url || 'about:blank');
+    await ensureWorkspaceWindow('about:blank');
     const tabs = await chrome.tabs.query({ windowId: state.workspaceWindowId });
     const activeTab = tabs.find((tab) => tab.active) || tabs[0];
     if (!activeTab || activeTab.id === undefined) {
       throw new Error('Workspace tab creation failed');
     }
     state.managedTabIds.add(activeTab.id);
+    await ensureNetworkSession(activeTab.id);
     if (url) {
+      await chrome.tabs.update(activeTab.id, { url });
       await waitForLoad(activeTab.id, 30);
     }
     return activeTab;
   }
   const tab = await chrome.tabs.create({
     windowId: state.workspaceWindowId,
-    url: url || 'about:blank',
+    url: 'about:blank',
     active: true,
   });
   if (tab.id === undefined) {
     throw new Error('Workspace tab creation failed');
   }
   state.managedTabIds.add(tab.id);
+  await ensureNetworkSession(tab.id);
   if (url) {
+    await chrome.tabs.update(tab.id, { url });
     await waitForLoad(tab.id, 30);
   }
   return tab;
@@ -326,6 +330,7 @@ function untrackTab(tabId) {
   state.pageIdByTabId.delete(tabId);
   state.traceSessions.delete(tabId);
   state.videoSessions.delete(tabId);
+  disposeNetworkSession(tabId);
 }
 
 const context = {
@@ -399,6 +404,9 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 
 chrome.windows.onRemoved.addListener((windowId) => {
   if (windowId === state.workspaceWindowId) {
+    for (const tabId of Array.from(state.managedTabIds)) {
+      disposeNetworkSession(tabId);
+    }
     state.workspaceWindowId = null;
     state.managedTabIds.clear();
     state.pageIdByTabId.clear();

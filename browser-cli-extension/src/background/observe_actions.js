@@ -1,19 +1,27 @@
 import {
   getConsoleMessagesJs,
-  getNetworkRequestsJs,
   installConsoleCaptureJs,
-  installNetworkCaptureJs,
   stopConsoleCaptureJs,
-  stopNetworkCaptureJs,
   storageGetJs,
   storageSetJs,
   verifyTextJs,
   verifyTitleJs,
   verifyUrlJs,
   verifyVisibleJs,
-  waitForNetworkIdleJs,
   waitJs,
 } from '../page_runtime.js';
+import {
+  getNetworkRecords,
+  startNetworkCapture,
+  stopNetworkCapture,
+  waitForNetworkIdle,
+  waitForNetworkRecord,
+} from '../debugger.js';
+import {
+  buildArtifactDescriptor,
+  decodeBase64Bytes,
+  emitArtifact,
+} from './artifact_actions.js';
 
 async function setCookieForTab(context, tabId, payload) {
   const tab = await context.getManagedTab(tabId);
@@ -61,6 +69,51 @@ async function clearCookiesForTab(context, tabId, payload) {
   return { cleared };
 }
 
+function cloneJson(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function networkFilterFromPayload(payload) {
+  return {
+    url_contains: payload.url_contains || null,
+    url_regex: payload.url_regex || null,
+    method: payload.method || null,
+    status: payload.status ?? null,
+    resource_type: payload.resource_type || null,
+    mime_contains: payload.mime_contains || null,
+    include_static: !!payload.include_static,
+  };
+}
+
+async function materializeNetworkRecords(context, tabId, requestId, records) {
+  const cloned = cloneJson(records || []);
+  const artifacts = [];
+  for (const record of cloned) {
+    const body = record?.body || {};
+    if (body.kind !== 'artifact') {
+      continue;
+    }
+    const descriptor = buildArtifactDescriptor({
+      artifactKind: 'network-body',
+      mimeType: body.artifact_mime_type || record.mime_type || 'application/octet-stream',
+      filename: body.artifact_filename || `${record.request_id || 'network-body'}.bin`,
+      pageId: context.pageIdForTab(tabId),
+      metadata: {
+        network_request_id: record.request_id || null,
+      },
+    });
+    await emitArtifact(context, requestId, descriptor, decodeBase64Bytes(body.artifact_base64 || ''));
+    artifacts.push(descriptor);
+    record.body = {
+      kind: 'path',
+      path: `artifact://${descriptor.artifact_id}`,
+      bytes: Number(body.bytes || 0),
+      truncated: !!body.truncated,
+    };
+  }
+  return { records: cloned, artifacts };
+}
+
 export function createObserveHandlers(context) {
   return {
     async wait(payload) {
@@ -69,9 +122,9 @@ export function createObserveHandlers(context) {
     },
     async 'wait-network'(payload) {
       await context.getManagedTab(payload.tab_id);
-      return await context.executeExpression(
+      return await waitForNetworkIdle(
         payload.tab_id,
-        waitForNetworkIdleJs({ timeoutSeconds: Number(payload.timeout_seconds || 30) }),
+        { timeoutMs: Math.max(0, Number(payload.timeout_seconds || 30) * 1000) },
       );
     },
     async 'console-start'(payload) {
@@ -88,15 +141,37 @@ export function createObserveHandlers(context) {
     },
     async 'network-start'(payload) {
       await context.getManagedTab(payload.tab_id);
-      return await context.executeExpression(payload.tab_id, installNetworkCaptureJs());
+      return await startNetworkCapture(payload.tab_id);
     },
-    async 'network-get'(payload) {
+    async network(payload, meta) {
       await context.getManagedTab(payload.tab_id);
-      return await context.executeExpression(payload.tab_id, getNetworkRequestsJs(payload));
+      const records = await getNetworkRecords(
+        payload.tab_id,
+        networkFilterFromPayload(payload),
+        { clear: payload.clear !== false },
+      );
+      const materialized = await materializeNetworkRecords(context, payload.tab_id, meta.requestId, records);
+      return {
+        records: materialized.records,
+        artifacts: materialized.artifacts,
+      };
+    },
+    async 'network-wait'(payload, meta) {
+      await context.getManagedTab(payload.tab_id);
+      const record = await waitForNetworkRecord(
+        payload.tab_id,
+        networkFilterFromPayload(payload),
+        { timeoutMs: Math.max(0, Number(payload.timeout_seconds || 30) * 1000) },
+      );
+      const materialized = await materializeNetworkRecords(context, payload.tab_id, meta.requestId, [record]);
+      return {
+        record: materialized.records[0] || null,
+        artifacts: materialized.artifacts,
+      };
     },
     async 'network-stop'(payload) {
       await context.getManagedTab(payload.tab_id);
-      return await context.executeExpression(payload.tab_id, stopNetworkCaptureJs());
+      return await stopNetworkCapture(payload.tab_id);
     },
     async 'cookies-get'(payload) {
       const tab = await context.getManagedTab(payload.tab_id);

@@ -143,9 +143,6 @@ function locatorPrelude() {
 
     function bcEnsureCaptureState() {
       if (!__browserCli.consoleBuffer) __browserCli.consoleBuffer = [];
-      if (!__browserCli.networkBuffer) __browserCli.networkBuffer = [];
-      if (!__browserCli.pendingNetworkCount) __browserCli.pendingNetworkCount = 0;
-      if (!__browserCli.lastNetworkActivityAt) __browserCli.lastNetworkActivityAt = 0;
       if (!__browserCli.dialogHandlers) __browserCli.dialogHandlers = {};
     }
 
@@ -278,96 +275,6 @@ export function stopConsoleCaptureJs() {
   `;
 }
 
-export function installNetworkCaptureJs() {
-  return `
-    (() => {
-      ${locatorPrelude()}
-      bcEnsureCaptureState();
-      if (__browserCli.networkInstalled) return { capturing: true, already_installed: true };
-      __browserCli.networkInstalled = true;
-      const markStart = () => {
-        __browserCli.pendingNetworkCount = (__browserCli.pendingNetworkCount || 0) + 1;
-        __browserCli.lastNetworkActivityAt = Date.now();
-      };
-      const markEnd = () => {
-        __browserCli.pendingNetworkCount = Math.max(0, (__browserCli.pendingNetworkCount || 1) - 1);
-        __browserCli.lastNetworkActivityAt = Date.now();
-      };
-      const originalFetch = window.fetch.bind(window);
-      window.fetch = async (...args) => {
-        markStart();
-        try {
-          const response = await originalFetch(...args);
-          try {
-            __browserCli.networkBuffer.push({
-              url: typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url) || '',
-              method: (args[1] && args[1].method) || 'GET',
-              resource_type: 'fetch',
-              ts: Date.now()
-            });
-          } catch (error) {}
-          return response;
-        } finally {
-          markEnd();
-        }
-      };
-      const xhrOpen = XMLHttpRequest.prototype.open;
-      const xhrSend = XMLHttpRequest.prototype.send;
-      XMLHttpRequest.prototype.open = function(method, url) {
-        this.__browserCliMethod = method;
-        this.__browserCliUrl = url;
-        return xhrOpen.apply(this, arguments);
-      };
-      XMLHttpRequest.prototype.send = function() {
-        markStart();
-        this.addEventListener('loadstart', () => {
-          try {
-            __browserCli.networkBuffer.push({
-              url: this.__browserCliUrl || '',
-              method: this.__browserCliMethod || 'GET',
-              resource_type: 'xhr',
-              ts: Date.now()
-            });
-          } catch (error) {}
-        });
-        this.addEventListener('loadend', () => {
-          markEnd();
-        });
-        return xhrSend.apply(this, arguments);
-      };
-      return { capturing: true, already_installed: false };
-    })()
-  `;
-}
-
-export function getNetworkRequestsJs({ includeStatic = false, clear = true } = {}) {
-  return `
-    (() => {
-      ${locatorPrelude()}
-      bcEnsureCaptureState();
-      let requests = Array.from(__browserCli.networkBuffer || []);
-      if (!${includeStatic ? 'true' : 'false'}) {
-        requests = requests.filter((item) => !['image', 'stylesheet', 'script', 'font', 'media'].includes(item.resource_type));
-      }
-      if (${clear ? 'true' : 'false'}) {
-        __browserCli.networkBuffer = [];
-      }
-      return { requests };
-    })()
-  `;
-}
-
-export function stopNetworkCaptureJs() {
-  return `
-    (() => {
-      ${locatorPrelude()}
-      bcEnsureCaptureState();
-      __browserCli.networkBuffer = [];
-      return { capturing: false };
-    })()
-  `;
-}
-
 export function storageGetJs() {
   return `
     (() => ({
@@ -413,32 +320,6 @@ export function verifyTitleJs({ expected, exact = false }) {
       const passed = ${exact ? 'actual === expected' : 'actual.includes(expected)'};
       return { passed, expected, actual };
     })()
-  `;
-}
-
-export function waitForNetworkIdleJs({ timeoutSeconds = 30, quietMs = 500 } = {}) {
-  return `
-    new Promise((resolve, reject) => {
-      ${locatorPrelude()}
-      bcEnsureCaptureState();
-      const deadline = Date.now() + ${Math.floor(Number(timeoutSeconds || 30) * 1000)};
-      const quietMs = ${Math.floor(Number(quietMs || 500))};
-      const loop = () => {
-        const pending = Number(__browserCli.pendingNetworkCount || 0);
-        const lastActivity = Number(__browserCli.lastNetworkActivityAt || 0);
-        const idleFor = Date.now() - lastActivity;
-        if (pending === 0 && idleFor >= quietMs) {
-          resolve({ network_idle: true, quiet_ms: quietMs });
-          return;
-        }
-        if (Date.now() > deadline) {
-          reject(new Error('network idle timed out'));
-          return;
-        }
-        setTimeout(loop, 150);
-      };
-      loop();
-    })
   `;
 }
 
