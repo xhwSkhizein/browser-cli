@@ -37,16 +37,22 @@ def load_workflow_manifest(path: str | Path) -> WorkflowManifest:
 
     base_dir = manifest_path.parent
     task_path = _resolve_relative(base_dir, _require_string(task_section, "path", manifest_path))
-    meta_path = _resolve_relative(base_dir, _require_string(task_section, "meta_path", manifest_path))
+    meta_path = _resolve_relative(
+        base_dir, _require_string(task_section, "meta_path", manifest_path)
+    )
     if not task_path.exists():
         raise InvalidInputError(f"Task file does not exist: {task_path}")
     if not meta_path.exists():
         raise InvalidInputError(f"Task metadata file does not exist: {meta_path}")
     validate_task_metadata(json.loads(meta_path.read_text(encoding="utf-8")), source=str(meta_path))
 
-    artifact_dir = _resolve_relative(base_dir, str(outputs_section.get("artifact_dir") or "artifacts"))
+    artifact_dir = _resolve_relative(
+        base_dir, str(outputs_section.get("artifact_dir") or "artifacts")
+    )
     result_json_raw = outputs_section.get("result_json_path")
-    result_json_path = _resolve_relative(base_dir, str(result_json_raw)) if result_json_raw else None
+    result_json_path = (
+        _resolve_relative(base_dir, str(result_json_raw)) if result_json_raw else None
+    )
 
     return WorkflowManifest(
         manifest_path=manifest_path,
@@ -74,7 +80,9 @@ def load_workflow_manifest(path: str | Path) -> WorkflowManifest:
             after_failure=tuple(_as_string_list(hooks_section.get("after_failure"))),
         ),
         runtime=WorkflowRuntime(
-            timeout_seconds=float(runtime_section["timeout_seconds"]) if runtime_section.get("timeout_seconds") is not None else None,
+            timeout_seconds=float(runtime_section["timeout_seconds"])
+            if runtime_section.get("timeout_seconds") is not None
+            else None,
             retry_attempts=int(runtime_section.get("retry_attempts") or 0),
             log_level=str(runtime_section.get("log_level") or "info"),
         ),

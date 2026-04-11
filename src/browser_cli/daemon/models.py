@@ -14,7 +14,7 @@ class DaemonRequest:
     request_id: str
 
     @classmethod
-    def from_dict(cls, payload: dict[str, Any]) -> "DaemonRequest":
+    def from_dict(cls, payload: dict[str, Any]) -> DaemonRequest:
         return cls(
             action=str(payload.get("action") or "").strip(),
             args=dict(payload.get("args") or {}),
@@ -43,7 +43,7 @@ class DaemonResponse:
         return payload
 
     @classmethod
-    def success(cls, data: dict[str, Any], *, meta: dict[str, Any] | None = None) -> "DaemonResponse":
+    def success(cls, data: dict[str, Any], *, meta: dict[str, Any] | None = None) -> DaemonResponse:
         return cls(ok=True, data=data, meta=meta or {})
 
     @classmethod
@@ -53,7 +53,7 @@ class DaemonResponse:
         error_code: str,
         error_message: str,
         meta: dict[str, Any] | None = None,
-    ) -> "DaemonResponse":
+    ) -> DaemonResponse:
         return cls(
             ok=False,
             data={},

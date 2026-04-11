@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from . import exit_codes
-from . import error_codes
+from . import error_codes, exit_codes
 
 
 @dataclass(slots=True)
@@ -71,27 +70,39 @@ class BusyTabError(BrowserCliError):
 
 
 class TabNotFoundError(BrowserCliError):
-    def __init__(self, message: str = "The requested tab is not visible or does not exist.") -> None:
+    def __init__(
+        self, message: str = "The requested tab is not visible or does not exist."
+    ) -> None:
         super().__init__(message, exit_codes.TEMPORARY_FAILURE, error_codes.TAB_NOT_FOUND)
 
 
 class RefNotFoundError(BrowserCliError):
-    def __init__(self, message: str = "The requested ref is not known in the latest snapshot.") -> None:
+    def __init__(
+        self, message: str = "The requested ref is not known in the latest snapshot."
+    ) -> None:
         super().__init__(message, exit_codes.TEMPORARY_FAILURE, error_codes.REF_NOT_FOUND)
 
 
 class NoSnapshotContextError(BrowserCliError):
-    def __init__(self, message: str = "No snapshot context is available for the active tab. Capture a snapshot first.") -> None:
+    def __init__(
+        self,
+        message: str = "No snapshot context is available for the active tab. Capture a snapshot first.",
+    ) -> None:
         super().__init__(message, exit_codes.TEMPORARY_FAILURE, error_codes.NO_SNAPSHOT_CONTEXT)
 
 
 class StaleSnapshotError(BrowserCliError):
-    def __init__(self, message: str = "The requested ref is stale. Capture a new snapshot and retry.") -> None:
+    def __init__(
+        self, message: str = "The requested ref is stale. Capture a new snapshot and retry."
+    ) -> None:
         super().__init__(message, exit_codes.TEMPORARY_FAILURE, error_codes.STALE_SNAPSHOT)
 
 
 class AmbiguousRefError(BrowserCliError):
-    def __init__(self, message: str = "The requested ref resolved to multiple elements. Capture a new snapshot and retry.") -> None:
+    def __init__(
+        self,
+        message: str = "The requested ref resolved to multiple elements. Capture a new snapshot and retry.",
+    ) -> None:
         super().__init__(message, exit_codes.TEMPORARY_FAILURE, error_codes.AMBIGUOUS_REF)
 
 

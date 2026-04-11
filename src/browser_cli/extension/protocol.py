@@ -91,7 +91,7 @@ class ExtensionHello:
     extension_instance_id: str = ""
 
     @classmethod
-    def from_message(cls, payload: dict[str, Any]) -> "ExtensionHello":
+    def from_message(cls, payload: dict[str, Any]) -> ExtensionHello:
         return cls(
             protocol_version=str(payload.get("protocol_version") or ""),
             extension_version=str(payload.get("extension_version") or ""),
@@ -139,12 +139,14 @@ class ExtensionResponse:
     error_message: str | None = None
 
     @classmethod
-    def from_message(cls, payload: dict[str, Any]) -> "ExtensionResponse":
+    def from_message(cls, payload: dict[str, Any]) -> ExtensionResponse:
         return cls(
             id=str(payload.get("id") or ""),
             ok=bool(payload.get("ok")),
             data=dict(payload.get("data") or {}),
-            error_code=(str(payload["error_code"]) if payload.get("error_code") is not None else None),
+            error_code=(
+                str(payload["error_code"]) if payload.get("error_code") is not None else None
+            ),
             error_message=(
                 str(payload["error_message"]) if payload.get("error_message") is not None else None
             ),
@@ -163,7 +165,7 @@ class ExtensionArtifactBegin:
     metadata: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def from_message(cls, payload: dict[str, Any]) -> "ExtensionArtifactBegin":
+    def from_message(cls, payload: dict[str, Any]) -> ExtensionArtifactBegin:
         return cls(
             request_id=str(payload.get("request_id") or ""),
             artifact_id=str(payload.get("artifact_id") or ""),
@@ -188,7 +190,7 @@ class ExtensionArtifactChunk:
     final: bool = False
 
     @classmethod
-    def from_message(cls, payload: dict[str, Any]) -> "ExtensionArtifactChunk":
+    def from_message(cls, payload: dict[str, Any]) -> ExtensionArtifactChunk:
         return cls(
             request_id=str(payload.get("request_id") or ""),
             artifact_id=str(payload.get("artifact_id") or ""),
@@ -208,9 +210,11 @@ class ExtensionArtifactEnd:
     size_bytes: int | None = None
 
     @classmethod
-    def from_message(cls, payload: dict[str, Any]) -> "ExtensionArtifactEnd":
+    def from_message(cls, payload: dict[str, Any]) -> ExtensionArtifactEnd:
         return cls(
             request_id=str(payload.get("request_id") or ""),
             artifact_id=str(payload.get("artifact_id") or ""),
-            size_bytes=(int(payload["size_bytes"]) if payload.get("size_bytes") is not None else None),
+            size_bytes=(
+                int(payload["size_bytes"]) if payload.get("size_bytes") is not None else None
+            ),
         )

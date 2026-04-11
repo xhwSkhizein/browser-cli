@@ -1,18 +1,17 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
 
-from browser_cli.task_runtime.models import validate_task_metadata
+from browser_cli.task_runtime.models import TaskMetadataError, validate_task_metadata
 from browser_cli.workflow.hooks import run_hook_commands
 from browser_cli.workflow.loader import load_workflow_manifest
 from browser_cli.workflow.runner import parse_input_overrides
 
 
 def test_validate_task_metadata_requires_sections() -> None:
-    with pytest.raises(Exception):
+    with pytest.raises(TaskMetadataError):
         validate_task_metadata({"task": {}}, source="memory")
 
 

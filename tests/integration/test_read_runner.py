@@ -6,11 +6,11 @@ import sys
 from pathlib import Path
 
 import pytest
+from tests.integration.fixture_server import run_fixture_server
 
 from browser_cli.daemon.client import send_command
 from browser_cli.profiles.discovery import ChromeEnvironment
 from browser_cli.runtime.read_runner import ReadRequest, ReadRunner
-from tests.integration.fixture_server import run_fixture_server
 
 
 def _can_launch_playwright_browser() -> bool:
@@ -44,7 +44,9 @@ def _unused_port() -> int:
 
 def _configure_runtime(monkeypatch, tmp_path: Path) -> None:
     real_home = Path.home()
-    if not (real_home / "Library" / "Caches" / "ms-playwright").exists() and sys.platform.startswith("linux"):
+    if not (
+        real_home / "Library" / "Caches" / "ms-playwright"
+    ).exists() and sys.platform.startswith("linux"):
         playwright_cache = real_home / ".cache" / "ms-playwright"
     else:
         playwright_cache = real_home / "Library" / "Caches" / "ms-playwright"
@@ -81,7 +83,9 @@ def _serialize_environment(chrome_environment: ChromeEnvironment) -> dict[str, s
     }
 
 
-@pytest.mark.skipif(not _can_launch_playwright_browser(), reason="Playwright browser runtime unavailable")
+@pytest.mark.skipif(
+    not _can_launch_playwright_browser(), reason="Playwright browser runtime unavailable"
+)
 def test_read_runner_capture_html_from_dynamic_fixture(monkeypatch, tmp_path: Path) -> None:
     _configure_runtime(monkeypatch, tmp_path)
     chrome_environment = _build_chrome_environment(tmp_path)
@@ -99,7 +103,9 @@ def test_read_runner_capture_html_from_dynamic_fixture(monkeypatch, tmp_path: Pa
         send_command("stop", start_if_needed=False)
 
 
-@pytest.mark.skipif(not _can_launch_playwright_browser(), reason="Playwright browser runtime unavailable")
+@pytest.mark.skipif(
+    not _can_launch_playwright_browser(), reason="Playwright browser runtime unavailable"
+)
 def test_read_runner_capture_snapshot_from_static_fixture(monkeypatch, tmp_path: Path) -> None:
     _configure_runtime(monkeypatch, tmp_path)
     chrome_environment = _build_chrome_environment(tmp_path)
@@ -114,14 +120,21 @@ def test_read_runner_capture_snapshot_from_static_fixture(monkeypatch, tmp_path:
         send_command("stop", start_if_needed=False)
 
 
-@pytest.mark.skipif(not _can_launch_playwright_browser(), reason="Playwright browser runtime unavailable")
-def test_read_runner_scroll_bottom_loads_more_content_without_leaking_tabs(monkeypatch, tmp_path: Path) -> None:
+@pytest.mark.skipif(
+    not _can_launch_playwright_browser(), reason="Playwright browser runtime unavailable"
+)
+def test_read_runner_scroll_bottom_loads_more_content_without_leaking_tabs(
+    monkeypatch, tmp_path: Path
+) -> None:
     _configure_runtime(monkeypatch, tmp_path)
     chrome_environment = _build_chrome_environment(tmp_path)
     with run_fixture_server() as base_url:
         existing_page = send_command(
             "open",
-            {"url": f"{base_url}/static", "chrome_environment": _serialize_environment(chrome_environment)},
+            {
+                "url": f"{base_url}/static",
+                "chrome_environment": _serialize_environment(chrome_environment),
+            },
         )
         existing_page_id = existing_page["data"]["page"]["page_id"]
 

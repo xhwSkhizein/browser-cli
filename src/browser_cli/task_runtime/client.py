@@ -54,7 +54,9 @@ class BrowserCliTaskClient:
     def wait(self, seconds: float) -> dict[str, Any]:
         return self.invoke("wait", seconds=seconds)
 
-    def wait_text(self, text: str, *, timeout: float = 5.0, gone: bool = False, exact: bool = False) -> dict[str, Any]:
+    def wait_text(
+        self, text: str, *, timeout: float = 5.0, gone: bool = False, exact: bool = False
+    ) -> dict[str, Any]:
         return self.invoke("wait", seconds=timeout, text=text, gone=gone, exact=exact)
 
     def eval(self, code: str) -> Any:
@@ -63,7 +65,9 @@ class BrowserCliTaskClient:
     def eval_on(self, ref: str, code: str) -> Any:
         return self.invoke("eval-on", ref=ref, code=code).get("result")
 
-    def verify_text(self, text: str, *, exact: bool = False, timeout: float = 5.0) -> dict[str, Any]:
+    def verify_text(
+        self, text: str, *, exact: bool = False, timeout: float = 5.0
+    ) -> dict[str, Any]:
         return self.invoke("verify-text", text=text, exact=exact, timeout=timeout)
 
     def verify_state(self, ref: str, state: str) -> dict[str, Any]:

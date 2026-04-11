@@ -1,2 +1,1 @@
 """Chrome profile discovery."""
-

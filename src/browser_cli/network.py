@@ -8,7 +8,6 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Any
 
-
 STATIC_RESOURCE_TYPES = frozenset({"image", "stylesheet", "script", "font", "media"})
 DEFAULT_NETWORK_RECENT_LIMIT = 200
 DEFAULT_NETWORK_CAPTURE_LIMIT = 200
@@ -44,9 +43,10 @@ class NetworkRecordFilter:
             return False
         if self.resource_type and resource_type != self.resource_type:
             return False
-        if self.mime_contains and self.mime_contains.lower() not in str(record.get("mime_type") or "").lower():
-            return False
-        return True
+        return not (
+            self.mime_contains
+            and self.mime_contains.lower() not in str(record.get("mime_type") or "").lower()
+        )
 
 
 def is_static_resource_type(resource_type: str | None) -> bool:

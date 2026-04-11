@@ -54,7 +54,9 @@ def _discover_managed_environment(
     profile_path = user_data_dir / selected_profile_directory
     profile_path.mkdir(parents=True, exist_ok=True)
 
-    lock_files = [str(user_data_dir / name) for name in LOCK_FILES if (user_data_dir / name).exists()]
+    lock_files = [
+        str(user_data_dir / name) for name in LOCK_FILES if (user_data_dir / name).exists()
+    ]
     if lock_files:
         joined = ", ".join(lock_files)
         raise ProfileUnavailableError(
@@ -93,7 +95,9 @@ def discover_chrome_executable(platform: str | None = None) -> Path:
             ]
         )
     else:
-        raise BrowserUnavailableError(f"Unsupported platform for Chrome discovery: {resolved_platform}")
+        raise BrowserUnavailableError(
+            f"Unsupported platform for Chrome discovery: {resolved_platform}"
+        )
 
     for candidate in candidates:
         if candidate.exists():
@@ -110,7 +114,9 @@ def discover_user_data_dir(platform: str | None = None, home: Path | None = None
         return home_dir / "Library" / "Application Support" / "Google" / "Chrome"
     if resolved_platform.startswith("linux"):
         return home_dir / ".config" / "google-chrome"
-    raise ProfileUnavailableError(f"Unsupported platform for profile discovery: {resolved_platform}")
+    raise ProfileUnavailableError(
+        f"Unsupported platform for profile discovery: {resolved_platform}"
+    )
 
 
 def discover_default_profile_dir(home: Path | None = None) -> Path:
@@ -131,14 +137,12 @@ def load_profile_info_cache(user_data_dir: Path) -> dict[str, dict]:
     info_cache = payload.get("profile", {}).get("info_cache", {})
     if not isinstance(info_cache, dict):
         return {}
-    return {
-        str(key): value
-        for key, value in info_cache.items()
-        if isinstance(value, dict)
-    }
+    return {str(key): value for key, value in info_cache.items() if isinstance(value, dict)}
 
 
-def resolve_profile_directory(user_data_dir: Path, *, preferred: str | None = None) -> tuple[str, str | None]:
+def resolve_profile_directory(
+    user_data_dir: Path, *, preferred: str | None = None
+) -> tuple[str, str | None]:
     if preferred:
         return preferred, load_profile_info_cache(user_data_dir).get(preferred, {}).get("name")
 
@@ -167,7 +171,8 @@ def resolve_profile_directory(user_data_dir: Path, *, preferred: str | None = No
         (
             entry
             for entry in user_data_dir.iterdir()
-            if entry.is_dir() and (entry.name.startswith("Profile ") or entry.name == DEFAULT_PROFILE_DIRECTORY)
+            if entry.is_dir()
+            and (entry.name.startswith("Profile ") or entry.name == DEFAULT_PROFILE_DIRECTORY)
         ),
         key=lambda entry: entry.stat().st_mtime,
         reverse=True,

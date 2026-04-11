@@ -10,9 +10,9 @@ import pytest
 import websockets
 
 from browser_cli.constants import APP_HOME_ENV, EXTENSION_PORT_ENV, get_app_paths
+from browser_cli.errors import OperationFailedError
 from browser_cli.extension.protocol import PROTOCOL_VERSION, REQUIRED_EXTENSION_CAPABILITIES
 from browser_cli.extension.session import ExtensionHub
-from browser_cli.errors import OperationFailedError
 
 
 def _unused_port() -> int:
@@ -21,7 +21,9 @@ def _unused_port() -> int:
         return int(sock.getsockname()[1])
 
 
-def test_extension_hub_accepts_handshake_and_round_trips_requests(monkeypatch, tmp_path: Path) -> None:
+def test_extension_hub_accepts_handshake_and_round_trips_requests(
+    monkeypatch, tmp_path: Path
+) -> None:
     async def _scenario() -> None:
         monkeypatch.setenv(APP_HOME_ENV, str(tmp_path / ".browser-cli-runtime"))
         monkeypatch.setenv(EXTENSION_PORT_ENV, str(_unused_port()))
@@ -77,7 +79,9 @@ def test_extension_hub_accepts_handshake_and_round_trips_requests(monkeypatch, t
     asyncio.run(_scenario())
 
 
-def test_extension_hub_answers_http_probe_without_websocket_upgrade(monkeypatch, tmp_path: Path) -> None:
+def test_extension_hub_answers_http_probe_without_websocket_upgrade(
+    monkeypatch, tmp_path: Path
+) -> None:
     async def _scenario() -> None:
         monkeypatch.setenv(APP_HOME_ENV, str(tmp_path / ".browser-cli-runtime"))
         monkeypatch.setenv(EXTENSION_PORT_ENV, str(_unused_port()))
@@ -86,7 +90,9 @@ def test_extension_hub_answers_http_probe_without_websocket_upgrade(monkeypatch,
         await hub.ensure_started()
         app_paths = get_app_paths()
 
-        reader, writer = await asyncio.open_connection(app_paths.extension_host, app_paths.extension_port)
+        reader, writer = await asyncio.open_connection(
+            app_paths.extension_host, app_paths.extension_port
+        )
         writer.write(
             (
                 f"GET /ext HTTP/1.1\r\n"
@@ -138,7 +144,9 @@ def test_extension_session_collects_chunked_artifacts(monkeypatch, tmp_path: Pat
             session = await hub.wait_for_session(timeout_seconds=1.0)
             assert session is not None
 
-            request_task = asyncio.create_task(session.send_request("screenshot", {"full_page": True}))
+            request_task = asyncio.create_task(
+                session.send_request("screenshot", {"full_page": True})
+            )
             raw_request = json.loads(await websocket.recv())
             request_id = raw_request["id"]
 

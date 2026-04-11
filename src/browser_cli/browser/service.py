@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import os
 import tempfile
@@ -37,7 +38,13 @@ from browser_cli.network import NetworkRecordFilter
 from browser_cli.profiles.discovery import ChromeEnvironment, discover_chrome_environment
 from browser_cli.refs import SemanticRefResolver, SnapshotRegistry
 from browser_cli.refs.generator import SemanticSnapshotGenerator
-from browser_cli.refs.models import LocatorSpec, RefData, SemanticSnapshot, SnapshotInput, SnapshotMetadata
+from browser_cli.refs.models import (
+    LocatorSpec,
+    RefData,
+    SemanticSnapshot,
+    SnapshotInput,
+    SnapshotMetadata,
+)
 
 
 class BrowserService:
@@ -117,7 +124,9 @@ class BrowserService:
             )
             self._context = await chromium.launch_persistent_context(
                 user_data_dir=str(launch_config.user_data_dir),
-                executable_path=str(launch_config.executable_path) if launch_config.executable_path else None,
+                executable_path=str(launch_config.executable_path)
+                if launch_config.executable_path
+                else None,
                 headless=launch_config.headless,
                 viewport={
                     "width": launch_config.viewport_width,
@@ -140,7 +149,9 @@ class BrowserService:
                 ],
                 **context_options,
             )
-            init_script = build_init_script(headless=launch_config.headless, locale=launch_config.locale)
+            init_script = build_init_script(
+                headless=launch_config.headless, locale=launch_config.locale
+            )
             if init_script:
                 await self._context.add_init_script(init_script)
             for page in list(self._context.pages):
@@ -271,7 +282,9 @@ class BrowserService:
                 await self._scroll_page_to_bottom(page)
                 await self._settle_page(page)
             if output_mode == "snapshot":
-                snapshot = await capture_snapshot(page, page_id=page_id, interactive=False, full_page=True)
+                snapshot = await capture_snapshot(
+                    page, page_id=page_id, interactive=False, full_page=True
+                )
                 body = snapshot.tree
             else:
                 body = await self._capture_html_from_page(page)
@@ -295,10 +308,8 @@ class BrowserService:
             return payload
         finally:
             if page_id is not None and page_id in self._pages:
-                try:
+                with contextlib.suppress(Exception):
                     await self._close_page(page_id)
-                except Exception:
-                    pass
 
     async def close_tab(self, page_id: str) -> dict[str, Any]:
         return await self._close_page(page_id)
@@ -348,8 +359,12 @@ class BrowserService:
         full_page: bool = True,
     ) -> dict[str, Any]:
         page = self._require_page(page_id)
-        snapshot = await capture_snapshot(page, page_id=page_id, interactive=interactive, full_page=full_page)
-        semantic_snapshot = self._semantic_snapshot_from_capture(page_id, snapshot, interactive=interactive, full_page=full_page)
+        snapshot = await capture_snapshot(
+            page, page_id=page_id, interactive=interactive, full_page=full_page
+        )
+        semantic_snapshot = self._semantic_snapshot_from_capture(
+            page_id, snapshot, interactive=interactive, full_page=full_page
+        )
         state = self._snapshot_registry.store(semantic_snapshot)
         return {
             "page_id": page_id,
@@ -366,12 +381,18 @@ class BrowserService:
             ],
         }
 
-    async def navigate(self, page_id: str, url: str, *, wait_until: str = "load", timeout_seconds: float = 30.0) -> dict[str, Any]:
+    async def navigate(
+        self, page_id: str, url: str, *, wait_until: str = "load", timeout_seconds: float = 30.0
+    ) -> dict[str, Any]:
         page = self._require_page(page_id)
-        await page.goto(self._normalize_url(url), wait_until=wait_until, timeout=timeout_seconds * 1000.0)
+        await page.goto(
+            self._normalize_url(url), wait_until=wait_until, timeout=timeout_seconds * 1000.0
+        )
         return await self.get_page_summary(page_id)
 
-    async def reload(self, page_id: str, *, wait_until: str = "load", timeout_seconds: float = 30.0) -> dict[str, Any]:
+    async def reload(
+        self, page_id: str, *, wait_until: str = "load", timeout_seconds: float = 30.0
+    ) -> dict[str, Any]:
         page = self._require_page(page_id)
         await page.reload(wait_until=wait_until, timeout=timeout_seconds * 1000.0)
         return await self.get_page_summary(page_id)
@@ -425,7 +446,9 @@ class BrowserService:
             await locator.press("Enter")
         return {"page_id": page_id, "ref": locator_spec.ref, "filled": True, "submitted": submit}
 
-    async def select_locator(self, page_id: str, locator_spec: LocatorSpec, text: str) -> dict[str, Any]:
+    async def select_locator(
+        self, page_id: str, locator_spec: LocatorSpec, text: str
+    ) -> dict[str, Any]:
         locator = await self._get_locator_by_spec(page_id, locator_spec)
         await locator.select_option(label=text)
         return {"page_id": page_id, "ref": locator_spec.ref, "selected": text}
@@ -479,14 +502,26 @@ class BrowserService:
     ) -> dict[str, Any]:
         locator = await self._get_locator_by_spec(page_id, locator_spec)
         await locator.set_input_files(file_path)
-        return {"page_id": page_id, "ref": locator_spec.ref, "file_path": str(Path(file_path).resolve())}
+        return {
+            "page_id": page_id,
+            "ref": locator_spec.ref,
+            "file_path": str(Path(file_path).resolve()),
+        }
 
-    async def evaluate_on_locator(self, page_id: str, locator_spec: LocatorSpec, code: str) -> dict[str, Any]:
+    async def evaluate_on_locator(
+        self, page_id: str, locator_spec: LocatorSpec, code: str
+    ) -> dict[str, Any]:
         locator = await self._get_locator_by_spec(page_id, locator_spec)
         result = await locator.evaluate(code)
-        return {"page_id": page_id, "ref": locator_spec.ref, "result": self._normalize_json_value(result)}
+        return {
+            "page_id": page_id,
+            "ref": locator_spec.ref,
+            "result": self._normalize_json_value(result),
+        }
 
-    async def verify_state_locator(self, page_id: str, locator_spec: LocatorSpec, *, state: str) -> dict[str, Any]:
+    async def verify_state_locator(
+        self, page_id: str, locator_spec: LocatorSpec, *, state: str
+    ) -> dict[str, Any]:
         locator = await self._get_locator_by_spec(page_id, locator_spec)
         normalized = state.strip().lower()
         if normalized in {"checked", "unchecked"}:
@@ -509,7 +544,12 @@ class BrowserService:
             expected = True
         else:
             raise InvalidInputError(f"Unsupported verify-state value: {state}")
-        return {"page_id": page_id, "ref": locator_spec.ref, "state": normalized, "passed": actual == expected}
+        return {
+            "page_id": page_id,
+            "ref": locator_spec.ref,
+            "state": normalized,
+            "passed": actual == expected,
+        }
 
     async def verify_value_locator(
         self,
@@ -520,7 +560,13 @@ class BrowserService:
     ) -> dict[str, Any]:
         locator = await self._get_locator_by_spec(page_id, locator_spec)
         actual = await locator.input_value()
-        return {"page_id": page_id, "ref": locator_spec.ref, "expected": expected, "actual": actual, "passed": actual == expected}
+        return {
+            "page_id": page_id,
+            "ref": locator_spec.ref,
+            "expected": expected,
+            "actual": actual,
+            "passed": actual == expected,
+        }
 
     async def click_ref(self, page_id: str, ref: str) -> dict[str, Any]:
         locator = await self._get_locator_by_ref(page_id, ref)
@@ -542,14 +588,18 @@ class BrowserService:
         await locator.focus()
         return {"page_id": page_id, "ref": ref, "action": "focus"}
 
-    async def fill_ref(self, page_id: str, ref: str, text: str, *, submit: bool = False) -> dict[str, Any]:
+    async def fill_ref(
+        self, page_id: str, ref: str, text: str, *, submit: bool = False
+    ) -> dict[str, Any]:
         locator = await self._get_locator_by_ref(page_id, ref)
         await locator.fill(text)
         if submit:
             await locator.press("Enter")
         return {"page_id": page_id, "ref": ref, "filled": True, "submitted": submit}
 
-    async def fill_form(self, page_id: str, fields: list[dict[str, Any]], *, submit: bool = False) -> dict[str, Any]:
+    async def fill_form(
+        self, page_id: str, fields: list[dict[str, Any]], *, submit: bool = False
+    ) -> dict[str, Any]:
         for field in fields:
             ref = str(field.get("ref") or "").strip()
             text = str(field.get("text") or "")
@@ -635,7 +685,9 @@ class BrowserService:
                 scrollY: window.scrollY
             })"""
         )
-        if (after["scrollX"], after["scrollY"]) == (before["scrollX"], before["scrollY"]) and (dx or dy):
+        if (after["scrollX"], after["scrollY"]) == (before["scrollX"], before["scrollY"]) and (
+            dx or dy
+        ):
             after = await page.evaluate(
                 """({ dx, dy }) => {
                     window.scrollBy(dx, dy);
@@ -659,12 +711,16 @@ class BrowserService:
         await page.mouse.move(x, y)
         return {"page_id": page_id, "x": x, "y": y}
 
-    async def mouse_click(self, page_id: str, *, x: int, y: int, button: str = "left", count: int = 1) -> dict[str, Any]:
+    async def mouse_click(
+        self, page_id: str, *, x: int, y: int, button: str = "left", count: int = 1
+    ) -> dict[str, Any]:
         page = self._require_page(page_id)
         await page.mouse.click(x, y, button=button, click_count=count)
         return {"page_id": page_id, "x": x, "y": y, "button": button, "count": count}
 
-    async def mouse_drag(self, page_id: str, *, x1: int, y1: int, x2: int, y2: int) -> dict[str, Any]:
+    async def mouse_drag(
+        self, page_id: str, *, x1: int, y1: int, x2: int, y2: int
+    ) -> dict[str, Any]:
         page = self._require_page(page_id)
         await page.mouse.move(x1, y1)
         await page.mouse.down()
@@ -710,12 +766,16 @@ class BrowserService:
         await page.wait_for_timeout((seconds or 1.0) * 1000.0)
         return {"page_id": page_id, "seconds": seconds or 1.0}
 
-    async def wait_for_network_idle(self, page_id: str, *, timeout_seconds: float = 30.0) -> dict[str, Any]:
+    async def wait_for_network_idle(
+        self, page_id: str, *, timeout_seconds: float = 30.0
+    ) -> dict[str, Any]:
         page = self._require_page(page_id)
         await page.wait_for_load_state("networkidle", timeout=timeout_seconds * 1000.0)
         return {"page_id": page_id, "network_idle": True}
 
-    async def screenshot(self, page_id: str, *, path: str, full_page: bool = False) -> dict[str, Any]:
+    async def screenshot(
+        self, page_id: str, *, path: str, full_page: bool = False
+    ) -> dict[str, Any]:
         page = self._require_page(page_id)
         output_path = self._resolve_output_path(path)
         await page.screenshot(path=str(output_path), full_page=full_page)
@@ -730,19 +790,15 @@ class BrowserService:
     async def start_console_capture(self, page_id: str) -> dict[str, Any]:
         page = self._require_page(page_id)
         if page_id in self._console_handlers:
-            try:
+            with contextlib.suppress(Exception):
                 page.remove_listener("console", self._console_handlers[page_id])
-            except Exception:
-                pass
         self._console_messages[page_id] = []
 
         def _handle_console(message: Any) -> None:
             location = message.location or {}
             location_text = None
             if location:
-                location_text = (
-                    f"{location.get('url', '')}:{location.get('lineNumber', 0)}:{location.get('columnNumber', 0)}"
-                )
+                location_text = f"{location.get('url', '')}:{location.get('lineNumber', 0)}:{location.get('columnNumber', 0)}"
             self._console_messages.setdefault(page_id, []).append(
                 {
                     "type": message.type,
@@ -755,7 +811,9 @@ class BrowserService:
         self._console_handlers[page_id] = _handle_console
         return {"page_id": page_id, "capturing": True}
 
-    async def get_console_messages(self, page_id: str, *, message_type: str | None = None, clear: bool = True) -> dict[str, Any]:
+    async def get_console_messages(
+        self, page_id: str, *, message_type: str | None = None, clear: bool = True
+    ) -> dict[str, Any]:
         messages = list(self._console_messages.get(page_id, []))
         if message_type:
             messages = [item for item in messages if item.get("type") == message_type]
@@ -767,10 +825,8 @@ class BrowserService:
         page = self._require_page(page_id)
         handler = self._console_handlers.pop(page_id, None)
         if handler is not None:
-            try:
+            with contextlib.suppress(Exception):
                 page.remove_listener("console", handler)
-            except Exception:
-                pass
         return {"page_id": page_id, "capturing": False}
 
     async def start_network_capture(self, page_id: str) -> dict[str, Any]:
@@ -807,8 +863,10 @@ class BrowserService:
                 ),
                 timeout_seconds=timeout_seconds,
             )
-        except asyncio.TimeoutError as exc:
-            raise OperationFailedError(f"Timed out waiting for a matching network record after {timeout_seconds:.1f}s.") from exc
+        except TimeoutError as exc:
+            raise OperationFailedError(
+                f"Timed out waiting for a matching network record after {timeout_seconds:.1f}s."
+            ) from exc
         return {"page_id": page_id, "record": record}
 
     async def get_network_records(
@@ -856,10 +914,8 @@ class BrowserService:
         page = self._require_page(page_id)
         existing = self._dialog_handlers.pop(page_id, None)
         if existing is not None:
-            try:
+            with contextlib.suppress(Exception):
                 page.remove_listener("dialog", existing)
-            except Exception:
-                pass
 
         async def _handle_dialog(dialog: Any) -> None:
             if default_action == "accept":
@@ -889,10 +945,8 @@ class BrowserService:
         page = self._require_page(page_id)
         existing = self._dialog_handlers.pop(page_id, None)
         if existing is not None:
-            try:
+            with contextlib.suppress(Exception):
                 page.remove_listener("dialog", existing)
-            except Exception:
-                pass
 
         async def _handle_next_dialog(dialog: Any) -> None:
             if accept:
@@ -916,10 +970,8 @@ class BrowserService:
         existing = self._dialog_handlers.pop(page_id, None)
         removed = existing is not None
         if existing is not None:
-            try:
+            with contextlib.suppress(Exception):
                 page.remove_listener("dialog", existing)
-            except Exception:
-                pass
         return {"page_id": page_id, "removed": removed}
 
     async def start_tracing(
@@ -961,7 +1013,9 @@ class BrowserService:
         saved_path = await self._stop_tracing_impl(path=path)
         return {"page_id": page_id, "path": saved_path}
 
-    async def start_video(self, page_id: str, *, width: int | None = None, height: int | None = None) -> dict[str, Any]:
+    async def start_video(
+        self, page_id: str, *, width: int | None = None, height: int | None = None
+    ) -> dict[str, Any]:
         page = self._require_page(page_id)
         if getattr(page, "video", None) is None:
             raise OperationFailedError("No video recording is available for the active tab.")
@@ -1024,7 +1078,9 @@ class BrowserService:
         page = self._require_page(page_id)
         cookie_domain = domain or urllib.parse.urlparse(page.url).hostname
         if not cookie_domain:
-            raise InvalidInputError("Cookie domain is required when the current page has no hostname.")
+            raise InvalidInputError(
+                "Cookie domain is required when the current page has no hostname."
+            )
         payload: dict[str, Any] = {
             "name": name,
             "value": value,
@@ -1050,7 +1106,11 @@ class BrowserService:
     ) -> dict[str, Any]:
         _ = self._require_page(page_id)
         await self._context.clear_cookies(name=name, domain=domain, path=path)
-        return {"page_id": page_id, "cleared": True, "filters": {"name": name, "domain": domain, "path": path}}
+        return {
+            "page_id": page_id,
+            "cleared": True,
+            "filters": {"name": name, "domain": domain, "path": path},
+        }
 
     async def save_storage_state(self, page_id: str, *, path: str | None = None) -> dict[str, Any]:
         _ = self._require_page(page_id)
@@ -1082,7 +1142,9 @@ class BrowserService:
                 )
         return {"page_id": page_id, "path": str(input_path), "cookies_loaded": len(cookies)}
 
-    async def verify_text(self, page_id: str, *, text: str, exact: bool = False, timeout_seconds: float = 5.0) -> dict[str, Any]:
+    async def verify_text(
+        self, page_id: str, *, text: str, exact: bool = False, timeout_seconds: float = 5.0
+    ) -> dict[str, Any]:
         page = self._require_page(page_id)
         locator = page.get_by_text(text, exact=exact).first
         try:
@@ -1091,7 +1153,9 @@ class BrowserService:
         except Exception:
             return {"page_id": page_id, "passed": False, "text": text}
 
-    async def verify_visible(self, page_id: str, *, role: str, name: str, timeout_seconds: float = 5.0) -> dict[str, Any]:
+    async def verify_visible(
+        self, page_id: str, *, role: str, name: str, timeout_seconds: float = 5.0
+    ) -> dict[str, Any]:
         page = self._require_page(page_id)
         locator = page.get_by_role(role, name=name).first
         try:
@@ -1100,13 +1164,17 @@ class BrowserService:
         except Exception:
             return {"page_id": page_id, "passed": False, "role": role, "name": name}
 
-    async def verify_url(self, page_id: str, *, expected: str, exact: bool = False) -> dict[str, Any]:
+    async def verify_url(
+        self, page_id: str, *, expected: str, exact: bool = False
+    ) -> dict[str, Any]:
         page = self._require_page(page_id)
         actual = page.url
         passed = actual == expected if exact else expected in actual
         return {"page_id": page_id, "passed": passed, "expected": expected, "actual": actual}
 
-    async def verify_title(self, page_id: str, *, expected: str, exact: bool = False) -> dict[str, Any]:
+    async def verify_title(
+        self, page_id: str, *, expected: str, exact: bool = False
+    ) -> dict[str, Any]:
         page = self._require_page(page_id)
         actual = await page.title()
         passed = actual == expected if exact else expected in actual
@@ -1137,7 +1205,13 @@ class BrowserService:
     async def verify_value(self, page_id: str, *, ref: str, expected: str) -> dict[str, Any]:
         locator = await self._get_locator_by_ref(page_id, ref)
         actual = await locator.input_value()
-        return {"page_id": page_id, "ref": ref, "expected": expected, "actual": actual, "passed": actual == expected}
+        return {
+            "page_id": page_id,
+            "ref": ref,
+            "expected": expected,
+            "actual": actual,
+            "passed": actual == expected,
+        }
 
     async def search(self, *, query: str, engine: str = "duckduckgo") -> dict[str, Any]:
         search_url = self._build_search_url(query, engine)
@@ -1180,19 +1254,15 @@ class BrowserService:
         self._console_messages.pop(page_id, None)
         console_handler = self._console_handlers.pop(page_id, None)
         if page is not None and console_handler is not None:
-            try:
+            with contextlib.suppress(Exception):
                 page.remove_listener("console", console_handler)
-            except Exception:
-                pass
         network_observer = self._network_observers.pop(page_id, None)
         if network_observer is not None:
             await network_observer.close()
         dialog_handler = self._dialog_handlers.pop(page_id, None)
         if page is not None and dialog_handler is not None:
-            try:
+            with contextlib.suppress(Exception):
                 page.remove_listener("dialog", dialog_handler)
-            except Exception:
-                pass
         self._video_started.discard(page_id)
         self._pending_video_save_paths.pop(page_id, None)
 
@@ -1250,12 +1320,14 @@ class BrowserService:
 
     @staticmethod
     def _normalize_json_value(value: Any) -> Any:
-        if value is None or isinstance(value, (bool, int, float, str)):
+        if value is None or isinstance(value, bool | int | float | str):
             return value
         if isinstance(value, list):
             return [BrowserService._normalize_json_value(item) for item in value]
         if isinstance(value, dict):
-            return {str(key): BrowserService._normalize_json_value(item) for key, item in value.items()}
+            return {
+                str(key): BrowserService._normalize_json_value(item) for key, item in value.items()
+            }
         return str(value)
 
     @staticmethod
@@ -1355,7 +1427,11 @@ class BrowserService:
     def _raise_launch_error(exc: Exception) -> None:
         message = str(exc)
         lowered = message.lower()
-        if "singleton" in lowered or "profile" in lowered or "user data directory is already in use" in lowered:
+        if (
+            "singleton" in lowered
+            or "profile" in lowered
+            or "user data directory is already in use" in lowered
+        ):
             raise ProfileUnavailableError(message) from exc
         if "executable" in lowered or "browser" in lowered or "failed to launch" in lowered:
             raise BrowserUnavailableError(message) from exc
@@ -1385,13 +1461,19 @@ class BrowserService:
                 role=str(data.get("role") or ""),
                 name=str(data["name"]) if data.get("name") is not None else None,
                 nth=int(data["nth"]) if data.get("nth") is not None else None,
-                text_content=str(data["text_content"]) if data.get("text_content") is not None else None,
+                text_content=str(data["text_content"])
+                if data.get("text_content") is not None
+                else None,
                 tag=str(data["tag"]) if data.get("tag") is not None else None,
                 interactive=bool(data.get("interactive")),
                 parent_ref=str(data["parent_ref"]) if data.get("parent_ref") is not None else None,
                 frame_path=tuple(int(item) for item in (data.get("frame_path") or [])),
-                playwright_ref=str(data["playwright_ref"]) if data.get("playwright_ref") is not None else None,
-                selector_recipe=str(data["selector_recipe"]) if data.get("selector_recipe") is not None else None,
+                playwright_ref=str(data["playwright_ref"])
+                if data.get("playwright_ref") is not None
+                else None,
+                selector_recipe=str(data["selector_recipe"])
+                if data.get("selector_recipe") is not None
+                else None,
                 snapshot_id=snapshot.snapshot_id,
                 page_id=page_id,
                 captured_url=str(page.url),

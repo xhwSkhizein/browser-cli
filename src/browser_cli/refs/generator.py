@@ -20,9 +20,35 @@ class SnapshotOptions:
 
 
 class SemanticSnapshotGenerator:
-    CONTENT_ROLES = {"article", "cell", "columnheader", "heading", "main", "navigation", "region", "rowheader"}
-    ALWAYS_REF_ROLES = {"cell", "columnheader", "gridcell", "listitem", "option", "row", "rowheader"}
-    LANDMARK_ROLES = {"banner", "contentinfo", "complementary", "form", "main", "navigation", "region", "search"}
+    CONTENT_ROLES = {
+        "article",
+        "cell",
+        "columnheader",
+        "heading",
+        "main",
+        "navigation",
+        "region",
+        "rowheader",
+    }
+    ALWAYS_REF_ROLES = {
+        "cell",
+        "columnheader",
+        "gridcell",
+        "listitem",
+        "option",
+        "row",
+        "rowheader",
+    }
+    LANDMARK_ROLES = {
+        "banner",
+        "contentinfo",
+        "complementary",
+        "form",
+        "main",
+        "navigation",
+        "region",
+        "search",
+    }
     SEMANTIC_ROLES = {
         "alert",
         "blockquote",
@@ -58,10 +84,10 @@ class SemanticSnapshotGenerator:
     _REF_NAMESPACE = "browser-cli-semantic-v1"
     _YAML_QUOTE_PATTERN = re.compile(r"^(\s*-\s*)'(.+)'(:{0,1})\s*$")
     _LINE_PATTERN = re.compile(
-        r'^(\s*-\s*)'
-        r'([A-Za-z0-9_/-]+)'
+        r"^(\s*-\s*)"
+        r"([A-Za-z0-9_/-]+)"
         r'(?:\s+"((?:[^"\\]|\\.)*)")?'
-        r'(.*)$'
+        r"(.*)$"
     )
     _REF_CLEAN_PATTERN = re.compile(r"\s*\[ref=[a-zA-Z0-9]+\]")
     _REF_EXTRACT_PATTERN = re.compile(r"\[ref=([a-zA-Z0-9]+)\]")
@@ -95,7 +121,9 @@ class SemanticSnapshotGenerator:
         return len(line) - len(line.lstrip(" "))
 
     @classmethod
-    def _build_selector(cls, role: str, name: str | None = None, text_content: str | None = None) -> str:
+    def _build_selector(
+        cls, role: str, name: str | None = None, text_content: str | None = None
+    ) -> str:
         if name:
             escaped_name = name.replace('"', '\\"')
             if role in cls.TEXT_LEAF_ROLES:
@@ -118,12 +146,13 @@ class SemanticSnapshotGenerator:
         raw = f"{cls._REF_NAMESPACE}\x1f{role}\x1f{name or ''}\x1f{frame_str}\x1f{nth}"
         return hashlib.sha256(raw.encode("utf-8")).digest()[:4].hex()
 
-    def _should_keep(self, role_lower: str, name: str | None, suffix: str, *, interactive_only: bool) -> tuple[bool, bool]:
+    def _should_keep(
+        self, role_lower: str, name: str | None, suffix: str, *, interactive_only: bool
+    ) -> tuple[bool, bool]:
         is_interactive = role_lower in self.INTERACTIVE_ROLES
         has_cursor_pointer = "[cursor=pointer]" in suffix
         has_aria_state = any(
-            token in suffix
-            for token in ("[pressed", "[expanded", "[checked", "[selected")
+            token in suffix for token in ("[pressed", "[expanded", "[checked", "[selected")
         )
         is_disabled = "[disabled]" in suffix
 
@@ -139,7 +168,13 @@ class SemanticSnapshotGenerator:
             return True, True
         if role_lower in self.ALWAYS_REF_ROLES:
             return True, True
-        if role_lower in self.CONTENT_ROLES | self.LANDMARK_ROLES | self.SEMANTIC_ROLES | self.STRUCTURAL_ROLES:
+        if (
+            role_lower
+            in self.CONTENT_ROLES
+            | self.LANDMARK_ROLES
+            | self.SEMANTIC_ROLES
+            | self.STRUCTURAL_ROLES
+        ):
             return True, bool(name)
         if role_lower in self.STRUCTURAL_NOISE_ROLES:
             return bool(name), bool(name)
@@ -243,14 +278,18 @@ class SemanticSnapshotGenerator:
             if not name and suffix and ":" in suffix:
                 inline_label_match = re.search(r':\s*(?:"((?:[^"\\]|\\.)*)"|([^\n]+))\s*$', suffix)
                 if inline_label_match:
-                    name = (inline_label_match.group(1) or inline_label_match.group(2) or "").strip() or None
+                    name = (
+                        inline_label_match.group(1) or inline_label_match.group(2) or ""
+                    ).strip() or None
 
             if role.startswith("/"):
                 if any(kept for _, kept, _, _ in depth_stack) or not depth_stack:
                     result.append(f"{'  ' * effective_depth(original_depth)}- {role}{suffix}")
                 continue
 
-            keep, have_ref = self._should_keep(role_lower, name, suffix, interactive_only=interactive)
+            keep, have_ref = self._should_keep(
+                role_lower, name, suffix, interactive_only=interactive
+            )
             current_out_depth = effective_depth(original_depth)
             current_ref: str | None = None
 
@@ -260,17 +299,14 @@ class SemanticSnapshotGenerator:
                     parent_path = iframe_stack[-1][1] if iframe_stack else ()
                     local_index = iframe_local_counters.get(parent_path, 0)
                     iframe_local_counters[parent_path] = local_index + 1
-                    iframe_stack.append((original_depth, tuple([*parent_path, local_index])))
+                    iframe_stack.append((original_depth, (*parent_path, local_index)))
                 continue
 
             clean_suffix = self._REF_CLEAN_PATTERN.sub("", suffix).strip()
             pw_ref_match = self._REF_EXTRACT_PATTERN.search(suffix)
             playwright_ref = pw_ref_match.group(1) if pw_ref_match else None
 
-            if interactive:
-                enhanced = f"- {role}"
-            else:
-                enhanced = f"{'  ' * current_out_depth}- {role}"
+            enhanced = f"- {role}" if interactive else f"{'  ' * current_out_depth}- {role}"
             if name:
                 enhanced += f' "{name}"'
 
@@ -315,7 +351,7 @@ class SemanticSnapshotGenerator:
                 parent_path = iframe_stack[-1][1] if iframe_stack else ()
                 local_index = iframe_local_counters.get(parent_path, 0)
                 iframe_local_counters[parent_path] = local_index + 1
-                iframe_stack.append((original_depth, tuple([*parent_path, local_index])))
+                iframe_stack.append((original_depth, (*parent_path, local_index)))
 
             if clean_suffix:
                 if name and ":" in clean_suffix:
@@ -325,7 +361,7 @@ class SemanticSnapshotGenerator:
                         if raw_text.startswith('"') and raw_text.endswith('"'):
                             raw_text = raw_text[1:-1]
                         if raw_text == name:
-                            clean_suffix = clean_suffix[:colon_match.start()].rstrip()
+                            clean_suffix = clean_suffix[: colon_match.start()].rstrip()
                 if clean_suffix == ":":
                     enhanced += ":"
                 elif clean_suffix.startswith(":"):
@@ -339,7 +375,9 @@ class SemanticSnapshotGenerator:
 
         dedup_counts: dict[tuple[str, str | None, tuple[int, ...]], int] = {}
         for item in refs.values():
-            dedup_counts[(item.role, item.name, item.frame_path)] = dedup_counts.get((item.role, item.name, item.frame_path), 0) + 1
+            dedup_counts[(item.role, item.name, item.frame_path)] = (
+                dedup_counts.get((item.role, item.name, item.frame_path), 0) + 1
+            )
         for ref, data in list(refs.items()):
             if dedup_counts[(data.role, data.name, data.frame_path)] == 1:
                 refs[ref] = replace(data, nth=None)

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from types import TracebackType
 from typing import Any
 
@@ -24,7 +23,7 @@ class BrowserSession:
         self._context: Any | None = None
         self._page: Any | None = None
 
-    async def __aenter__(self) -> "BrowserSession":
+    async def __aenter__(self) -> BrowserSession:
         await self.start()
         return self
 
@@ -54,7 +53,9 @@ class BrowserSession:
             )
             self._context = await chromium.launch_persistent_context(
                 user_data_dir=str(self._config.user_data_dir),
-                executable_path=str(self._config.executable_path) if self._config.executable_path else None,
+                executable_path=str(self._config.executable_path)
+                if self._config.executable_path
+                else None,
                 headless=self._config.headless,
                 viewport={
                     "width": self._config.viewport_width,
@@ -72,10 +73,14 @@ class BrowserSession:
                 ],
                 **context_options,
             )
-            init_script = build_init_script(headless=self._config.headless, locale=self._config.locale)
+            init_script = build_init_script(
+                headless=self._config.headless, locale=self._config.locale
+            )
             if init_script:
                 await self._context.add_init_script(init_script)
-            self._page = self._context.pages[0] if self._context.pages else await self._context.new_page()
+            self._page = (
+                self._context.pages[0] if self._context.pages else await self._context.new_page()
+            )
             self._page.set_default_navigation_timeout(self._config.navigation_timeout_ms)
         except Exception as exc:
             await self.close()
@@ -93,7 +98,9 @@ class BrowserSession:
     async def navigate(self, url: str) -> None:
         self._ensure_started()
         try:
-            await self._page.goto(url, wait_until="load", timeout=self._config.navigation_timeout_ms)
+            await self._page.goto(
+                url, wait_until="load", timeout=self._config.navigation_timeout_ms
+            )
         except Exception as exc:
             raise TemporaryReadError(f"Failed to navigate to {url}: {exc}") from exc
 
@@ -140,7 +147,11 @@ class BrowserSession:
     def _raise_launch_error(self, exc: Exception) -> None:
         message = str(exc)
         lowered = message.lower()
-        if "singleton" in lowered or "profile" in lowered or "user data directory is already in use" in lowered:
+        if (
+            "singleton" in lowered
+            or "profile" in lowered
+            or "user data directory is already in use" in lowered
+        ):
             raise ProfileUnavailableError(message) from exc
         if "executable" in lowered or "browser" in lowered or "failed to launch" in lowered:
             raise BrowserUnavailableError(message) from exc

@@ -1,17 +1,17 @@
 from __future__ import annotations
 
 import json
-import socket
 import shutil
+import socket
 import sys
 import tempfile
 from pathlib import Path
 
 import pytest
+from tests.integration.fixture_server import run_fixture_server
 
 from browser_cli.cli.main import main
 from browser_cli.profiles.discovery import discover_chrome_executable
-from tests.integration.fixture_server import run_fixture_server
 
 
 def _can_launch_daemon_browser() -> bool:
@@ -55,7 +55,9 @@ def _configure_runtime(monkeypatch, tmp_path: Path) -> None:
             return int(sock.getsockname()[1])
 
     real_home = Path.home()
-    if not (real_home / "Library" / "Caches" / "ms-playwright").exists() and sys.platform.startswith("linux"):
+    if not (
+        real_home / "Library" / "Caches" / "ms-playwright"
+    ).exists() and sys.platform.startswith("linux"):
         playwright_cache = real_home / ".cache" / "ms-playwright"
     else:
         playwright_cache = real_home / "Library" / "Caches" / "ms-playwright"
@@ -75,9 +77,13 @@ def _run_cli_json(args: list[str], capsys) -> dict:
 
 
 @pytest.mark.skipif(not _can_launch_daemon_browser(), reason="Stable Chrome runtime unavailable")
-def test_workflow_validate_and_run_against_local_fixture(monkeypatch, tmp_path: Path, capsys) -> None:
+def test_workflow_validate_and_run_against_local_fixture(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
     _configure_runtime(monkeypatch, tmp_path)
-    source_dir = Path("/Users/hongv/workspace/m-projects/browser-cli/tasks/interactive_reveal_capture")
+    source_dir = Path(
+        "/Users/hongv/workspace/m-projects/browser-cli/tasks/interactive_reveal_capture"
+    )
     copied_dir = tmp_path / "interactive_reveal_capture"
     shutil.copytree(source_dir, copied_dir)
     workflow_path = copied_dir / "workflow.toml"

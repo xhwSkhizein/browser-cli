@@ -16,7 +16,7 @@ class PageSnapshotState:
     captured_at: float
 
     @classmethod
-    def from_snapshot(cls, snapshot: SemanticSnapshot) -> "PageSnapshotState":
+    def from_snapshot(cls, snapshot: SemanticSnapshot) -> PageSnapshotState:
         return cls(
             snapshot_id=snapshot.metadata.snapshot_id,
             tree=snapshot.tree,

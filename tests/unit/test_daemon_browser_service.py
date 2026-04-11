@@ -144,7 +144,9 @@ def _patched_browser_service(monkeypatch: pytest.MonkeyPatch):
     return fake_hub
 
 
-def test_browser_service_uses_playwright_by_default(_patched_browser_service: _FakeExtensionHub) -> None:
+def test_browser_service_uses_playwright_by_default(
+    _patched_browser_service: _FakeExtensionHub,
+) -> None:
     async def _scenario() -> None:
         tabs = TabRegistry()
         service = browser_service_module.BrowserService(tabs)
@@ -159,7 +161,9 @@ def test_browser_service_uses_playwright_by_default(_patched_browser_service: _F
     asyncio.run(_scenario())
 
 
-def test_browser_service_prefers_extension_when_available(_patched_browser_service: _FakeExtensionHub) -> None:
+def test_browser_service_prefers_extension_when_available(
+    _patched_browser_service: _FakeExtensionHub,
+) -> None:
     async def _scenario() -> None:
         _patched_browser_service.connect()
         tabs = TabRegistry()

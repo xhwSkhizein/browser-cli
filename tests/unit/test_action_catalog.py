@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from browser_cli.actions import get_action_specs
 
-
 BRIDGIC_COMMANDS = {
     "open",
     "search",
@@ -77,7 +76,7 @@ BRIDGIC_COMMANDS = {
 
 def test_action_catalog_covers_bridgic_surface() -> None:
     names = {spec.name for spec in get_action_specs()}
-    assert BRIDGIC_COMMANDS <= names
+    assert names >= BRIDGIC_COMMANDS
 
 
 def test_browser_cli_only_adds_documented_extensions() -> None:

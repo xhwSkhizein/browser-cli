@@ -5,7 +5,13 @@ import asyncio
 from browser_cli.network import NetworkRecordFilter, NetworkRecordStore
 
 
-def _record(url: str, *, resource_type: str = "fetch", status: int = 200, mime_type: str = "application/json") -> dict[str, object]:
+def _record(
+    url: str,
+    *,
+    resource_type: str = "fetch",
+    status: int = 200,
+    mime_type: str = "application/json",
+) -> dict[str, object]:
     return {
         "request_id": url,
         "url": url,
@@ -45,7 +51,9 @@ def test_network_record_store_clear_only_removes_matched_records() -> None:
     store = NetworkRecordStore()
     store.start_capture()
     store.add_record(_record("https://example.com/api/ping"))
-    store.add_record(_record("https://example.com/styles.css", resource_type="stylesheet", mime_type="text/css"))
+    store.add_record(
+        _record("https://example.com/styles.css", resource_type="stylesheet", mime_type="text/css")
+    )
 
     matched = store.get_captured_records(
         record_filter=NetworkRecordFilter(url_contains="/api/"),

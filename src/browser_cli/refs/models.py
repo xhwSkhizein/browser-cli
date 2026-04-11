@@ -101,7 +101,7 @@ class LocatorSpec:
         }
 
     @classmethod
-    def from_dict(cls, payload: dict[str, Any]) -> "LocatorSpec":
+    def from_dict(cls, payload: dict[str, Any]) -> LocatorSpec:
         return cls(
             ref=str(payload.get("ref") or "").strip(),
             role=str(payload.get("role") or "").strip(),
@@ -109,8 +109,12 @@ class LocatorSpec:
             text_content=(
                 str(payload["text_content"]) if payload.get("text_content") is not None else None
             ),
-            match_text=(str(payload["match_text"]) if payload.get("match_text") is not None else None),
-            child_text=(str(payload["child_text"]) if payload.get("child_text") is not None else None),
+            match_text=(
+                str(payload["match_text"]) if payload.get("match_text") is not None else None
+            ),
+            child_text=(
+                str(payload["child_text"]) if payload.get("child_text") is not None else None
+            ),
             nth=(int(payload["nth"]) if payload.get("nth") is not None else None),
             tag=(str(payload["tag"]) if payload.get("tag") is not None else None),
             interactive=bool(payload.get("interactive")),

@@ -19,10 +19,16 @@ def test_resolve_agent_id_uses_environment_value(monkeypatch) -> None:
 def test_tab_registry_enforces_busy_active_tab() -> None:
     async def _run() -> None:
         registry = TabRegistry()
-        await registry.add_tab(page_id="page_0001", owner_agent_id="agent-a", url="https://example.com")
-        async with registry.claim_active_tab(agent_id="agent-a", request_id="r1", command="snapshot"):
+        await registry.add_tab(
+            page_id="page_0001", owner_agent_id="agent-a", url="https://example.com"
+        )
+        async with registry.claim_active_tab(
+            agent_id="agent-a", request_id="r1", command="snapshot"
+        ):
             try:
-                async with registry.claim_active_tab(agent_id="agent-a", request_id="r2", command="html"):
+                async with registry.claim_active_tab(
+                    agent_id="agent-a", request_id="r2", command="html"
+                ):
                     raise AssertionError("Expected second claim to fail.")
             except Exception as exc:
                 assert exc.__class__.__name__ == "BusyTabError"

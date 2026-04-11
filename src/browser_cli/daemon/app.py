@@ -2,18 +2,17 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any, Awaitable, Callable
+from typing import Any
 
 from browser_cli import error_codes
 from browser_cli.constants import DEFAULT_PUBLIC_AGENT_ID
 from browser_cli.errors import (
     BrowserCliError,
-    BusyTabError,
     InvalidInputError,
     NoActiveTabError,
     OperationFailedError,
-    TabNotFoundError,
 )
 from browser_cli.profiles.discovery import ChromeEnvironment
 
@@ -143,7 +142,9 @@ class BrowserDaemonApp:
             if command_started:
                 runtime_meta = await self._state.browser_service.end_command()
             return self._error_response(
-                OperationFailedError(f"Unexpected daemon failure: {exc}", error_code=error_codes.INTERNAL_ERROR),
+                OperationFailedError(
+                    f"Unexpected daemon failure: {exc}", error_code=error_codes.INTERNAL_ERROR
+                ),
                 request=request,
             )
 
@@ -263,7 +264,9 @@ class BrowserDaemonApp:
         try:
             await self._state.tabs.set_active_tab(request.agent_id, page_id)
         finally:
-            await self._state.tabs.release_tab(page_id=claimed.page_id, request_id=request.request_id)
+            await self._state.tabs.release_tab(
+                page_id=claimed.page_id, request_id=request.request_id
+            )
         return {"page": await self._state.browser_service.get_page_summary(page_id)}
 
     async def _handle_close_tab(self, request: DaemonRequest) -> dict[str, Any]:
@@ -281,13 +284,17 @@ class BrowserDaemonApp:
             await self._state.tabs.remove_tab(request.agent_id, page_id)
             return result
         finally:
-            await self._state.tabs.release_tab(page_id=claimed.page_id, request_id=request.request_id)
+            await self._state.tabs.release_tab(
+                page_id=claimed.page_id, request_id=request.request_id
+            )
 
     async def _handle_close(self, request: DaemonRequest) -> dict[str, Any]:
         return await self._handle_close_tab(request)
 
     async def _handle_info(self, request: DaemonRequest) -> dict[str, Any]:
-        page = await self._run_active_page_action(request, self._state.browser_service.get_page_info)
+        page = await self._run_active_page_action(
+            request, self._state.browser_service.get_page_info
+        )
         return {"page": page}
 
     async def _handle_read_page(self, request: DaemonRequest) -> dict[str, Any]:
@@ -302,7 +309,9 @@ class BrowserDaemonApp:
         return payload
 
     async def _handle_html(self, request: DaemonRequest) -> dict[str, Any]:
-        payload = await self._run_active_page_action(request, self._state.browser_service.capture_html)
+        payload = await self._run_active_page_action(
+            request, self._state.browser_service.capture_html
+        )
         return payload
 
     async def _handle_snapshot(self, request: DaemonRequest) -> dict[str, Any]:
@@ -338,7 +347,9 @@ class BrowserDaemonApp:
         return {"page": payload}
 
     async def _handle_forward(self, request: DaemonRequest) -> dict[str, Any]:
-        payload = await self._run_active_page_action(request, self._state.browser_service.go_forward)
+        payload = await self._run_active_page_action(
+            request, self._state.browser_service.go_forward
+        )
         return {"page": payload}
 
     async def _handle_resize(self, request: DaemonRequest) -> dict[str, Any]:
@@ -353,19 +364,27 @@ class BrowserDaemonApp:
 
     async def _handle_click(self, request: DaemonRequest) -> dict[str, Any]:
         ref = self._require_str(request.args, "ref")
-        return await self._run_active_page_action(request, lambda page_id: self._state.browser_service.click_ref(page_id, ref))
+        return await self._run_active_page_action(
+            request, lambda page_id: self._state.browser_service.click_ref(page_id, ref)
+        )
 
     async def _handle_double_click(self, request: DaemonRequest) -> dict[str, Any]:
         ref = self._require_str(request.args, "ref")
-        return await self._run_active_page_action(request, lambda page_id: self._state.browser_service.double_click_ref(page_id, ref))
+        return await self._run_active_page_action(
+            request, lambda page_id: self._state.browser_service.double_click_ref(page_id, ref)
+        )
 
     async def _handle_hover(self, request: DaemonRequest) -> dict[str, Any]:
         ref = self._require_str(request.args, "ref")
-        return await self._run_active_page_action(request, lambda page_id: self._state.browser_service.hover_ref(page_id, ref))
+        return await self._run_active_page_action(
+            request, lambda page_id: self._state.browser_service.hover_ref(page_id, ref)
+        )
 
     async def _handle_focus(self, request: DaemonRequest) -> dict[str, Any]:
         ref = self._require_str(request.args, "ref")
-        return await self._run_active_page_action(request, lambda page_id: self._state.browser_service.focus_ref(page_id, ref))
+        return await self._run_active_page_action(
+            request, lambda page_id: self._state.browser_service.focus_ref(page_id, ref)
+        )
 
     async def _handle_fill(self, request: DaemonRequest) -> dict[str, Any]:
         ref = self._require_str(request.args, "ref")
@@ -389,55 +408,81 @@ class BrowserDaemonApp:
     async def _handle_select(self, request: DaemonRequest) -> dict[str, Any]:
         ref = self._require_str(request.args, "ref")
         text = self._require_str(request.args, "text")
-        return await self._run_active_page_action(request, lambda page_id: self._state.browser_service.select_option(page_id, ref, text))
+        return await self._run_active_page_action(
+            request, lambda page_id: self._state.browser_service.select_option(page_id, ref, text)
+        )
 
     async def _handle_options(self, request: DaemonRequest) -> dict[str, Any]:
         ref = self._require_str(request.args, "ref")
-        return await self._run_active_page_action(request, lambda page_id: self._state.browser_service.list_options(page_id, ref))
+        return await self._run_active_page_action(
+            request, lambda page_id: self._state.browser_service.list_options(page_id, ref)
+        )
 
     async def _handle_check(self, request: DaemonRequest) -> dict[str, Any]:
         ref = self._require_str(request.args, "ref")
-        return await self._run_active_page_action(request, lambda page_id: self._state.browser_service.check_ref(page_id, ref))
+        return await self._run_active_page_action(
+            request, lambda page_id: self._state.browser_service.check_ref(page_id, ref)
+        )
 
     async def _handle_uncheck(self, request: DaemonRequest) -> dict[str, Any]:
         ref = self._require_str(request.args, "ref")
-        return await self._run_active_page_action(request, lambda page_id: self._state.browser_service.uncheck_ref(page_id, ref))
+        return await self._run_active_page_action(
+            request, lambda page_id: self._state.browser_service.uncheck_ref(page_id, ref)
+        )
 
     async def _handle_scroll_to(self, request: DaemonRequest) -> dict[str, Any]:
         ref = self._require_str(request.args, "ref")
-        return await self._run_active_page_action(request, lambda page_id: self._state.browser_service.scroll_to_ref(page_id, ref))
+        return await self._run_active_page_action(
+            request, lambda page_id: self._state.browser_service.scroll_to_ref(page_id, ref)
+        )
 
     async def _handle_drag(self, request: DaemonRequest) -> dict[str, Any]:
         start_ref = self._require_str(request.args, "start_ref")
         end_ref = self._require_str(request.args, "end_ref")
-        return await self._run_active_page_action(request, lambda page_id: self._state.browser_service.drag_ref(page_id, start_ref, end_ref))
+        return await self._run_active_page_action(
+            request,
+            lambda page_id: self._state.browser_service.drag_ref(page_id, start_ref, end_ref),
+        )
 
     async def _handle_upload(self, request: DaemonRequest) -> dict[str, Any]:
         ref = self._require_str(request.args, "ref")
         path = self._require_str(request.args, "path")
-        return await self._run_active_page_action(request, lambda page_id: self._state.browser_service.upload_file(page_id, ref, path))
+        return await self._run_active_page_action(
+            request, lambda page_id: self._state.browser_service.upload_file(page_id, ref, path)
+        )
 
     async def _handle_type(self, request: DaemonRequest) -> dict[str, Any]:
         text = self._require_str(request.args, "text")
         submit = bool(request.args.get("submit"))
-        return await self._run_active_page_action(request, lambda page_id: self._state.browser_service.type_text(page_id, text, submit=submit))
+        return await self._run_active_page_action(
+            request,
+            lambda page_id: self._state.browser_service.type_text(page_id, text, submit=submit),
+        )
 
     async def _handle_press(self, request: DaemonRequest) -> dict[str, Any]:
         key = self._require_str(request.args, "key")
-        return await self._run_active_page_action(request, lambda page_id: self._state.browser_service.press_key(page_id, key))
+        return await self._run_active_page_action(
+            request, lambda page_id: self._state.browser_service.press_key(page_id, key)
+        )
 
     async def _handle_key_down(self, request: DaemonRequest) -> dict[str, Any]:
         key = self._require_str(request.args, "key")
-        return await self._run_active_page_action(request, lambda page_id: self._state.browser_service.key_down(page_id, key))
+        return await self._run_active_page_action(
+            request, lambda page_id: self._state.browser_service.key_down(page_id, key)
+        )
 
     async def _handle_key_up(self, request: DaemonRequest) -> dict[str, Any]:
         key = self._require_str(request.args, "key")
-        return await self._run_active_page_action(request, lambda page_id: self._state.browser_service.key_up(page_id, key))
+        return await self._run_active_page_action(
+            request, lambda page_id: self._state.browser_service.key_up(page_id, key)
+        )
 
     async def _handle_scroll(self, request: DaemonRequest) -> dict[str, Any]:
         dx = int(request.args.get("dx") or 0)
         dy = int(request.args.get("dy") or 700)
-        return await self._run_active_page_action(request, lambda page_id: self._state.browser_service.wheel(page_id, dx=dx, dy=dy))
+        return await self._run_active_page_action(
+            request, lambda page_id: self._state.browser_service.wheel(page_id, dx=dx, dy=dy)
+        )
 
     async def _handle_mouse_click(self, request: DaemonRequest) -> dict[str, Any]:
         return await self._run_active_page_action(
@@ -493,12 +538,16 @@ class BrowserDaemonApp:
 
     async def _handle_eval(self, request: DaemonRequest) -> dict[str, Any]:
         code = self._require_str(request.args, "code")
-        return await self._run_active_page_action(request, lambda page_id: self._state.browser_service.evaluate(page_id, code))
+        return await self._run_active_page_action(
+            request, lambda page_id: self._state.browser_service.evaluate(page_id, code)
+        )
 
     async def _handle_eval_on(self, request: DaemonRequest) -> dict[str, Any]:
         ref = self._require_str(request.args, "ref")
         code = self._require_str(request.args, "code")
-        return await self._run_active_page_action(request, lambda page_id: self._state.browser_service.evaluate_on_ref(page_id, ref, code))
+        return await self._run_active_page_action(
+            request, lambda page_id: self._state.browser_service.evaluate_on_ref(page_id, ref, code)
+        )
 
     async def _handle_wait(self, request: DaemonRequest) -> dict[str, Any]:
         seconds = request.args.get("seconds")
@@ -520,7 +569,9 @@ class BrowserDaemonApp:
         timeout_seconds = float(request.args.get("timeout") or 30.0)
         return await self._run_active_page_action(
             request,
-            lambda page_id: self._state.browser_service.wait_for_network_idle(page_id, timeout_seconds=timeout_seconds),
+            lambda page_id: self._state.browser_service.wait_for_network_idle(
+                page_id, timeout_seconds=timeout_seconds
+            ),
         )
 
     async def _handle_screenshot(self, request: DaemonRequest) -> dict[str, Any]:
@@ -528,29 +579,41 @@ class BrowserDaemonApp:
         full_page = bool(request.args.get("full_page"))
         return await self._run_active_page_action(
             request,
-            lambda page_id: self._state.browser_service.screenshot(page_id, path=path, full_page=full_page),
+            lambda page_id: self._state.browser_service.screenshot(
+                page_id, path=path, full_page=full_page
+            ),
         )
 
     async def _handle_pdf(self, request: DaemonRequest) -> dict[str, Any]:
         path = self._require_str(request.args, "path")
-        return await self._run_active_page_action(request, lambda page_id: self._state.browser_service.save_pdf(page_id, path=path))
+        return await self._run_active_page_action(
+            request, lambda page_id: self._state.browser_service.save_pdf(page_id, path=path)
+        )
 
     async def _handle_console_start(self, request: DaemonRequest) -> dict[str, Any]:
-        return await self._run_active_page_action(request, self._state.browser_service.start_console_capture)
+        return await self._run_active_page_action(
+            request, self._state.browser_service.start_console_capture
+        )
 
     async def _handle_console(self, request: DaemonRequest) -> dict[str, Any]:
         message_type = str(request.args.get("message_type") or "").strip() or None
         clear = not bool(request.args.get("no_clear"))
         return await self._run_active_page_action(
             request,
-            lambda page_id: self._state.browser_service.get_console_messages(page_id, message_type=message_type, clear=clear),
+            lambda page_id: self._state.browser_service.get_console_messages(
+                page_id, message_type=message_type, clear=clear
+            ),
         )
 
     async def _handle_console_stop(self, request: DaemonRequest) -> dict[str, Any]:
-        return await self._run_active_page_action(request, self._state.browser_service.stop_console_capture)
+        return await self._run_active_page_action(
+            request, self._state.browser_service.stop_console_capture
+        )
 
     async def _handle_network_start(self, request: DaemonRequest) -> dict[str, Any]:
-        return await self._run_active_page_action(request, self._state.browser_service.start_network_capture)
+        return await self._run_active_page_action(
+            request, self._state.browser_service.start_network_capture
+        )
 
     async def _handle_network_wait(self, request: DaemonRequest) -> dict[str, Any]:
         filters = self._network_filters_from_request(request.args)
@@ -569,11 +632,15 @@ class BrowserDaemonApp:
         clear = not bool(request.args.get("no_clear"))
         return await self._run_active_page_action(
             request,
-            lambda page_id: self._state.browser_service.get_network_records(page_id, clear=clear, **filters),
+            lambda page_id: self._state.browser_service.get_network_records(
+                page_id, clear=clear, **filters
+            ),
         )
 
     async def _handle_network_stop(self, request: DaemonRequest) -> dict[str, Any]:
-        return await self._run_active_page_action(request, self._state.browser_service.stop_network_capture)
+        return await self._run_active_page_action(
+            request, self._state.browser_service.stop_network_capture
+        )
 
     async def _handle_dialog_setup(self, request: DaemonRequest) -> dict[str, Any]:
         action = str(request.args.get("action") or "accept")
@@ -600,7 +667,9 @@ class BrowserDaemonApp:
         )
 
     async def _handle_dialog_remove(self, request: DaemonRequest) -> dict[str, Any]:
-        return await self._run_active_page_action(request, self._state.browser_service.remove_dialog_handler)
+        return await self._run_active_page_action(
+            request, self._state.browser_service.remove_dialog_handler
+        )
 
     async def _handle_cookies(self, request: DaemonRequest) -> dict[str, Any]:
         return await self._run_active_page_action(
@@ -622,7 +691,9 @@ class BrowserDaemonApp:
                 value=self._require_str(request.args, "value"),
                 domain=self._optional_str(request.args, "domain"),
                 path=str(request.args.get("path") or "/"),
-                expires=float(request.args["expires"]) if request.args.get("expires") is not None else None,
+                expires=float(request.args["expires"])
+                if request.args.get("expires") is not None
+                else None,
                 http_only=bool(request.args.get("http_only")),
                 secure=bool(request.args.get("secure")),
                 same_site=self._optional_str(request.args, "same_site"),
@@ -651,7 +722,10 @@ class BrowserDaemonApp:
 
     async def _handle_storage_load(self, request: DaemonRequest) -> dict[str, Any]:
         path = self._require_str(request.args, "path")
-        return await self._run_active_page_action(request, lambda page_id: self._state.browser_service.load_storage_state(page_id, path=path))
+        return await self._run_active_page_action(
+            request,
+            lambda page_id: self._state.browser_service.load_storage_state(page_id, path=path),
+        )
 
     async def _handle_verify_text(self, request: DaemonRequest) -> dict[str, Any]:
         text = self._require_str(request.args, "text")
@@ -659,7 +733,9 @@ class BrowserDaemonApp:
         timeout = float(request.args.get("timeout") or 5.0)
         return await self._run_active_page_action(
             request,
-            lambda page_id: self._state.browser_service.verify_text(page_id, text=text, exact=exact, timeout_seconds=timeout),
+            lambda page_id: self._state.browser_service.verify_text(
+                page_id, text=text, exact=exact, timeout_seconds=timeout
+            ),
         )
 
     async def _handle_verify_visible(self, request: DaemonRequest) -> dict[str, Any]:
@@ -668,7 +744,9 @@ class BrowserDaemonApp:
         timeout = float(request.args.get("timeout") or 5.0)
         return await self._run_active_page_action(
             request,
-            lambda page_id: self._state.browser_service.verify_visible(page_id, role=role, name=name, timeout_seconds=timeout),
+            lambda page_id: self._state.browser_service.verify_visible(
+                page_id, role=role, name=name, timeout_seconds=timeout
+            ),
         )
 
     async def _handle_verify_url(self, request: DaemonRequest) -> dict[str, Any]:
@@ -676,7 +754,9 @@ class BrowserDaemonApp:
         exact = bool(request.args.get("exact"))
         return await self._run_active_page_action(
             request,
-            lambda page_id: self._state.browser_service.verify_url(page_id, expected=expected, exact=exact),
+            lambda page_id: self._state.browser_service.verify_url(
+                page_id, expected=expected, exact=exact
+            ),
         )
 
     async def _handle_verify_title(self, request: DaemonRequest) -> dict[str, Any]:
@@ -684,7 +764,9 @@ class BrowserDaemonApp:
         exact = bool(request.args.get("exact"))
         return await self._run_active_page_action(
             request,
-            lambda page_id: self._state.browser_service.verify_title(page_id, expected=expected, exact=exact),
+            lambda page_id: self._state.browser_service.verify_title(
+                page_id, expected=expected, exact=exact
+            ),
         )
 
     async def _handle_verify_state(self, request: DaemonRequest) -> dict[str, Any]:
@@ -700,7 +782,9 @@ class BrowserDaemonApp:
         expected = self._require_str(request.args, "expected")
         return await self._run_active_page_action(
             request,
-            lambda page_id: self._state.browser_service.verify_value(page_id, ref=ref, expected=expected),
+            lambda page_id: self._state.browser_service.verify_value(
+                page_id, ref=ref, expected=expected
+            ),
         )
 
     async def _handle_trace_start(self, request: DaemonRequest) -> dict[str, Any]:
@@ -806,7 +890,9 @@ class BrowserDaemonApp:
             ChromeEnvironment(
                 executable_path=Path(executable_path) if executable_path else None,
                 user_data_dir=Path(self._require_str(chrome_environment_payload, "user_data_dir")),
-                profile_directory=str(chrome_environment_payload.get("profile_directory") or "Default"),
+                profile_directory=str(
+                    chrome_environment_payload.get("profile_directory") or "Default"
+                ),
                 profile_name=self._optional_str(chrome_environment_payload, "profile_name"),
                 source=str(chrome_environment_payload.get("source") or "chrome"),
                 fallback_reason=self._optional_str(chrome_environment_payload, "fallback_reason"),

@@ -10,7 +10,7 @@ from browser_cli.workflow.runner import parse_input_overrides, run_workflow
 
 
 def run_workflow_command(args: Namespace) -> str:
-    subcommand = getattr(args, "workflow_subcommand")
+    subcommand = args.workflow_subcommand
     if subcommand == "validate":
         manifest = load_workflow_manifest(args.path)
         payload = {

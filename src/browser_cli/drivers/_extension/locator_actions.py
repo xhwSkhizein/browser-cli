@@ -49,7 +49,9 @@ class ExtensionDriverLocatorActionsMixin:
         await self._locator_command(page_id, "scroll-to", locator)
         return {"page_id": page_id, "ref": locator.ref, "scrolled": True}
 
-    async def drag(self, page_id: str, start_locator: LocatorSpec, end_locator: LocatorSpec) -> dict[str, Any]:
+    async def drag(
+        self, page_id: str, start_locator: LocatorSpec, end_locator: LocatorSpec
+    ) -> dict[str, Any]:
         payload = await self._page_command(
             page_id,
             "drag",
@@ -70,12 +72,18 @@ class ExtensionDriverLocatorActionsMixin:
         payload = await self._locator_command(page_id, "eval-on", locator, {"code": code})
         return {"page_id": page_id, "ref": locator.ref, "result": payload.get("result")}
 
-    async def verify_state(self, page_id: str, *, locator: LocatorSpec, state: str) -> dict[str, Any]:
+    async def verify_state(
+        self, page_id: str, *, locator: LocatorSpec, state: str
+    ) -> dict[str, Any]:
         payload = await self._locator_command(page_id, "verify-state", locator, {"state": state})
         return {"page_id": page_id, "ref": locator.ref, **payload}
 
-    async def verify_value(self, page_id: str, *, locator: LocatorSpec, expected: str) -> dict[str, Any]:
-        payload = await self._locator_command(page_id, "verify-value", locator, {"expected": expected})
+    async def verify_value(
+        self, page_id: str, *, locator: LocatorSpec, expected: str
+    ) -> dict[str, Any]:
+        payload = await self._locator_command(
+            page_id, "verify-value", locator, {"expected": expected}
+        )
         return {"page_id": page_id, "ref": locator.ref, **payload}
 
     async def _locator_command(

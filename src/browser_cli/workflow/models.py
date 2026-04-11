@@ -50,6 +50,8 @@ class WorkflowManifest:
     task: WorkflowTaskConfig
     inputs: dict[str, Any] = field(default_factory=dict)
     schedule: dict[str, Any] = field(default_factory=dict)
-    outputs: WorkflowOutputs = field(default_factory=lambda: WorkflowOutputs(artifact_dir=Path("artifacts")))
+    outputs: WorkflowOutputs = field(
+        default_factory=lambda: WorkflowOutputs(artifact_dir=Path("artifacts"))
+    )
     hooks: WorkflowHooks = field(default_factory=WorkflowHooks)
     runtime: WorkflowRuntime = field(default_factory=WorkflowRuntime)

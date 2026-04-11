@@ -8,7 +8,6 @@ from pathlib import Path
 from browser_cli.actions import get_action_specs
 from browser_cli.cli.main import build_parser
 from browser_cli.extension.protocol import REQUIRED_EXTENSION_CAPABILITIES
-
 from scripts.guards.common import Finding
 
 REQUIRED_ACTIONS = {"html", "stop"}
@@ -40,13 +39,23 @@ def run(_root: Path) -> list[Finding]:
     if "read" not in top_level_commands:
         findings.append(Finding("error", "CONTRACT002", "Top-level 'read' command is required."))
     if "workflow" not in top_level_commands:
-        findings.append(Finding("error", "CONTRACT003", "Top-level 'workflow' command is required."))
+        findings.append(
+            Finding("error", "CONTRACT003", "Top-level 'workflow' command is required.")
+        )
     if "status" not in top_level_commands:
         findings.append(Finding("error", "CONTRACT010", "Top-level 'status' command is required."))
     if "reload" not in top_level_commands:
-        findings.append(Finding("error", "CONTRACT011", "Top-level lifecycle 'reload' command is required."))
+        findings.append(
+            Finding("error", "CONTRACT011", "Top-level lifecycle 'reload' command is required.")
+        )
     if "page-reload" not in top_level_commands:
-        findings.append(Finding("error", "CONTRACT012", "Top-level 'page-reload' command is required to preserve page reload behavior."))
+        findings.append(
+            Finding(
+                "error",
+                "CONTRACT012",
+                "Top-level 'page-reload' command is required to preserve page reload behavior.",
+            )
+        )
 
     if "read" in top_level_commands:
         findings.extend(_check_read_contract(top_level_commands["read"]))
@@ -74,7 +83,11 @@ def _check_read_contract(parser: argparse.ArgumentParser) -> list[Finding]:
                 f"'read' optional flags changed unexpectedly. Expected {sorted(expected)}, found {sorted(option_strings)}.",
             )
         )
-    positional = [action.dest for action in parser._actions if not action.option_strings and action.dest != "help"]
+    positional = [
+        action.dest
+        for action in parser._actions
+        if not action.option_strings and action.dest != "help"
+    ]
     if positional != ["url"]:
         findings.append(
             Finding(

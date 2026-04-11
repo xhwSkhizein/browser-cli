@@ -5,11 +5,11 @@ from __future__ import annotations
 import asyncio
 import base64
 import contextlib
-from http import HTTPStatus
 import json
 import logging
 import uuid
 from dataclasses import dataclass, field
+from http import HTTPStatus
 from typing import Any
 
 import websockets
@@ -80,7 +80,9 @@ class ExtensionSession:
         state = getattr(self.websocket, "state", None)
         return state not in {State.CLOSING, State.CLOSED}
 
-    async def send_request(self, action: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def send_request(
+        self, action: str, payload: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         if not self.available:
             raise OperationFailedError("Browser CLI extension session is not connected.")
         request = ExtensionRequest(
@@ -121,7 +123,9 @@ class ExtensionSession:
     def fail_all(self, message: str) -> None:
         for future in list(self._pending.values()):
             if not future.done():
-                future.set_exception(OperationFailedError(message, error_code="EXTENSION_DISCONNECTED"))
+                future.set_exception(
+                    OperationFailedError(message, error_code="EXTENSION_DISCONNECTED")
+                )
         self._pending.clear()
         self._artifact_buffers.clear()
         self._completed_artifacts.clear()
@@ -148,8 +152,13 @@ class ExtensionSession:
         buffer = self._artifact_buffers.pop(key, None)
         if buffer is None:
             return
-        self._completed_artifacts.setdefault(artifact_end.request_id, []).append(buffer.to_payload())
-        if not any(request_id == artifact_end.request_id for request_id, _artifact_id in self._artifact_buffers):
+        self._completed_artifacts.setdefault(artifact_end.request_id, []).append(
+            buffer.to_payload()
+        )
+        if not any(
+            request_id == artifact_end.request_id
+            for request_id, _artifact_id in self._artifact_buffers
+        ):
             event = self._artifact_events.get(artifact_end.request_id)
             if event is not None:
                 event.set()
@@ -248,7 +257,9 @@ class ExtensionHub:
                 elif message_type == "artifact-begin":
                     session.begin_artifact(ExtensionArtifactBegin.from_message(dict(payload)))
                 elif message_type == "artifact-chunk":
-                    session.append_artifact_chunk(ExtensionArtifactChunk.from_message(dict(payload)))
+                    session.append_artifact_chunk(
+                        ExtensionArtifactChunk.from_message(dict(payload))
+                    )
                 elif message_type == "artifact-end":
                     session.complete_artifact(ExtensionArtifactEnd.from_message(dict(payload)))
                 elif message_type == "heartbeat":

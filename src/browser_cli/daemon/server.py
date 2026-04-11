@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
@@ -14,7 +15,13 @@ from browser_cli.constants import get_app_paths
 
 from .app import BrowserDaemonApp
 from .models import DaemonRequest, DaemonResponse
-from .transport import DAEMON_RUNTIME_VERSION, ensure_run_dir, remove_run_info, safe_remove_socket, write_run_info
+from .transport import (
+    DAEMON_RUNTIME_VERSION,
+    ensure_run_dir,
+    remove_run_info,
+    safe_remove_socket,
+    write_run_info,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -44,10 +51,8 @@ class BrowserDaemonServer:
                 self._handle_client,
                 path=str(app_paths.socket_path),
             )
-            try:
+            with contextlib.suppress(OSError):
                 os.chmod(app_paths.socket_path, 0o600)
-            except OSError:
-                pass
             write_run_info(
                 {
                     "transport": "unix",
@@ -70,17 +75,15 @@ class BrowserDaemonServer:
                 self._server = None
             await self._app.state.browser_service.stop()
             remove_run_info()
-            try:
+            with contextlib.suppress(FileNotFoundError):
                 safe_remove_socket(app_paths.socket_path)
-            except FileNotFoundError:
-                pass
             for sig in installed_signal_handlers:
-                try:
+                with contextlib.suppress(Exception):
                     loop.remove_signal_handler(sig)
-                except Exception:
-                    pass
 
-    async def _handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+    async def _handle_client(
+        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+    ) -> None:
         try:
             raw = await reader.readline()
             if not raw:
@@ -96,7 +99,5 @@ class BrowserDaemonServer:
         writer.write((json.dumps(response.to_dict()) + "\n").encode("utf-8"))
         await writer.drain()
         writer.close()
-        try:
+        with contextlib.suppress(Exception):
             await writer.wait_closed()
-        except Exception:
-            pass

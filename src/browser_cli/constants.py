@@ -36,13 +36,19 @@ class AppPaths:
 
 def get_app_paths() -> AppPaths:
     configured_home = os.environ.get(APP_HOME_ENV)
-    home = Path(configured_home).expanduser() if configured_home else Path.home() / DEFAULT_HOME_DIRNAME
+    home = (
+        Path(configured_home).expanduser()
+        if configured_home
+        else Path.home() / DEFAULT_HOME_DIRNAME
+    )
     run_dir = home / "run"
     socket_path = run_dir / "browser-cli.sock"
     if len(str(socket_path)) > 90:
         digest = hashlib.sha1(str(home).encode("utf-8")).hexdigest()[:12]
         socket_path = Path(tempfile.gettempdir()) / f"browser-cli-{digest}.sock"
-    extension_host = os.environ.get(EXTENSION_HOST_ENV, DEFAULT_EXTENSION_HOST).strip() or DEFAULT_EXTENSION_HOST
+    extension_host = (
+        os.environ.get(EXTENSION_HOST_ENV, DEFAULT_EXTENSION_HOST).strip() or DEFAULT_EXTENSION_HOST
+    )
     raw_extension_port = os.environ.get(EXTENSION_PORT_ENV, str(DEFAULT_EXTENSION_PORT)).strip()
     try:
         extension_port = int(raw_extension_port)

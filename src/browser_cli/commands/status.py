@@ -206,7 +206,9 @@ def _classify_overall_status(
     return "healthy"
 
 
-def _build_backend_section(live_payload: dict[str, Any] | None, *, live_error: str | None) -> dict[str, Any]:
+def _build_backend_section(
+    live_payload: dict[str, Any] | None, *, live_error: str | None
+) -> dict[str, Any]:
     if not live_payload:
         return {
             "browser_started": False,
@@ -219,7 +221,9 @@ def _build_backend_section(live_payload: dict[str, Any] | None, *, live_error: s
     extension = dict(live_payload.get("extension") or {})
     pending = live_payload.get("pending_rebind")
     if pending:
-        pending_text = f"{pending.get('target') or 'unknown'} ({pending.get('reason') or 'pending'})"
+        pending_text = (
+            f"{pending.get('target') or 'unknown'} ({pending.get('reason') or 'pending'})"
+        )
     else:
         pending_text = "none"
     return {
@@ -325,7 +329,9 @@ def _build_guidance(
             "If you expect real Chrome mode, check the extension popup or `chrome://extensions`, then run `browser-cli reload` if needed.",
         ]
     if not bool(extension.get("capability_complete")):
-        missing = ", ".join(sorted(str(item) for item in (extension.get("missing_capabilities") or [])))
+        missing = ", ".join(
+            sorted(str(item) for item in (extension.get("missing_capabilities") or []))
+        )
         return [
             "The extension is connected but its required capability set is incomplete.",
             f"Missing capabilities: {missing or 'unknown'}.",

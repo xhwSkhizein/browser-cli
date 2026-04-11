@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import os
 import signal
@@ -24,15 +25,15 @@ from browser_cli.errors import (
     DaemonNotAvailableError,
     EmptyContentError,
     InvalidInputError,
-    NoSnapshotContextError,
     NoActiveTabError,
+    NoSnapshotContextError,
     NoVisibleTabsError,
     OperationFailedError,
     ProfileUnavailableError,
     RefNotFoundError,
     StaleSnapshotError,
-    TemporaryReadError,
     TabNotFoundError,
+    TemporaryReadError,
 )
 
 from .transport import (
@@ -84,10 +85,8 @@ async def _send_command_async(action: str, args: dict[str, Any]) -> dict[str, An
     await writer.drain()
     raw = await reader.readline()
     writer.close()
-    try:
+    with contextlib.suppress(Exception):
         await writer.wait_closed()
-    except Exception:
-        pass
     if not raw:
         raise DaemonNotAvailableError("Browser daemon closed the connection without a response.")
     payload = json.loads(raw.decode("utf-8"))
@@ -186,10 +185,8 @@ def _cleanup_stale_runtime(*, fast_kill: bool = False) -> None:
             else:
                 _terminate_process_tree(pid)
     remove_run_info()
-    try:
+    with contextlib.suppress(FileNotFoundError):
         safe_remove_socket()
-    except FileNotFoundError:
-        pass
 
 
 def _run_info_is_compatible(run_info: dict[str, Any] | None) -> bool:

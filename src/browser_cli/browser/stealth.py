@@ -364,7 +364,10 @@ def _get_playwright_disabled_features() -> list[str]:
     except Exception:
         return []
     try:
-        switches_js = Path(playwright_pkg.__file__).parent / "driver/package/lib/server/chromium/chromiumSwitches.js"
+        switches_js = (
+            Path(playwright_pkg.__file__).parent
+            / "driver/package/lib/server/chromium/chromiumSwitches.js"
+        )
         text = switches_js.read_text(encoding="utf-8")
         match = re.search(r"const disabledFeatures\s*=.*?\[(.+?)\]\.filter", text, re.DOTALL)
         if not match:
@@ -376,7 +379,9 @@ def _get_playwright_disabled_features() -> list[str]:
 
 def _build_disable_features(headless: bool) -> str:
     playright_features = _get_playwright_disabled_features()
-    browser_cli_features = CHROME_DISABLED_COMPONENTS if headless else CHROME_DISABLED_COMPONENTS_HEADED
+    browser_cli_features = (
+        CHROME_DISABLED_COMPONENTS if headless else CHROME_DISABLED_COMPONENTS_HEADED
+    )
     combined = list(dict.fromkeys(playright_features + list(browser_cli_features)))
     return f"--disable-features={','.join(combined)}"
 

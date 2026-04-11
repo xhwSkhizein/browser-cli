@@ -54,7 +54,11 @@ def test_collect_status_report_when_stale_runtime(tmp_path: Path) -> None:
 
 
 def test_collect_status_report_when_managed_backend_is_degraded(tmp_path: Path) -> None:
-    run_info = {"pid": 123, "package_version": "0.1.0", "runtime_version": "2026-04-10-dual-driver-extension-v1"}
+    run_info = {
+        "pid": 123,
+        "package_version": "0.1.0",
+        "runtime_version": "2026-04-10-dual-driver-extension-v1",
+    }
     runtime_status = {
         "browser_started": True,
         "active_driver": "playwright",
@@ -68,13 +72,21 @@ def test_collect_status_report_when_managed_backend_is_degraded(tmp_path: Path) 
         },
         "pending_rebind": None,
         "workspace_window_state": {},
-        "tabs": {"count": 1, "busy_count": 0, "records": [{"page_id": "page_0001", "url": "https://example.com", "busy": False}], "active_by_agent": {"public": "page_0001"}},
+        "tabs": {
+            "count": 1,
+            "busy_count": 0,
+            "records": [{"page_id": "page_0001", "url": "https://example.com", "busy": False}],
+            "active_by_agent": {"public": "page_0001"},
+        },
     }
     with (
         patch("browser_cli.commands.status.get_app_paths", return_value=_fake_paths(tmp_path)),
         patch("browser_cli.commands.status.read_run_info", return_value=run_info),
         patch("browser_cli.commands.status.probe_socket", return_value=True),
-        patch("browser_cli.commands.status.send_command", return_value={"ok": True, "data": runtime_status}),
+        patch(
+            "browser_cli.commands.status.send_command",
+            return_value={"ok": True, "data": runtime_status},
+        ),
     ):
         report = collect_status_report()
         text = run_status_command(Namespace())
@@ -96,12 +108,17 @@ def test_reload_command_reports_forced_cleanup() -> None:
         guidance=[],
     )
     with (
-        patch("browser_cli.commands.reload.send_command", return_value={"ok": True, "data": {"already_stopped": False}}),
+        patch(
+            "browser_cli.commands.reload.send_command",
+            return_value={"ok": True, "data": {"already_stopped": False}},
+        ),
         patch("browser_cli.commands.reload.wait_for_daemon_stop", return_value=False),
         patch("browser_cli.commands.reload.cleanup_runtime", return_value=True),
         patch("browser_cli.commands.reload.ensure_daemon_running"),
         patch("browser_cli.commands.reload.collect_status_report", return_value=status_report),
-        patch("browser_cli.commands.reload.render_status_report", return_value="Status: degraded\n"),
+        patch(
+            "browser_cli.commands.reload.render_status_report", return_value="Status: degraded\n"
+        ),
     ):
         text = run_reload_command(Namespace())
 
@@ -121,11 +138,16 @@ def test_reload_command_checks_status_without_browser_warmup() -> None:
         guidance=[],
     )
     with (
-        patch("browser_cli.commands.reload.send_command", return_value={"ok": True, "data": {"already_stopped": True}}),
+        patch(
+            "browser_cli.commands.reload.send_command",
+            return_value={"ok": True, "data": {"already_stopped": True}},
+        ),
         patch("browser_cli.commands.reload.wait_for_daemon_stop", return_value=True),
         patch("browser_cli.commands.reload.cleanup_runtime", return_value=False),
         patch("browser_cli.commands.reload.ensure_daemon_running"),
-        patch("browser_cli.commands.reload.collect_status_report", return_value=status_report) as collect_status,
+        patch(
+            "browser_cli.commands.reload.collect_status_report", return_value=status_report
+        ) as collect_status,
         patch("browser_cli.commands.reload.render_status_report", return_value="Status: healthy\n"),
     ):
         run_reload_command(Namespace())
@@ -135,12 +157,18 @@ def test_reload_command_checks_status_without_browser_warmup() -> None:
 
 def test_reload_command_wraps_restart_failure() -> None:
     with (
-        patch("browser_cli.commands.reload.send_command", return_value={"ok": True, "data": {"already_stopped": True}}),
+        patch(
+            "browser_cli.commands.reload.send_command",
+            return_value={"ok": True, "data": {"already_stopped": True}},
+        ),
         patch("browser_cli.commands.reload.wait_for_daemon_stop", return_value=True),
         patch("browser_cli.commands.reload.cleanup_runtime", return_value=False),
-        patch("browser_cli.commands.reload.ensure_daemon_running", side_effect=DaemonNotAvailableError("boom")),
+        patch(
+            "browser_cli.commands.reload.ensure_daemon_running",
+            side_effect=DaemonNotAvailableError("boom"),
+        ),
+        pytest.raises(OperationFailedError) as exc_info,
     ):
-        with pytest.raises(OperationFailedError) as exc_info:
-            run_reload_command(Namespace())
+        run_reload_command(Namespace())
 
     assert "restart failed" in str(exc_info.value)

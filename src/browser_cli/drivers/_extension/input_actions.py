@@ -2,7 +2,9 @@ from __future__ import annotations
 
 
 class ExtensionDriverInputActionsMixin:
-    async def type_text(self, page_id: str, text: str, *, submit: bool = False) -> dict[str, object]:
+    async def type_text(
+        self, page_id: str, text: str, *, submit: bool = False
+    ) -> dict[str, object]:
         payload = await self._page_command(page_id, "type", {"text": text, "submit": submit})
         return {"page_id": page_id, **payload}
 
@@ -42,7 +44,9 @@ class ExtensionDriverInputActionsMixin:
         )
         return {"page_id": page_id, **payload}
 
-    async def mouse_drag(self, page_id: str, *, x1: int, y1: int, x2: int, y2: int) -> dict[str, object]:
+    async def mouse_drag(
+        self, page_id: str, *, x1: int, y1: int, x2: int, y2: int
+    ) -> dict[str, object]:
         payload = await self._page_command(
             page_id,
             "mouse-drag",
