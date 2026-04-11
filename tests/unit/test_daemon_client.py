@@ -68,7 +68,7 @@ def test_ensure_daemon_running_reaps_incompatible_live_daemon(monkeypatch, tmp_p
     monkeypatch.setenv("BROWSER_CLI_HOME", str(tmp_path / ".browser-cli-runtime"))
     terminated: list[int] = []
     run_info = {"pid": 777, "package_version": "0.0.0", "runtime_version": "old"}
-    probe_results = iter([True, False, False])
+    probe_results = iter([True, False, False, False])
 
     with (
         patch("browser_cli.daemon.client.probe_socket", side_effect=lambda: next(probe_results)),
@@ -85,3 +85,24 @@ def test_ensure_daemon_running_reaps_incompatible_live_daemon(monkeypatch, tmp_p
     assert remove_run_info_mock.called
     assert safe_remove_socket_mock.called
     assert spawn_mock.called
+
+
+def test_cleanup_runtime_fast_kills_stopped_daemon_without_waiting_for_grace(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("BROWSER_CLI_HOME", str(tmp_path / ".browser-cli-runtime"))
+
+    with (
+        patch("browser_cli.daemon.client.read_run_info", return_value={"pid": 888}),
+        patch("browser_cli.daemon.client._pid_exists", return_value=True),
+        patch("browser_cli.daemon.client.probe_socket", return_value=False),
+        patch("browser_cli.daemon.client._signal_process_tree") as signal_mock,
+        patch("browser_cli.daemon.client._wait_for_pid_exit", return_value=True) as wait_mock,
+        patch("browser_cli.daemon.client._terminate_process_tree") as terminate_mock,
+        patch("browser_cli.daemon.client.remove_run_info"),
+        patch("browser_cli.daemon.client.safe_remove_socket"),
+    ):
+        had_runtime = client.cleanup_runtime(fast_kill=True)
+
+    assert had_runtime is True
+    signal_mock.assert_called_once_with(888, client.signal.SIGKILL)
+    wait_mock.assert_called_once_with(888, timeout_seconds=1.0)
+    terminate_mock.assert_not_called()

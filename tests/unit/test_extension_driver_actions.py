@@ -50,6 +50,50 @@ class _FakeSession:
             return {"cleared": 2}
         if action == "wait-network":
             return {"network_idle": True}
+        if action == "network-wait":
+            return {
+                "record": {
+                    "request_id": "page_0001-req-0001",
+                    "url": "https://example.com/api/ping",
+                    "method": "GET",
+                    "resource_type": "fetch",
+                    "status": 200,
+                    "ok": True,
+                    "request_headers": {"accept": "application/json"},
+                    "request_post_data": None,
+                    "response_headers": {"content-type": "application/json"},
+                    "mime_type": "application/json",
+                    "started_at": 1.0,
+                    "ended_at": 1.1,
+                    "duration_ms": 100.0,
+                    "failed": False,
+                    "failure_reason": None,
+                    "body": {"kind": "text", "text": '{"ok":true}', "bytes": 11, "truncated": False},
+                }
+            }
+        if action == "network":
+            return {
+                "records": [
+                    {
+                        "request_id": "page_0001-req-0002",
+                        "url": "https://example.com/api/ping",
+                        "method": "GET",
+                        "resource_type": "fetch",
+                        "status": 200,
+                        "ok": True,
+                        "request_headers": {"accept": "application/json"},
+                        "request_post_data": None,
+                        "response_headers": {"content-type": "application/json"},
+                        "mime_type": "application/json",
+                        "started_at": 2.0,
+                        "ended_at": 2.1,
+                        "duration_ms": 100.0,
+                        "failed": False,
+                        "failure_reason": None,
+                        "body": {"kind": "text", "text": '{"ok":true}', "bytes": 11, "truncated": False},
+                    }
+                ]
+            }
         if action == "verify-visible":
             return {"passed": True}
         if action == "trace-stop":
@@ -155,6 +199,13 @@ def test_extension_driver_routes_representative_actions(tmp_path: Path) -> None:
         await driver.evaluate("page_0001", "(() => document.title)()")
         await driver.evaluate_on("page_0001", locator, "(el) => el.textContent")
         await driver.wait_for_network_idle("page_0001", timeout_seconds=12)
+        waited_record = await driver.wait_for_network_record(
+            "page_0001",
+            url_contains="/api/ping",
+            mime_contains="json",
+            timeout_seconds=8,
+        )
+        records = await driver.get_network_records("page_0001", url_contains="/api/ping", include_static=True, clear=False)
         await driver.set_cookie("page_0001", name="sid", value="123", domain="example.com")
         await driver.clear_cookies("page_0001", domain="example.com")
         await driver.verify_visible("page_0001", role="button", name="Submit", timeout_seconds=4)
@@ -188,6 +239,8 @@ def test_extension_driver_routes_representative_actions(tmp_path: Path) -> None:
         assert Path(screenshot["path"]).read_bytes() == b"png-bytes"
         assert Path(pdf["path"]).read_bytes() == b"%PDF-1.4"
         assert Path(trace["path"]).exists()
+        assert waited_record["record"]["body"]["text"] == '{"ok":true}'
+        assert records["records"][0]["mime_type"] == "application/json"
         assert planned_video["deferred"] is True
         assert Path(close_payload["video_path"]).read_bytes() == b"video-bytes"
         assert page2["page_id"] == "page_0002"
@@ -201,6 +254,8 @@ def test_extension_driver_routes_representative_actions(tmp_path: Path) -> None:
         "eval",
         "eval-on",
         "wait-network",
+        "network-wait",
+        "network",
         "cookie-set",
         "cookies-clear",
         "verify-visible",

@@ -468,19 +468,28 @@ def test_capture_network_dialog_storage_trace_and_video_commands(monkeypatch, tm
         storage_ref = _find_ref(refs_summary, role="button", name="Storage Button")
 
         _run_cli_json(["console-start"], capsys)
+        _run_cli_json(["click", fetch_ref], capsys)
+        waited_record = _run_cli_json(["network-wait", "--url-contains", "/api/ping?from=button", "--timeout", "5"], capsys)
+        assert waited_record["data"]["record"]["status"] == 200
+        assert waited_record["data"]["record"]["body"]["kind"] == "text"
+        assert waited_record["data"]["record"]["body"]["text"] == '{"ok":true}'
+
         _run_cli_json(["network-start"], capsys)
         _run_cli_json(["click", fetch_ref], capsys)
         _run_cli_json(["wait-network"], capsys)
         _run_cli_json(["click", load_static_ref], capsys)
+        _run_cli_json(["wait-network"], capsys)
         _run_cli_json(["click", console_ref], capsys)
 
         network_payload = _run_cli_json(["network", "--no-clear"], capsys)
-        urls = [request["url"] for request in network_payload["data"]["requests"]]
+        urls = [record["url"] for record in network_payload["data"]["records"]]
         assert any("/api/ping?from=button" in url for url in urls)
         assert not any("/asset.js" in url for url in urls)
+        api_records = [record for record in network_payload["data"]["records"] if "/api/ping?from=button" in record["url"]]
+        assert any(record["response_headers"]["content-type"].startswith("application/json") for record in api_records)
 
         network_static_payload = _run_cli_json(["network", "--include-static"], capsys)
-        static_urls = [request["url"] for request in network_static_payload["data"]["requests"]]
+        static_urls = [record["url"] for record in network_static_payload["data"]["records"]]
         assert any("/asset.js" in url for url in static_urls)
         assert any("/styles.css" in url for url in static_urls)
 

@@ -43,6 +43,7 @@ BRIDGIC_COMMANDS = {
     "wait",
     "screenshot",
     "pdf",
+    "network-wait",
     "network-start",
     "network",
     "network-stop",
