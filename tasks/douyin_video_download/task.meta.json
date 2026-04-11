@@ -1,0 +1,111 @@
+{
+  "task": {
+    "id": "douyin_video_download",
+    "name": "Douyin Video Download",
+    "goal": "Open a Douyin share link in a real browser, reuse the browser-generated signed detail request plus cookies, extract a playable MP4 URL from the detail JSON, and download the video artifact.",
+    "inputs": {
+      "url": {
+        "required": true,
+        "type": "string",
+        "default": "https://v.douyin.com/6Zy2Ip3kk-g"
+      },
+      "wait_rounds": {
+        "required": false,
+        "type": "integer",
+        "default": 8
+      },
+      "wait_seconds": {
+        "required": false,
+        "type": "number",
+        "default": 1.0
+      },
+      "timeout_seconds": {
+        "required": false,
+        "type": "number",
+        "default": 30.0
+      }
+    },
+    "expected_outputs": {
+      "video_path": "Downloaded MP4 file stored in the task artifacts directory",
+      "detail_path": "JSON copy of the aweme detail payload used to derive the video URL",
+      "summary_path": "JSON summary with resolved URL, cookie count, selected video source, and download bytes"
+    }
+  },
+  "environment": {
+    "site": "www.douyin.com",
+    "entry_url": "Short share URL or canonical /video/<aweme_id> URL provided at runtime",
+    "requires_login": false,
+    "agent_scope": "default or caller-provided X_AGENT_ID",
+    "profile_expectation": "Task must run inside browser-cli so the page can mint signed detail URLs and Douyin cookies before Python requests replays the detail request.",
+    "browser_assumptions": [
+      "The short share link redirects to a canonical /video/<aweme_id> page.",
+      "The canonical page emits an aweme detail request that appears in performance resource entries.",
+      "The browser profile accumulates enough Douyin cookies for the signed detail URL to return JSON instead of an empty 200 response."
+    ]
+  },
+  "success_path": {
+    "steps": [
+      "Open the Douyin URL with browser-cli and poll page state until a signed aweme detail request URL appears in performance resource entries.",
+      "Read all browser cookies through browser-cli and replay the signed detail request with requests.",
+      "Parse aweme_detail.video.play_addr first, then JSON-based fallbacks, choose the first playable MP4 URL, and download it with a Douyin Referer."
+    ],
+    "key_refs": [],
+    "key_assertions": [
+      "The task should not depend on manual selector clicks or direct Playwright.",
+      "detail.json must decode as JSON and contain aweme_detail.video.",
+      "The selected media URL must download to a non-empty local MP4 artifact."
+    ],
+    "artifacts": [
+      "page-state.json",
+      "detail.json",
+      "download-summary.json",
+      "<aweme_id>.mp4"
+    ]
+  },
+  "recovery_hints": {
+    "retryable_steps": [
+      "Increase wait_rounds or wait_seconds if the page is slow to expose the aweme detail resource entry.",
+      "Rerun the task if the signed media URL expires before the download starts."
+    ],
+    "alternate_paths": [
+      "If play_addr is absent, the task falls back to play_addr_h264, play_addr_265, and bit_rate[*].play_addr from the same detail JSON."
+    ],
+    "stale_ref_strategy": "No semantic refs are required; the critical wait is page state becoming ready enough to expose the signed detail resource entry.",
+    "known_wait_points": [
+      "Redirect from the short share URL to the canonical /video/<aweme_id> page.",
+      "Hydration completing far enough that performance resource entries include the aweme detail request."
+    ],
+    "anti_bot_recovery": [
+      "Do not reuse only document.cookie. The signed detail request returned HTTP 200 with an empty body until the full browser-cli cookie jar was replayed.",
+      "Keep Referer and User-Agent aligned with the real Douyin page when replaying the detail request and downloading the MP4."
+    ]
+  },
+  "failures": [
+    {
+      "code": "EMPTY_DETAIL_BODY_WITH_PARTIAL_COOKIES",
+      "symptom": "The aweme detail request returns HTTP 200 with Content-Length: 0 and x-whale-throughput-abort-data when replayed without the full browser cookie jar.",
+      "lesson": "browser-cli cookies is required for this site; document.cookie alone is insufficient."
+    },
+    {
+      "code": "NETWORK_CAPTURE_NO_RESPONSE_BODY",
+      "symptom": "browser-cli network capture exposes request metadata only, not response bodies.",
+      "lesson": "For Douyin detail extraction, performance resource entries plus requests replay currently work more reliably than trying to read the detail JSON directly from browser-cli network capture."
+    }
+  ],
+  "knowledge": {
+    "stable_selectors_or_roles": [],
+    "semantic_ref_notes": [
+      "This task is primarily browser-state driven rather than ref-driven."
+    ],
+    "pagination_pattern": null,
+    "lazy_load_pattern": "Hydration/resource discovery rather than infinite scroll",
+    "anti_bot_notes": [
+      "Douyin signs detail requests in-browser and couples successful replay to the active browser cookie jar.",
+      "The current browser-cli network capture layer records fetch/XHR request metadata but not response bodies."
+    ],
+    "output_interpretation_notes": [
+      "detail.json preserves the exact JSON used for media URL derivation.",
+      "download-summary.json shows which JSON field produced the chosen video URL."
+    ]
+  }
+}
