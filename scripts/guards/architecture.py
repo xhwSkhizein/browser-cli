@@ -26,7 +26,7 @@ SHARED_IMPORTS = {
 ALLOWED_DEPENDENCIES: dict[str, set[str]] = {
     "actions": set(),
     "agent_scope": {"constants"},
-    "browser": {"browser", "constants", "errors", "profiles", "refs"},
+    "browser": {"browser", "constants", "errors", "network", "profiles", "refs"},
     "cli": {"actions", "commands", "errors", "exit_codes"},
     "commands": {"daemon", "errors", "outputs", "runtime", "workflow"},
     "daemon": {
