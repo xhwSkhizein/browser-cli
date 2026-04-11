@@ -71,9 +71,10 @@ def get_action_specs() -> list[ActionSpec]:
         ActionSpec("console-start", "Start console capture.", "Start capturing browser console messages.", _no_arguments, _default_request),
         ActionSpec("console", "Read console messages.", "Read captured console messages.", _add_console_arguments, _default_request),
         ActionSpec("console-stop", "Stop console capture.", "Stop capturing browser console messages.", _no_arguments, _default_request),
-        ActionSpec("network-start", "Start network capture.", "Start capturing network requests.", _no_arguments, _default_request),
-        ActionSpec("network", "Read network requests.", "Read captured network requests.", _add_network_arguments, _default_request),
-        ActionSpec("network-stop", "Stop network capture.", "Stop capturing network requests.", _no_arguments, _default_request),
+        ActionSpec("network-wait", "Wait for a matching network response.", "Wait for the first matching completed network record.", _add_network_wait_arguments, _default_request),
+        ActionSpec("network-start", "Start network capture.", "Start capturing completed network records.", _no_arguments, _default_request),
+        ActionSpec("network", "Read network records.", "Read captured completed network records.", _add_network_arguments, _default_request),
+        ActionSpec("network-stop", "Stop network capture.", "Stop capturing completed network records.", _no_arguments, _default_request),
         ActionSpec("dialog-setup", "Configure automatic dialog handling.", "Automatically accept or dismiss future dialogs for the active tab.", _add_dialog_setup_arguments, _default_request),
         ActionSpec("dialog", "Configure one-time dialog handling.", "Handle the next dialog shown by the active tab.", _add_dialog_arguments, _default_request),
         ActionSpec("dialog-remove", "Remove automatic dialog handling.", "Remove the persistent dialog handler for the active tab.", _no_arguments, _default_request),
@@ -284,9 +285,24 @@ def _add_console_arguments(parser: ArgumentParser) -> None:
     parser.add_argument("--no-clear", action="store_true", help="Keep buffered messages after reading.")
 
 
-def _add_network_arguments(parser: ArgumentParser) -> None:
+def _add_network_filter_arguments(parser: ArgumentParser) -> None:
+    parser.add_argument("--url-contains", help="Only match records whose URL contains this substring.")
+    parser.add_argument("--url-regex", help="Only match records whose URL matches this regex.")
+    parser.add_argument("--method", help="Only match a specific HTTP method like GET or POST.")
+    parser.add_argument("--status", type=int, help="Only match a specific response status code.")
+    parser.add_argument("--resource-type", help="Only match a specific browser resource type.")
+    parser.add_argument("--mime-contains", help="Only match records whose MIME type contains this substring.")
     parser.add_argument("--include-static", action="store_true", help="Include images, scripts, and stylesheets.")
-    parser.add_argument("--no-clear", action="store_true", help="Keep buffered requests after reading.")
+
+
+def _add_network_wait_arguments(parser: ArgumentParser) -> None:
+    _add_network_filter_arguments(parser)
+    parser.add_argument("--timeout", dest="timeout_seconds", type=float, default=30.0, help="Maximum wait time in seconds.")
+
+
+def _add_network_arguments(parser: ArgumentParser) -> None:
+    _add_network_filter_arguments(parser)
+    parser.add_argument("--no-clear", action="store_true", help="Keep buffered records after reading.")
 
 
 def _add_cookie_filter_arguments(parser: ArgumentParser) -> None:

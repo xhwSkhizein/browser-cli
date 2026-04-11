@@ -28,7 +28,7 @@ def run_reload_command(_args: Namespace) -> str:
     if not wait_for_daemon_stop():
         forced_cleanup = True
 
-    if cleanup_runtime():
+    if cleanup_runtime(fast_kill=True):
         forced_cleanup = True
 
     try:
