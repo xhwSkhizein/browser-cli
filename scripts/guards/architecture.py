@@ -90,7 +90,9 @@ def run(root: Path) -> list[Finding]:
             continue
         if owner != "browser":
             for import_name in sorted(resolve_internal_imports(path)):
-                if import_name == "browser_cli.browser.session" or import_name.startswith("browser_cli.browser.session."):
+                if import_name == "browser_cli.browser.session" or import_name.startswith(
+                    "browser_cli.browser.session."
+                ):
                     findings.append(
                         Finding(
                             "error",
@@ -107,7 +109,7 @@ def _check_driver_contracts(path: Path, root: Path) -> list[Finding]:
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     findings: list[Finding] = []
     for node in ast.walk(tree):
-        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
             continue
         if node.name == "capture_snapshot":
             findings.append(

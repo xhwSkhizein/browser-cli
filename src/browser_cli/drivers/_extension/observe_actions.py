@@ -26,8 +26,12 @@ class ExtensionDriverObserveActionsMixin:
         )
         return {"page_id": page_id, **payload}
 
-    async def wait_for_network_idle(self, page_id: str, *, timeout_seconds: float = 30.0) -> dict[str, object]:
-        payload = await self._page_command(page_id, "wait-network", {"timeout_seconds": timeout_seconds})
+    async def wait_for_network_idle(
+        self, page_id: str, *, timeout_seconds: float = 30.0
+    ) -> dict[str, object]:
+        payload = await self._page_command(
+            page_id, "wait-network", {"timeout_seconds": timeout_seconds}
+        )
         return {"page_id": page_id, **payload}
 
     async def start_console_capture(self, page_id: str) -> dict[str, object]:
@@ -120,7 +124,9 @@ class ExtensionDriverObserveActionsMixin:
         payload = await self._page_command(page_id, "network-stop", {})
         return {"page_id": page_id, **payload}
 
-    async def _materialize_network_body_artifacts(self, payload: dict[str, object], *, page_id: str) -> None:
+    async def _materialize_network_body_artifacts(
+        self, payload: dict[str, object], *, page_id: str
+    ) -> None:
         artifacts = list(payload.get("_artifacts") or [])
         artifact_paths: dict[str, str] = {}
         for artifact in artifacts:
@@ -146,7 +152,9 @@ class ExtensionDriverObserveActionsMixin:
                     self._rewrite_network_body_path(record, artifact_paths)
 
     @staticmethod
-    def _rewrite_network_body_path(record: dict[str, object], artifact_paths: dict[str, str]) -> None:
+    def _rewrite_network_body_path(
+        record: dict[str, object], artifact_paths: dict[str, str]
+    ) -> None:
         body = record.get("body")
         if not isinstance(body, dict):
             return
@@ -217,7 +225,9 @@ class ExtensionDriverObserveActionsMixin:
         )
         return {"page_id": page_id, **payload}
 
-    async def save_storage_state(self, page_id: str, *, path: str | None = None) -> dict[str, object]:
+    async def save_storage_state(
+        self, page_id: str, *, path: str | None = None
+    ) -> dict[str, object]:
         payload = await self._page_command(page_id, "storage-get", {})
         output_path = self._resolve_output_path(path, page_id=page_id, suffix=".json")
         output_path.write_text(json.dumps(payload, ensure_ascii=True, indent=2), encoding="utf-8")
@@ -243,12 +253,20 @@ class ExtensionDriverObserveActionsMixin:
         )
         return {"page_id": page_id, **payload}
 
-    async def verify_url(self, page_id: str, *, expected: str, exact: bool = False) -> dict[str, object]:
-        payload = await self._page_command(page_id, "verify-url", {"expected": expected, "exact": exact})
+    async def verify_url(
+        self, page_id: str, *, expected: str, exact: bool = False
+    ) -> dict[str, object]:
+        payload = await self._page_command(
+            page_id, "verify-url", {"expected": expected, "exact": exact}
+        )
         return {"page_id": page_id, **payload}
 
-    async def verify_title(self, page_id: str, *, expected: str, exact: bool = False) -> dict[str, object]:
-        payload = await self._page_command(page_id, "verify-title", {"expected": expected, "exact": exact})
+    async def verify_title(
+        self, page_id: str, *, expected: str, exact: bool = False
+    ) -> dict[str, object]:
+        payload = await self._page_command(
+            page_id, "verify-title", {"expected": expected, "exact": exact}
+        )
         return {"page_id": page_id, **payload}
 
     async def verify_visible(

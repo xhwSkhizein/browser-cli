@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from browser_cli.browser.service import BrowserService as PlaywrightBrowserService
 from browser_cli.profiles.discovery import ChromeEnvironment
 from browser_cli.refs.models import LocatorSpec, SnapshotInput
@@ -19,7 +21,9 @@ class PlaywrightDriver(BrowserDriver):
         *,
         headless: bool | None = None,
     ) -> None:
-        self._service = PlaywrightBrowserService(chrome_environment=chrome_environment, headless=headless)
+        self._service = PlaywrightBrowserService(
+            chrome_environment=chrome_environment, headless=headless
+        )
 
     @property
     def chrome_environment(self) -> ChromeEnvironment | None:
@@ -44,11 +48,13 @@ class PlaywrightDriver(BrowserDriver):
             name=self.name,
             available=True,
             details={
-                "chrome_environment": (
-                    environment.source if environment is not None else None
-                ),
-                "user_data_dir": str(environment.user_data_dir) if environment is not None else None,
-                "profile_directory": environment.profile_directory if environment is not None else None,
+                "chrome_environment": (environment.source if environment is not None else None),
+                "user_data_dir": str(environment.user_data_dir)
+                if environment is not None
+                else None,
+                "profile_directory": environment.profile_directory
+                if environment is not None
+                else None,
             },
         )
 
@@ -133,7 +139,9 @@ class PlaywrightDriver(BrowserDriver):
         wait_until: str = "load",
         timeout_seconds: float = 30.0,
     ) -> dict[str, Any]:
-        return await self._service.reload(page_id, wait_until=wait_until, timeout_seconds=timeout_seconds)
+        return await self._service.reload(
+            page_id, wait_until=wait_until, timeout_seconds=timeout_seconds
+        )
 
     async def go_back(self, page_id: str) -> dict[str, Any]:
         return await self._service.go_back(page_id)
@@ -178,7 +186,9 @@ class PlaywrightDriver(BrowserDriver):
     async def scroll_to(self, page_id: str, locator: LocatorSpec) -> dict[str, Any]:
         return await self._service.scroll_to_locator(page_id, locator)
 
-    async def drag(self, page_id: str, start_locator: LocatorSpec, end_locator: LocatorSpec) -> dict[str, Any]:
+    async def drag(
+        self, page_id: str, start_locator: LocatorSpec, end_locator: LocatorSpec
+    ) -> dict[str, Any]:
         return await self._service.drag_between_locators(page_id, start_locator, end_locator)
 
     async def upload(self, page_id: str, locator: LocatorSpec, file_path: str) -> dict[str, Any]:
@@ -198,7 +208,7 @@ class PlaywrightDriver(BrowserDriver):
         text: str | None = None,
         gone: bool = False,
         exact: bool = False,
-        ) -> dict[str, Any]:
+    ) -> dict[str, Any]:
         return await self._service.wait(
             page_id,
             seconds=seconds,
@@ -207,7 +217,9 @@ class PlaywrightDriver(BrowserDriver):
             exact=exact,
         )
 
-    async def wait_for_network_idle(self, page_id: str, *, timeout_seconds: float = 30.0) -> dict[str, Any]:
+    async def wait_for_network_idle(
+        self, page_id: str, *, timeout_seconds: float = 30.0
+    ) -> dict[str, Any]:
         return await self._service.wait_for_network_idle(page_id, timeout_seconds=timeout_seconds)
 
     async def start_console_capture(self, page_id: str) -> dict[str, Any]:
@@ -220,7 +232,9 @@ class PlaywrightDriver(BrowserDriver):
         message_type: str | None = None,
         clear: bool = True,
     ) -> dict[str, Any]:
-        return await self._service.get_console_messages(page_id, message_type=message_type, clear=clear)
+        return await self._service.get_console_messages(
+            page_id, message_type=message_type, clear=clear
+        )
 
     async def stop_console_capture(self, page_id: str) -> dict[str, Any]:
         return await self._service.stop_console_capture(page_id)
@@ -347,10 +361,14 @@ class PlaywrightDriver(BrowserDriver):
             timeout_seconds=timeout_seconds,
         )
 
-    async def verify_url(self, page_id: str, *, expected: str, exact: bool = False) -> dict[str, Any]:
+    async def verify_url(
+        self, page_id: str, *, expected: str, exact: bool = False
+    ) -> dict[str, Any]:
         return await self._service.verify_url(page_id, expected=expected, exact=exact)
 
-    async def verify_title(self, page_id: str, *, expected: str, exact: bool = False) -> dict[str, Any]:
+    async def verify_title(
+        self, page_id: str, *, expected: str, exact: bool = False
+    ) -> dict[str, Any]:
         return await self._service.verify_title(page_id, expected=expected, exact=exact)
 
     async def verify_visible(
@@ -368,10 +386,14 @@ class PlaywrightDriver(BrowserDriver):
             timeout_seconds=timeout_seconds,
         )
 
-    async def verify_state(self, page_id: str, *, locator: LocatorSpec, state: str) -> dict[str, Any]:
+    async def verify_state(
+        self, page_id: str, *, locator: LocatorSpec, state: str
+    ) -> dict[str, Any]:
         return await self._service.verify_state_locator(page_id, locator, state=state)
 
-    async def verify_value(self, page_id: str, *, locator: LocatorSpec, expected: str) -> dict[str, Any]:
+    async def verify_value(
+        self, page_id: str, *, locator: LocatorSpec, expected: str
+    ) -> dict[str, Any]:
         return await self._service.verify_value_locator(page_id, locator, expected=expected)
 
     async def type_text(self, page_id: str, text: str, *, submit: bool = False) -> dict[str, Any]:
@@ -403,7 +425,9 @@ class PlaywrightDriver(BrowserDriver):
     ) -> dict[str, Any]:
         return await self._service.mouse_click(page_id, x=x, y=y, button=button, count=count)
 
-    async def mouse_drag(self, page_id: str, *, x1: int, y1: int, x2: int, y2: int) -> dict[str, Any]:
+    async def mouse_drag(
+        self, page_id: str, *, x1: int, y1: int, x2: int, y2: int
+    ) -> dict[str, Any]:
         return await self._service.mouse_drag(page_id, x1=x1, y1=y1, x2=x2, y2=y2)
 
     async def mouse_down(self, page_id: str, *, button: str = "left") -> dict[str, Any]:
@@ -412,7 +436,9 @@ class PlaywrightDriver(BrowserDriver):
     async def mouse_up(self, page_id: str, *, button: str = "left") -> dict[str, Any]:
         return await self._service.mouse_up(page_id, button=button)
 
-    async def screenshot(self, page_id: str, *, path: str, full_page: bool = False) -> dict[str, Any]:
+    async def screenshot(
+        self, page_id: str, *, path: str, full_page: bool = False
+    ) -> dict[str, Any]:
         return await self._service.screenshot(page_id, path=path, full_page=full_page)
 
     async def save_pdf(self, page_id: str, *, path: str) -> dict[str, Any]:
@@ -464,7 +490,9 @@ class PlaywrightDriver(BrowserDriver):
     async def stop_tracing(self, page_id: str, *, path: str | None = None) -> dict[str, Any]:
         return await self._service.stop_tracing(page_id, path=path)
 
-    async def start_video(self, page_id: str, *, width: int | None = None, height: int | None = None) -> dict[str, Any]:
+    async def start_video(
+        self, page_id: str, *, width: int | None = None, height: int | None = None
+    ) -> dict[str, Any]:
         return await self._service.start_video(page_id, width=width, height=height)
 
     async def stop_video(self, page_id: str, *, path: str | None = None) -> dict[str, Any]:

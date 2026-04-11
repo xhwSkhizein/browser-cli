@@ -31,7 +31,9 @@ class _FakeApp:
         self.state = _FakeState()
 
 
-def test_daemon_server_starts_extension_listener_before_waiting(monkeypatch, tmp_path: Path) -> None:
+def test_daemon_server_starts_extension_listener_before_waiting(
+    monkeypatch, tmp_path: Path
+) -> None:
     async def _scenario() -> None:
         monkeypatch.setenv(APP_HOME_ENV, str(tmp_path / ".browser-cli-runtime"))
         app = _FakeApp()

@@ -6,8 +6,8 @@ import argparse
 import sys
 from collections.abc import Sequence
 
-from browser_cli.actions import get_action_specs
 from browser_cli import __version__, exit_codes
+from browser_cli.actions import get_action_specs
 from browser_cli.commands.action import run_action_command
 from browser_cli.commands.read import run_read_command
 from browser_cli.commands.reload import run_reload_command
@@ -45,7 +45,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="Validate or run a published workflow wrapper.",
         description="Run workflow.toml packaging around a task.py artifact.",
     )
-    workflow_subparsers = workflow_parser.add_subparsers(dest="workflow_subcommand", metavar="WORKFLOW_COMMAND")
+    workflow_subparsers = workflow_parser.add_subparsers(
+        dest="workflow_subcommand", metavar="WORKFLOW_COMMAND"
+    )
 
     workflow_run_parser = workflow_subparsers.add_parser(
         "run",

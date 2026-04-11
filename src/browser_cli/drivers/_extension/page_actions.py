@@ -155,7 +155,11 @@ class ExtensionDriverPageActionsMixin:
                 "timeout_seconds": timeout_seconds,
             },
         )
-        return {"page_id": page_id, "url": str(payload.get("url") or url), "title": str(payload.get("title") or "")}
+        return {
+            "page_id": page_id,
+            "url": str(payload.get("url") or url),
+            "title": str(payload.get("title") or ""),
+        }
 
     async def reload(
         self,
@@ -178,17 +182,29 @@ class ExtensionDriverPageActionsMixin:
 
     async def resize(self, page_id: str, *, width: int, height: int) -> dict[str, Any]:
         payload = await self._page_command(page_id, "resize", {"width": width, "height": height})
-        return {"page_id": page_id, "width": int(payload.get("width") or width), "height": int(payload.get("height") or height)}
+        return {
+            "page_id": page_id,
+            "width": int(payload.get("width") or width),
+            "height": int(payload.get("height") or height),
+        }
 
     async def evaluate(self, page_id: str, code: str) -> dict[str, Any]:
         payload = await self._page_command(page_id, "eval", {"code": code})
         return {"page_id": page_id, "result": payload.get("result")}
 
-    async def _simple_page_command(self, page_id: str, action: str, payload: dict[str, Any]) -> dict[str, Any]:
+    async def _simple_page_command(
+        self, page_id: str, action: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
         payload = await self._page_command(page_id, action, payload)
-        return {"page_id": page_id, "url": str(payload.get("url") or ""), "title": str(payload.get("title") or "")}
+        return {
+            "page_id": page_id,
+            "url": str(payload.get("url") or ""),
+            "title": str(payload.get("title") or ""),
+        }
 
-    async def _page_command(self, page_id: str, action: str, payload: dict[str, Any]) -> dict[str, Any]:
+    async def _page_command(
+        self, page_id: str, action: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
         tab_id = self._require_tab_id(page_id)
         session = await self._require_session()
         return await session.send_request(action, {"tab_id": tab_id, **payload})

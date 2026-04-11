@@ -21,10 +21,7 @@ def default_headless() -> bool:
 def default_locale() -> str:
     raw = os.environ.get(LOCALE_ENV, "").strip()
     if not raw:
-        raw = (
-            os.environ.get("LC_ALL", "").strip()
-            or os.environ.get("LANG", "").strip()
-        )
+        raw = os.environ.get("LC_ALL", "").strip() or os.environ.get("LANG", "").strip()
     if not raw:
         system_locale, _encoding = py_locale.getlocale()
         raw = system_locale or ""

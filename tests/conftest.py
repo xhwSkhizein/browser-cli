@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
 
 import pytest
@@ -22,7 +23,5 @@ def _cleanup_browser_cli_runtime(monkeypatch):
     if pid is not None and _pid_exists(pid):
         _terminate_process_tree(pid)
     remove_run_info()
-    try:
+    with contextlib.suppress(FileNotFoundError):
         safe_remove_socket()
-    except FileNotFoundError:
-        pass

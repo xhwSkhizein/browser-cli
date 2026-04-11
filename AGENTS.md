@@ -195,6 +195,7 @@ Keep these boundaries intact. Do not push browser internals into CLI handlers, d
 
 - Unit tests live under `tests/unit/`; integration coverage lives under `tests/integration/`.
 - Contract-sensitive areas include CLI parser shape, action catalog parity, daemon lifecycle, semantic refs, driver parity, workflow validation, and `X_AGENT_ID` tab isolation.
+- Tests and workflow fixtures must resolve repo assets relative to the checked-out repository, not a developer-specific absolute workspace path; CI runners will fail on hard-coded local paths first in workflow/task fixture coverage.
 - `scripts/lint.sh` owns repository lint execution.
 - `scripts/guard.sh` owns architecture, product-contract, and doc-sync guards.
 - `scripts/check.sh` runs both lint and guard in the expected order.

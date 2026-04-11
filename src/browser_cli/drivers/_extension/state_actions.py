@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 
 
 class ExtensionDriverStateMixin:
-    _hub: "ExtensionHub"
+    _hub: ExtensionHub
     _page_to_tab: dict[str, int]
     _tab_to_page: dict[int, str]
     _active_page_id: str | None
@@ -76,7 +76,9 @@ class ExtensionDriverStateMixin:
         await self.ensure_started()
         session = self._hub.session
         if session is None:
-            raise OperationFailedError("Browser CLI extension is not connected.", error_code="EXTENSION_UNAVAILABLE")
+            raise OperationFailedError(
+                "Browser CLI extension is not connected.", error_code="EXTENSION_UNAVAILABLE"
+            )
         return session
 
     def _require_tab_id(self, page_id: str) -> int:

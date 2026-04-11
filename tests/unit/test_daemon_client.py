@@ -25,20 +25,24 @@ def test_spawn_daemon_timeout_terminates_spawned_process(monkeypatch, tmp_path: 
     terminated: list[int] = []
 
     with (
-        patch("browser_cli.daemon.client.subprocess.Popen", return_value=_FakeProcess(321)) as popen_mock,
+        patch(
+            "browser_cli.daemon.client.subprocess.Popen", return_value=_FakeProcess(321)
+        ) as popen_mock,
         patch("browser_cli.daemon.client._wait_for_socket", return_value=False),
         patch("browser_cli.daemon.client._terminate_process_tree", side_effect=terminated.append),
         patch("browser_cli.daemon.client.read_run_info", return_value={"pid": 321}),
+        pytest.raises(DaemonNotAvailableError),
     ):
-        with pytest.raises(DaemonNotAvailableError):
-            client._spawn_daemon()  # noqa: SLF001
+        client._spawn_daemon()  # noqa: SLF001
 
     assert terminated == [321]
     command = popen_mock.call_args.args[0]
     assert command[-2:] == ["--home", str(tmp_path / ".browser-cli-runtime")]
 
 
-def test_ensure_daemon_running_reaps_stale_runtime_before_spawn(monkeypatch, tmp_path: Path) -> None:
+def test_ensure_daemon_running_reaps_stale_runtime_before_spawn(
+    monkeypatch, tmp_path: Path
+) -> None:
     monkeypatch.setenv("BROWSER_CLI_HOME", str(tmp_path / ".browser-cli-runtime"))
     call_state = {"probe_count": 0, "spawned": False}
     terminated: list[int] = []
@@ -54,7 +58,10 @@ def test_ensure_daemon_running_reaps_stale_runtime_before_spawn(monkeypatch, tmp
         patch("browser_cli.daemon.client._terminate_process_tree", side_effect=terminated.append),
         patch("browser_cli.daemon.client.remove_run_info") as remove_run_info_mock,
         patch("browser_cli.daemon.client.safe_remove_socket") as safe_remove_socket_mock,
-        patch("browser_cli.daemon.client._spawn_daemon", side_effect=lambda: call_state.__setitem__("spawned", True)),
+        patch(
+            "browser_cli.daemon.client._spawn_daemon",
+            side_effect=lambda: call_state.__setitem__("spawned", True),
+        ),
     ):
         client.ensure_daemon_running()
 
@@ -87,7 +94,9 @@ def test_ensure_daemon_running_reaps_incompatible_live_daemon(monkeypatch, tmp_p
     assert spawn_mock.called
 
 
-def test_cleanup_runtime_fast_kills_stopped_daemon_without_waiting_for_grace(monkeypatch, tmp_path: Path) -> None:
+def test_cleanup_runtime_fast_kills_stopped_daemon_without_waiting_for_grace(
+    monkeypatch, tmp_path: Path
+) -> None:
     monkeypatch.setenv("BROWSER_CLI_HOME", str(tmp_path / ".browser-cli-runtime"))
 
     with (

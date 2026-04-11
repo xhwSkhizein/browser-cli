@@ -9,9 +9,9 @@ from browser_cli.profiles.discovery import (
     discover_chrome_environment,
     discover_chrome_executable,
     discover_default_profile_dir,
+    discover_user_data_dir,
     load_profile_info_cache,
     resolve_profile_directory,
-    discover_user_data_dir,
 )
 
 
@@ -108,7 +108,9 @@ def test_resolve_profile_directory_prefers_most_recent_local_state_entry(tmp_pat
     assert name == "Personal"
 
 
-def test_resolve_profile_directory_falls_back_to_default_when_local_state_missing(tmp_path: Path) -> None:
+def test_resolve_profile_directory_falls_back_to_default_when_local_state_missing(
+    tmp_path: Path,
+) -> None:
     user_data = tmp_path / "user-data"
     (user_data / "Default").mkdir(parents=True)
 
@@ -147,7 +149,9 @@ def test_discover_chrome_environment_uses_managed_profile_root(monkeypatch, tmp_
     assert (result.user_data_dir / "Default").exists()
 
 
-def test_discover_chrome_environment_raises_when_managed_profile_locked(monkeypatch, tmp_path: Path) -> None:
+def test_discover_chrome_environment_raises_when_managed_profile_locked(
+    monkeypatch, tmp_path: Path
+) -> None:
     executable = tmp_path / "Google Chrome"
     executable.write_text("", encoding="utf-8")
     fallback_root = tmp_path / ".browser-cli" / "default-profile"

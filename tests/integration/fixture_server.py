@@ -6,7 +6,6 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-
 STATIC_PAGE = """<!doctype html>
 <html>
   <head><title>Static Fixture</title></head>

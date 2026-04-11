@@ -7,7 +7,7 @@ from pathlib import Path
 
 from browser_cli.drivers.extension_driver import ExtensionDriver
 from browser_cli.errors import OperationFailedError
-from browser_cli.extension.protocol import ExtensionHello, REQUIRED_EXTENSION_CAPABILITIES
+from browser_cli.extension.protocol import REQUIRED_EXTENSION_CAPABILITIES, ExtensionHello
 from browser_cli.refs.models import LocatorSpec
 
 
@@ -68,7 +68,12 @@ class _FakeSession:
                     "duration_ms": 100.0,
                     "failed": False,
                     "failure_reason": None,
-                    "body": {"kind": "text", "text": '{"ok":true}', "bytes": 11, "truncated": False},
+                    "body": {
+                        "kind": "text",
+                        "text": '{"ok":true}',
+                        "bytes": 11,
+                        "truncated": False,
+                    },
                 }
             }
         if action == "network":
@@ -90,7 +95,12 @@ class _FakeSession:
                         "duration_ms": 100.0,
                         "failed": False,
                         "failure_reason": None,
-                        "body": {"kind": "text", "text": '{"ok":true}', "bytes": 11, "truncated": False},
+                        "body": {
+                            "kind": "text",
+                            "text": '{"ok":true}',
+                            "bytes": 11,
+                            "truncated": False,
+                        },
                     }
                 ]
             }
@@ -175,7 +185,9 @@ def _hello(*, capabilities: set[str] | None = None) -> ExtensionHello:
 
 
 def test_extension_driver_health_reports_missing_required_capabilities() -> None:
-    hello = _hello(capabilities=set(REQUIRED_EXTENSION_CAPABILITIES) - {"screenshot", "wait-network"})
+    hello = _hello(
+        capabilities=set(REQUIRED_EXTENSION_CAPABILITIES) - {"screenshot", "wait-network"}
+    )
     driver = ExtensionDriver(_FakeHub(_FakeSession(hello)))
 
     async def _scenario() -> None:
@@ -205,7 +217,9 @@ def test_extension_driver_routes_representative_actions(tmp_path: Path) -> None:
             mime_contains="json",
             timeout_seconds=8,
         )
-        records = await driver.get_network_records("page_0001", url_contains="/api/ping", include_static=True, clear=False)
+        records = await driver.get_network_records(
+            "page_0001", url_contains="/api/ping", include_static=True, clear=False
+        )
         await driver.set_cookie("page_0001", name="sid", value="123", domain="example.com")
         await driver.clear_cookies("page_0001", domain="example.com")
         await driver.verify_visible("page_0001", role="button", name="Submit", timeout_seconds=4)

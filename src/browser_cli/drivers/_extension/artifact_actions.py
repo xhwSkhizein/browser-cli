@@ -5,7 +5,9 @@ from typing import Any
 
 
 class ExtensionDriverArtifactActionsMixin:
-    async def screenshot(self, page_id: str, *, path: str, full_page: bool = False) -> dict[str, Any]:
+    async def screenshot(
+        self, page_id: str, *, path: str, full_page: bool = False
+    ) -> dict[str, Any]:
         payload = await self._page_command(
             page_id,
             "screenshot",
@@ -63,8 +65,12 @@ class ExtensionDriverArtifactActionsMixin:
         )
         return {"page_id": page_id, "path": output_path}
 
-    async def start_video(self, page_id: str, *, width: int | None = None, height: int | None = None) -> dict[str, Any]:
-        payload = await self._page_command(page_id, "video-start", {"width": width, "height": height})
+    async def start_video(
+        self, page_id: str, *, width: int | None = None, height: int | None = None
+    ) -> dict[str, Any]:
+        payload = await self._page_command(
+            page_id, "video-start", {"width": width, "height": height}
+        )
         return {"page_id": page_id, **payload}
 
     async def stop_video(self, page_id: str, *, path: str | None = None) -> dict[str, Any]:
@@ -96,7 +102,9 @@ class ExtensionDriverArtifactActionsMixin:
                 return str(resolved)
         if inline_key and payload.get(inline_key):
             output_path = self._resolve_output_path(path, page_id=page_id, suffix=suffix)
-            output_path.write_bytes(base64.b64decode(str(payload.get(inline_key) or "").encode("ascii")))
+            output_path.write_bytes(
+                base64.b64decode(str(payload.get(inline_key) or "").encode("ascii"))
+            )
             return str(output_path)
         if path:
             return str(self._resolve_output_path(path, page_id=page_id, suffix=suffix))
@@ -111,7 +119,8 @@ class ExtensionDriverArtifactActionsMixin:
             resolved = self._resolve_artifact_output_path(
                 artifact,
                 page_id=page_id,
-                path=str(((artifact.get("metadata") or {}).get("requested_path") or "")).strip() or None,
+                path=str((artifact.get("metadata") or {}).get("requested_path") or "").strip()
+                or None,
                 suffix=".webm",
             )
             self._write_artifact_bytes(artifact, resolved)
@@ -140,6 +149,6 @@ class ExtensionDriverArtifactActionsMixin:
     @staticmethod
     def _write_artifact_bytes(artifact: dict[str, Any], output_path) -> None:
         content = artifact.get("content")
-        if not isinstance(content, (bytes, bytearray)):
+        if not isinstance(content, bytes | bytearray):
             raise RuntimeError("Extension artifact payload is missing binary content.")
         output_path.write_bytes(bytes(content))

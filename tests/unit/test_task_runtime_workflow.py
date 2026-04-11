@@ -1,18 +1,19 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
 
-from browser_cli.task_runtime.models import validate_task_metadata
+from browser_cli.task_runtime.models import TaskMetadataError, validate_task_metadata
 from browser_cli.workflow.hooks import run_hook_commands
 from browser_cli.workflow.loader import load_workflow_manifest
 from browser_cli.workflow.runner import parse_input_overrides
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
 
 def test_validate_task_metadata_requires_sections() -> None:
-    with pytest.raises(Exception):
+    with pytest.raises(TaskMetadataError):
         validate_task_metadata({"task": {}}, source="memory")
 
 
@@ -27,7 +28,7 @@ def test_parse_input_overrides_merges_json_and_set() -> None:
 
 def test_load_workflow_manifest_resolves_repo_examples() -> None:
     manifest = load_workflow_manifest(
-        "/Users/hongv/workspace/m-projects/browser-cli/tasks/interactive_reveal_capture/workflow.toml"
+        REPO_ROOT / "tasks" / "interactive_reveal_capture" / "workflow.toml"
     )
     assert manifest.workflow.id == "interactive_reveal_capture"
     assert manifest.task.path.name == "task.py"

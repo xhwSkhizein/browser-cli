@@ -102,7 +102,9 @@ class SemanticRefResolver:
         if not locator_spec.role:
             return None
 
-        normalized_name = locator_spec.name.strip() if locator_spec.name and locator_spec.name.strip() else None
+        normalized_name = (
+            locator_spec.name.strip() if locator_spec.name and locator_spec.name.strip() else None
+        )
         normalized_text = (
             locator_spec.text_content.strip()
             if locator_spec.text_content and locator_spec.text_content.strip()
@@ -127,7 +129,9 @@ class SemanticRefResolver:
             locator = scope.get_by_role(locator_spec.role, name=normalized_name, exact=True)
         elif locator_spec.role in self.ROLE_TEXT_MATCH_ROLES and match_text:
             if locator_spec.role == "row":
-                locator = scope.get_by_role("row").filter(has_text=self._text_pattern(match_text, exact=False))
+                locator = scope.get_by_role("row").filter(
+                    has_text=self._text_pattern(match_text, exact=False)
+                )
             else:
                 locator = scope.get_by_role(locator_spec.role).filter(
                     has_text=self._text_pattern(match_text, exact=True)
@@ -138,7 +142,9 @@ class SemanticRefResolver:
         elif locator_spec.role in self.STRUCTURAL_NOISE_ROLES and match_text:
             css = self.STRUCTURAL_NOISE_CSS.get(locator_spec.role)
             if css:
-                locator = scope.locator(css).filter(has_text=self._text_pattern(match_text, exact=True))
+                locator = scope.locator(css).filter(
+                    has_text=self._text_pattern(match_text, exact=True)
+                )
             else:
                 locator = scope.get_by_text(match_text, exact=True)
                 skip_nth = True
@@ -146,7 +152,9 @@ class SemanticRefResolver:
             if child_text:
                 css = self.STRUCTURAL_NOISE_CSS.get(locator_spec.role)
                 if css:
-                    locator = scope.locator(css).filter(has_text=self._text_pattern(child_text, exact=True))
+                    locator = scope.locator(css).filter(
+                        has_text=self._text_pattern(child_text, exact=True)
+                    )
                 else:
                     locator = scope.get_by_text(child_text, exact=True)
                 skip_nth = True
@@ -183,7 +191,10 @@ class SemanticRefResolver:
                     (child.name or child.text_content or "").strip()
                     for child in refs.values()
                     if child.parent_ref == ref
-                    and (child.role in self.TEXT_LEAF_ROLES or child.role in self.STRUCTURAL_NOISE_ROLES)
+                    and (
+                        child.role in self.TEXT_LEAF_ROLES
+                        or child.role in self.STRUCTURAL_NOISE_ROLES
+                    )
                     and (child.name or child.text_content)
                 ),
                 None,

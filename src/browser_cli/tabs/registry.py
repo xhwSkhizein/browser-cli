@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from typing import AsyncIterator
 
-from browser_cli.constants import DEFAULT_PUBLIC_AGENT_ID
 from browser_cli.errors import BusyTabError, NoActiveTabError, TabNotFoundError
 
 
@@ -255,11 +254,7 @@ class TabRegistry:
                 record.busy = None
 
     def _find_latest_page_id_locked(self, agent_id: str) -> str | None:
-        candidates = [
-            record
-            for record in self._tabs.values()
-            if record.owner_agent_id == agent_id
-        ]
+        candidates = [record for record in self._tabs.values() if record.owner_agent_id == agent_id]
         if not candidates:
             return None
         candidates.sort(key=lambda item: item.last_used_at, reverse=True)

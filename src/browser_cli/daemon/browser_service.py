@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 from typing import Any
 
@@ -20,6 +21,7 @@ from browser_cli.extension import ExtensionHub
 from browser_cli.profiles.discovery import ChromeEnvironment
 from browser_cli.refs import SemanticRefResolver, SemanticSnapshotGenerator, SnapshotRegistry
 from browser_cli.tabs import TabRegistry
+from browser_cli.tabs.registry import TabRecord
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +42,9 @@ class BrowserService:
         headless: bool | None = None,
     ) -> None:
         self._tabs = tabs or TabRegistry()
-        self._playwright = PlaywrightDriver(chrome_environment=chrome_environment, headless=headless)
+        self._playwright = PlaywrightDriver(
+            chrome_environment=chrome_environment, headless=headless
+        )
         self._extension_hub = ExtensionHub()
         self._extension = ExtensionDriver(self._extension_hub)
         self._snapshot_registry = SnapshotRegistry()
@@ -101,7 +105,9 @@ class BrowserService:
         if self._driver is not None:
             return
         session = await self._extension_hub.wait_for_session(self.INITIAL_EXTENSION_WAIT_SECONDS)
-        target = "extension" if session and session.hello.has_required_capabilities() else "playwright"
+        target = (
+            "extension" if session and session.hello.has_required_capabilities() else "playwright"
+        )
         logger.info("Selecting startup driver=%s", target)
         await self._activate_driver(target, reason="startup")
 
@@ -126,13 +132,13 @@ class BrowserService:
                 shutdown = {}
         except Exception as exc:
             cleanup_error = str(exc)
-            logger.warning("Driver stop failed for %s: %s", self._driver_name or "none", cleanup_error)
+            logger.warning(
+                "Driver stop failed for %s: %s", self._driver_name or "none", cleanup_error
+            )
             shutdown = {}
         await self._extension_hub.stop()
-        try:
+        with contextlib.suppress(Exception):
             await self._playwright.stop()
-        except Exception:
-            pass
         self._driver = None
         self._driver_name = None
         self._snapshot_registry.clear()
@@ -188,7 +194,8 @@ class BrowserService:
                         "target": "playwright",
                         "reason": "extension-disconnected-waiting-command",
                     }
-                    if self._driver_name == "extension" and not bool(extension_details.get("connected"))
+                    if self._driver_name == "extension"
+                    and not bool(extension_details.get("connected"))
                     else None
                 )
             ),
@@ -218,7 +225,9 @@ class BrowserService:
     ) -> dict[str, Any]:
         if output_mode not in {"html", "snapshot"}:
             raise InvalidInputError(f"Unsupported read output mode: {output_mode}")
-        page = await self.new_tab(url=url, wait_until="load", timeout_seconds=self.READ_NAVIGATION_TIMEOUT_SECONDS)
+        page = await self.new_tab(
+            url=url, wait_until="load", timeout_seconds=self.READ_NAVIGATION_TIMEOUT_SECONDS
+        )
         page_id = str(page["page_id"])
         try:
             await self.wait(page_id, seconds=self.READ_SETTLE_TIMEOUT_MS / 1000.0)
@@ -226,7 +235,11 @@ class BrowserService:
                 await self._scroll_page_to_bottom(page_id)
                 await self.wait(page_id, seconds=self.READ_SETTLE_TIMEOUT_MS / 1000.0)
             if output_mode == "snapshot":
-                body = str((await self.capture_snapshot(page_id, interactive=False, full_page=True))["tree"])
+                body = str(
+                    (await self.capture_snapshot(page_id, interactive=False, full_page=True))[
+                        "tree"
+                    ]
+                )
             else:
                 body = str((await self.capture_html(page_id))["html"])
             if not body.strip():
@@ -238,10 +251,8 @@ class BrowserService:
                 "url": str(page["url"]),
             }
         finally:
-            try:
+            with contextlib.suppress(Exception):
                 await self.close_tab(page_id)
-            except Exception:
-                pass
 
     async def close_tab(self, page_id: str) -> dict[str, Any]:
         self._snapshot_registry.clear_page(page_id)
@@ -292,13 +303,21 @@ class BrowserService:
             ],
         }
 
-    async def navigate(self, page_id: str, url: str, *, wait_until: str = "load", timeout_seconds: float = 30.0) -> dict[str, Any]:
+    async def navigate(
+        self, page_id: str, url: str, *, wait_until: str = "load", timeout_seconds: float = 30.0
+    ) -> dict[str, Any]:
         self._snapshot_registry.clear_page(page_id)
-        return await self._active_driver().navigate(page_id, url, wait_until=wait_until, timeout_seconds=timeout_seconds)
+        return await self._active_driver().navigate(
+            page_id, url, wait_until=wait_until, timeout_seconds=timeout_seconds
+        )
 
-    async def reload(self, page_id: str, *, wait_until: str = "load", timeout_seconds: float = 30.0) -> dict[str, Any]:
+    async def reload(
+        self, page_id: str, *, wait_until: str = "load", timeout_seconds: float = 30.0
+    ) -> dict[str, Any]:
         self._snapshot_registry.clear_page(page_id)
-        return await self._active_driver().reload(page_id, wait_until=wait_until, timeout_seconds=timeout_seconds)
+        return await self._active_driver().reload(
+            page_id, wait_until=wait_until, timeout_seconds=timeout_seconds
+        )
 
     async def go_back(self, page_id: str) -> dict[str, Any]:
         self._snapshot_registry.clear_page(page_id)
@@ -315,7 +334,9 @@ class BrowserService:
         return await self._active_driver().click(page_id, await self._require_locator(page_id, ref))
 
     async def double_click_ref(self, page_id: str, ref: str) -> dict[str, Any]:
-        return await self._active_driver().double_click(page_id, await self._require_locator(page_id, ref))
+        return await self._active_driver().double_click(
+            page_id, await self._require_locator(page_id, ref)
+        )
 
     async def hover_ref(self, page_id: str, ref: str) -> dict[str, Any]:
         return await self._active_driver().hover(page_id, await self._require_locator(page_id, ref))
@@ -323,10 +344,16 @@ class BrowserService:
     async def focus_ref(self, page_id: str, ref: str) -> dict[str, Any]:
         return await self._active_driver().focus(page_id, await self._require_locator(page_id, ref))
 
-    async def fill_ref(self, page_id: str, ref: str, text: str, *, submit: bool = False) -> dict[str, Any]:
-        return await self._active_driver().fill(page_id, await self._require_locator(page_id, ref), text, submit=submit)
+    async def fill_ref(
+        self, page_id: str, ref: str, text: str, *, submit: bool = False
+    ) -> dict[str, Any]:
+        return await self._active_driver().fill(
+            page_id, await self._require_locator(page_id, ref), text, submit=submit
+        )
 
-    async def fill_form(self, page_id: str, fields: list[dict[str, Any]], *, submit: bool = False) -> dict[str, Any]:
+    async def fill_form(
+        self, page_id: str, fields: list[dict[str, Any]], *, submit: bool = False
+    ) -> dict[str, Any]:
         for field in fields:
             ref = str(field.get("ref") or "").strip()
             text = str(field.get("text") or "")
@@ -338,19 +365,29 @@ class BrowserService:
         return {"page_id": page_id, "filled_fields": len(fields), "submitted": submit}
 
     async def select_option(self, page_id: str, ref: str, text: str) -> dict[str, Any]:
-        return await self._active_driver().select_option(page_id, await self._require_locator(page_id, ref), text)
+        return await self._active_driver().select_option(
+            page_id, await self._require_locator(page_id, ref), text
+        )
 
     async def list_options(self, page_id: str, ref: str) -> dict[str, Any]:
-        return await self._active_driver().list_options(page_id, await self._require_locator(page_id, ref))
+        return await self._active_driver().list_options(
+            page_id, await self._require_locator(page_id, ref)
+        )
 
     async def check_ref(self, page_id: str, ref: str) -> dict[str, Any]:
-        return await self._active_driver().check(page_id, await self._require_locator(page_id, ref), checked=True)
+        return await self._active_driver().check(
+            page_id, await self._require_locator(page_id, ref), checked=True
+        )
 
     async def uncheck_ref(self, page_id: str, ref: str) -> dict[str, Any]:
-        return await self._active_driver().check(page_id, await self._require_locator(page_id, ref), checked=False)
+        return await self._active_driver().check(
+            page_id, await self._require_locator(page_id, ref), checked=False
+        )
 
     async def scroll_to_ref(self, page_id: str, ref: str) -> dict[str, Any]:
-        return await self._active_driver().scroll_to(page_id, await self._require_locator(page_id, ref))
+        return await self._active_driver().scroll_to(
+            page_id, await self._require_locator(page_id, ref)
+        )
 
     async def drag_ref(self, page_id: str, start_ref: str, end_ref: str) -> dict[str, Any]:
         return await self._active_driver().drag(
@@ -360,13 +397,17 @@ class BrowserService:
         )
 
     async def upload_file(self, page_id: str, ref: str, file_path: str) -> dict[str, Any]:
-        return await self._active_driver().upload(page_id, await self._require_locator(page_id, ref), file_path)
+        return await self._active_driver().upload(
+            page_id, await self._require_locator(page_id, ref), file_path
+        )
 
     async def evaluate(self, page_id: str, code: str) -> dict[str, Any]:
         return await self._active_driver().evaluate(page_id, code)
 
     async def evaluate_on_ref(self, page_id: str, ref: str, code: str) -> dict[str, Any]:
-        return await self._active_driver().evaluate_on(page_id, await self._require_locator(page_id, ref), code)
+        return await self._active_driver().evaluate_on(
+            page_id, await self._require_locator(page_id, ref), code
+        )
 
     async def wait(
         self,
@@ -377,16 +418,26 @@ class BrowserService:
         gone: bool = False,
         exact: bool = False,
     ) -> dict[str, Any]:
-        return await self._active_driver().wait(page_id, seconds=seconds, text=text, gone=gone, exact=exact)
+        return await self._active_driver().wait(
+            page_id, seconds=seconds, text=text, gone=gone, exact=exact
+        )
 
-    async def wait_for_network_idle(self, page_id: str, *, timeout_seconds: float = 30.0) -> dict[str, Any]:
-        return await self._active_driver().wait_for_network_idle(page_id, timeout_seconds=timeout_seconds)
+    async def wait_for_network_idle(
+        self, page_id: str, *, timeout_seconds: float = 30.0
+    ) -> dict[str, Any]:
+        return await self._active_driver().wait_for_network_idle(
+            page_id, timeout_seconds=timeout_seconds
+        )
 
     async def start_console_capture(self, page_id: str) -> dict[str, Any]:
         return await self._active_driver().start_console_capture(page_id)
 
-    async def get_console_messages(self, page_id: str, *, message_type: str | None = None, clear: bool = True) -> dict[str, Any]:
-        return await self._active_driver().get_console_messages(page_id, message_type=message_type, clear=clear)
+    async def get_console_messages(
+        self, page_id: str, *, message_type: str | None = None, clear: bool = True
+    ) -> dict[str, Any]:
+        return await self._active_driver().get_console_messages(
+            page_id, message_type=message_type, clear=clear
+        )
 
     async def stop_console_capture(self, page_id: str) -> dict[str, Any]:
         return await self._active_driver().stop_console_capture(page_id)
@@ -447,7 +498,14 @@ class BrowserService:
     async def stop_network_capture(self, page_id: str) -> dict[str, Any]:
         return await self._active_driver().stop_network_capture(page_id)
 
-    async def get_cookies(self, page_id: str, *, name: str | None = None, domain: str | None = None, path: str | None = None) -> dict[str, Any]:
+    async def get_cookies(
+        self,
+        page_id: str,
+        *,
+        name: str | None = None,
+        domain: str | None = None,
+        path: str | None = None,
+    ) -> dict[str, Any]:
         return await self._active_driver().get_cookies(page_id, name=name, domain=domain, path=path)
 
     async def set_cookie(
@@ -483,7 +541,9 @@ class BrowserService:
         domain: str | None = None,
         path: str | None = None,
     ) -> dict[str, Any]:
-        return await self._active_driver().clear_cookies(page_id, name=name, domain=domain, path=path)
+        return await self._active_driver().clear_cookies(
+            page_id, name=name, domain=domain, path=path
+        )
 
     async def save_storage_state(self, page_id: str, *, path: str | None = None) -> dict[str, Any]:
         return await self._active_driver().save_storage_state(page_id, path=path)
@@ -491,16 +551,26 @@ class BrowserService:
     async def load_storage_state(self, page_id: str, *, path: str) -> dict[str, Any]:
         return await self._active_driver().load_storage_state(page_id, path=path)
 
-    async def verify_text(self, page_id: str, *, text: str, exact: bool = False, timeout_seconds: float = 5.0) -> dict[str, Any]:
-        return await self._active_driver().verify_text(page_id, text=text, exact=exact, timeout_seconds=timeout_seconds)
+    async def verify_text(
+        self, page_id: str, *, text: str, exact: bool = False, timeout_seconds: float = 5.0
+    ) -> dict[str, Any]:
+        return await self._active_driver().verify_text(
+            page_id, text=text, exact=exact, timeout_seconds=timeout_seconds
+        )
 
-    async def verify_url(self, page_id: str, *, expected: str, exact: bool = False) -> dict[str, Any]:
+    async def verify_url(
+        self, page_id: str, *, expected: str, exact: bool = False
+    ) -> dict[str, Any]:
         return await self._active_driver().verify_url(page_id, expected=expected, exact=exact)
 
-    async def verify_title(self, page_id: str, *, expected: str, exact: bool = False) -> dict[str, Any]:
+    async def verify_title(
+        self, page_id: str, *, expected: str, exact: bool = False
+    ) -> dict[str, Any]:
         return await self._active_driver().verify_title(page_id, expected=expected, exact=exact)
 
-    async def verify_visible(self, page_id: str, *, role: str, name: str, timeout_seconds: float = 5.0) -> dict[str, Any]:
+    async def verify_visible(
+        self, page_id: str, *, role: str, name: str, timeout_seconds: float = 5.0
+    ) -> dict[str, Any]:
         return await self._active_driver().verify_visible(
             page_id,
             role=role,
@@ -509,10 +579,14 @@ class BrowserService:
         )
 
     async def verify_state(self, page_id: str, *, ref: str, state: str) -> dict[str, Any]:
-        return await self._active_driver().verify_state(page_id, locator=await self._require_locator(page_id, ref), state=state)
+        return await self._active_driver().verify_state(
+            page_id, locator=await self._require_locator(page_id, ref), state=state
+        )
 
     async def verify_value(self, page_id: str, *, ref: str, expected: str) -> dict[str, Any]:
-        return await self._active_driver().verify_value(page_id, locator=await self._require_locator(page_id, ref), expected=expected)
+        return await self._active_driver().verify_value(
+            page_id, locator=await self._require_locator(page_id, ref), expected=expected
+        )
 
     async def type_text(self, page_id: str, text: str, *, submit: bool = False) -> dict[str, Any]:
         return await self._active_driver().type_text(page_id, text, submit=submit)
@@ -541,9 +615,13 @@ class BrowserService:
         button: str = "left",
         count: int = 1,
     ) -> dict[str, Any]:
-        return await self._active_driver().mouse_click(page_id, x=x, y=y, button=button, count=count)
+        return await self._active_driver().mouse_click(
+            page_id, x=x, y=y, button=button, count=count
+        )
 
-    async def mouse_drag(self, page_id: str, *, x1: int, y1: int, x2: int, y2: int) -> dict[str, Any]:
+    async def mouse_drag(
+        self, page_id: str, *, x1: int, y1: int, x2: int, y2: int
+    ) -> dict[str, Any]:
         return await self._active_driver().mouse_drag(page_id, x1=x1, y1=y1, x2=x2, y2=y2)
 
     async def mouse_down(self, page_id: str, *, button: str = "left") -> dict[str, Any]:
@@ -552,7 +630,9 @@ class BrowserService:
     async def mouse_up(self, page_id: str, *, button: str = "left") -> dict[str, Any]:
         return await self._active_driver().mouse_up(page_id, button=button)
 
-    async def screenshot(self, page_id: str, *, path: str, full_page: bool = False) -> dict[str, Any]:
+    async def screenshot(
+        self, page_id: str, *, path: str, full_page: bool = False
+    ) -> dict[str, Any]:
         return await self._active_driver().screenshot(page_id, path=path, full_page=full_page)
 
     async def save_pdf(self, page_id: str, *, path: str) -> dict[str, Any]:
@@ -578,7 +658,9 @@ class BrowserService:
         accept: bool,
         prompt_text: str | None = None,
     ) -> dict[str, Any]:
-        return await self._active_driver().handle_dialog(page_id, accept=accept, prompt_text=prompt_text)
+        return await self._active_driver().handle_dialog(
+            page_id, accept=accept, prompt_text=prompt_text
+        )
 
     async def remove_dialog_handler(self, page_id: str) -> dict[str, Any]:
         return await self._active_driver().remove_dialog_handler(page_id)
@@ -604,14 +686,18 @@ class BrowserService:
     async def stop_tracing(self, page_id: str, *, path: str | None = None) -> dict[str, Any]:
         return await self._active_driver().stop_tracing(page_id, path=path)
 
-    async def start_video(self, page_id: str, *, width: int | None = None, height: int | None = None) -> dict[str, Any]:
+    async def start_video(
+        self, page_id: str, *, width: int | None = None, height: int | None = None
+    ) -> dict[str, Any]:
         return await self._active_driver().start_video(page_id, width=width, height=height)
 
     async def stop_video(self, page_id: str, *, path: str | None = None) -> dict[str, Any]:
         return await self._active_driver().stop_video(page_id, path=path)
 
     async def search(self, *, query: str, engine: str = "duckduckgo") -> dict[str, Any]:
-        return await self.new_tab(url=PlaywrightDriver.build_search_url(query, engine), wait_until="load")
+        return await self.new_tab(
+            url=PlaywrightDriver.build_search_url(query, engine), wait_until="load"
+        )
 
     async def _require_locator(self, page_id: str, ref: str):
         state = self._snapshot_registry.get(page_id)
@@ -675,15 +761,11 @@ class BrowserService:
             )
             records, active_by_agent = await self._tabs.snapshot_state()
             if old_driver_name == "extension":
-                try:
+                with contextlib.suppress(Exception):
                     await self._extension.stop()
-                except Exception:
-                    pass
             elif old_driver_name == "playwright":
-                try:
+                with contextlib.suppress(Exception):
                     await self._playwright.stop()
-                except Exception:
-                    pass
             self._driver = None
             self._driver_name = None
             if driver_name == "extension":

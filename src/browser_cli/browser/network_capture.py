@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import contextlib
 import logging
 import mimetypes
 import time
@@ -79,17 +80,17 @@ class PlaywrightNetworkObserver:
         record_filter: NetworkRecordFilter,
         timeout_seconds: float,
     ) -> dict[str, Any]:
-        return await self._store.wait_for_record(record_filter=record_filter, timeout_seconds=timeout_seconds)
+        return await self._store.wait_for_record(
+            record_filter=record_filter, timeout_seconds=timeout_seconds
+        )
 
     async def close(self) -> None:
         if self._closed:
             return
         self._closed = True
         for event_name, handler in self._handlers.items():
-            try:
+            with contextlib.suppress(Exception):
                 self._page.remove_listener(event_name, handler)
-            except Exception:
-                pass
         for task in list(self._pending_tasks):
             task.cancel()
         if self._pending_tasks:
@@ -167,7 +168,9 @@ class PlaywrightNetworkObserver:
             "error": "Response body was not available.",
         }
         if response is not None:
-            pending.response_headers = await _read_response_headers(response, pending.response_headers)
+            pending.response_headers = await _read_response_headers(
+                response, pending.response_headers
+            )
             pending.status = int(response.status or pending.status or 0)
             pending.ok = bool(response.ok)
             pending.mime_type = _extract_mime_type(pending.response_headers) or pending.mime_type
@@ -273,7 +276,9 @@ async def _build_body_payload(
                 "bytes": byte_length,
                 "truncated": False,
             }
-        output_path = _write_body_artifact(page_id=page_id, request_id=request_id, url=url, mime_type=mime_type, content=body_bytes)
+        output_path = _write_body_artifact(
+            page_id=page_id, request_id=request_id, url=url, mime_type=mime_type, content=body_bytes
+        )
         return {
             "kind": "path",
             "path": str(output_path),
@@ -287,7 +292,9 @@ async def _build_body_payload(
             "bytes": byte_length,
             "truncated": False,
         }
-    output_path = _write_body_artifact(page_id=page_id, request_id=request_id, url=url, mime_type=mime_type, content=body_bytes)
+    output_path = _write_body_artifact(
+        page_id=page_id, request_id=request_id, url=url, mime_type=mime_type, content=body_bytes
+    )
     return {
         "kind": "path",
         "path": str(output_path),
@@ -352,7 +359,10 @@ def _is_textual_mime(mime_type: str) -> bool:
         return False
     if normalized.startswith("text/"):
         return True
-    return any(token in normalized for token in ("json", "xml", "javascript", "ecmascript", "svg", "x-www-form-urlencoded"))
+    return any(
+        token in normalized
+        for token in ("json", "xml", "javascript", "ecmascript", "svg", "x-www-form-urlencoded")
+    )
 
 
 def _write_body_artifact(

@@ -45,7 +45,9 @@ class Flow:
         return self._last_snapshot
 
     def snapshot_find(self, *, role: str, name: str, nth: int = 0, refresh: bool = False) -> str:
-        snapshot = self.snapshot() if refresh or self._last_snapshot is None else self._last_snapshot
+        snapshot = (
+            self.snapshot() if refresh or self._last_snapshot is None else self._last_snapshot
+        )
         return snapshot.find_ref(role=role, name=name, nth=nth)
 
     def click(self, ref: str) -> dict[str, Any]:
@@ -72,7 +74,9 @@ class Flow:
     def wait(self, seconds: float) -> dict[str, Any]:
         return self.client.wait(seconds)
 
-    def wait_text(self, text: str, *, timeout: float = 5.0, gone: bool = False, exact: bool = False) -> dict[str, Any]:
+    def wait_text(
+        self, text: str, *, timeout: float = 5.0, gone: bool = False, exact: bool = False
+    ) -> dict[str, Any]:
         return self.client.wait_text(text, timeout=timeout, gone=gone, exact=exact)
 
     def html(self) -> str:

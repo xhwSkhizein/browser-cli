@@ -10,12 +10,17 @@ import time
 from pathlib import Path
 
 import pytest
+from tests.integration.fixture_server import run_fixture_server
 
 from browser_cli.cli.main import main
 from browser_cli.daemon.client import send_command
-from browser_cli.errors import AmbiguousRefError, BusyTabError, NoSnapshotContextError, StaleSnapshotError
+from browser_cli.errors import (
+    AmbiguousRefError,
+    BusyTabError,
+    NoSnapshotContextError,
+    StaleSnapshotError,
+)
 from browser_cli.profiles.discovery import discover_chrome_executable
-from tests.integration.fixture_server import run_fixture_server
 
 
 def _can_launch_daemon_browser() -> bool:
@@ -67,7 +72,9 @@ def _configure_runtime(
     search_url_template: str | None = None,
 ) -> None:
     real_home = Path.home()
-    if not (real_home / "Library" / "Caches" / "ms-playwright").exists() and sys.platform.startswith("linux"):
+    if not (
+        real_home / "Library" / "Caches" / "ms-playwright"
+    ).exists() and sys.platform.startswith("linux"):
         playwright_cache = real_home / ".cache" / "ms-playwright"
     else:
         playwright_cache = real_home / "Library" / "Caches" / "ms-playwright"
@@ -173,7 +180,10 @@ def test_navigation_and_lifecycle_commands(monkeypatch, tmp_path: Path, capsys) 
         assert second_page_id != first_page_id
 
         tabs_payload = _run_cli_json(["tabs"], capsys)
-        assert [tab["page_id"] for tab in tabs_payload["data"]["tabs"]] == [second_page_id, first_page_id]
+        assert [tab["page_id"] for tab in tabs_payload["data"]["tabs"]] == [
+            second_page_id,
+            first_page_id,
+        ]
 
         switch_payload = _run_cli_json(["switch-tab", first_page_id], capsys)
         assert switch_payload["data"]["page"]["page_id"] == first_page_id
@@ -198,7 +208,9 @@ def test_navigation_and_lifecycle_commands(monkeypatch, tmp_path: Path, capsys) 
 
 
 @pytest.mark.skipif(not _can_launch_daemon_browser(), reason="Stable Chrome runtime unavailable")
-def test_snapshot_html_and_element_interaction_commands(monkeypatch, tmp_path: Path, capsys) -> None:
+def test_snapshot_html_and_element_interaction_commands(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
     with run_fixture_server() as base_url:
         _configure_runtime(monkeypatch, tmp_path)
         _run_cli_json(["open", f"{base_url}/interactive"], capsys)
@@ -271,7 +283,9 @@ def test_snapshot_html_and_element_interaction_commands(monkeypatch, tmp_path: P
 
         double_click_payload = _run_cli_json(["double-click", double_click_ref], capsys)
         assert double_click_payload["data"]["action"] == "double-click"
-        dbl_status = _run_cli_json(["eval", "() => document.getElementById('dbl-status').textContent"], capsys)
+        dbl_status = _run_cli_json(
+            ["eval", "() => document.getElementById('dbl-status').textContent"], capsys
+        )
         assert dbl_status["data"]["result"] == "1"
 
         click_payload = _run_cli_json(["click", reveal_ref], capsys)
@@ -285,12 +299,16 @@ def test_snapshot_html_and_element_interaction_commands(monkeypatch, tmp_path: P
         upload_file.write_text("upload payload", encoding="utf-8")
         upload_payload = _run_cli_json(["upload", upload_ref, str(upload_file)], capsys)
         assert upload_payload["data"]["file_path"].endswith("upload.txt")
-        upload_status = _run_cli_json(["eval", "() => document.getElementById('upload-status').textContent"], capsys)
+        upload_status = _run_cli_json(
+            ["eval", "() => document.getElementById('upload-status').textContent"], capsys
+        )
         assert upload_status["data"]["result"] == "upload.txt"
 
         drag_payload = _run_cli_json(["drag", drag_source_ref, drag_target_ref], capsys)
         assert drag_payload["data"]["dragged"] is True
-        drag_status = _run_cli_json(["eval", "() => document.getElementById('drag-status').textContent"], capsys)
+        drag_status = _run_cli_json(
+            ["eval", "() => document.getElementById('drag-status').textContent"], capsys
+        )
         assert drag_status["data"]["result"] == "drag-source"
 
         scroll_to_payload = _run_cli_json(["scroll-to", deep_target_ref], capsys)
@@ -317,7 +335,9 @@ def test_snapshot_html_and_element_interaction_commands(monkeypatch, tmp_path: P
 
 
 @pytest.mark.skipif(not _can_launch_daemon_browser(), reason="Stable Chrome runtime unavailable")
-def test_semantic_ref_recovers_after_rerender_and_iframe(monkeypatch, tmp_path: Path, capsys) -> None:
+def test_semantic_ref_recovers_after_rerender_and_iframe(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
     with run_fixture_server() as base_url:
         _configure_runtime(monkeypatch, tmp_path)
 
@@ -327,19 +347,25 @@ def test_semantic_ref_recovers_after_rerender_and_iframe(monkeypatch, tmp_path: 
         rerender_ref = _find_ref(semantic_refs, role="button", name="Rerender Stable Target")
 
         _run_cli_json(["click", target_ref], capsys)
-        first_status = _run_cli_json(["eval", "() => document.getElementById('semantic-status').textContent"], capsys)
+        first_status = _run_cli_json(
+            ["eval", "() => document.getElementById('semantic-status').textContent"], capsys
+        )
         assert first_status["data"]["result"] == "1"
 
         _run_cli_json(["click", rerender_ref], capsys)
         _run_cli_json(["click", target_ref], capsys)
-        second_status = _run_cli_json(["eval", "() => document.getElementById('semantic-status').textContent"], capsys)
+        second_status = _run_cli_json(
+            ["eval", "() => document.getElementById('semantic-status').textContent"], capsys
+        )
         assert second_status["data"]["result"] == "2"
 
         _run_cli_json(["open", f"{base_url}/iframe"], capsys)
         iframe_refs = _snapshot_refs(capsys)
         frame_ref = _find_ref(iframe_refs, role="button", name="Frame Trigger")
         _run_cli_json(["click", frame_ref], capsys)
-        frame_status = _run_cli_json(["eval", "() => document.getElementById('frame-status').textContent"], capsys)
+        frame_status = _run_cli_json(
+            ["eval", "() => document.getElementById('frame-status').textContent"], capsys
+        )
         assert frame_status["data"]["result"] == "clicked"
 
         _stop_daemon(capsys)
@@ -393,15 +419,21 @@ def test_keyboard_mouse_wait_and_eval_commands(monkeypatch, tmp_path: Path, caps
 
         press_payload = _run_cli_json(["press", "Enter"], capsys)
         assert press_payload["data"]["key"] == "Enter"
-        key_status = _run_cli_json(["eval", "() => document.getElementById('key-status').textContent"], capsys)
+        key_status = _run_cli_json(
+            ["eval", "() => document.getElementById('key-status').textContent"], capsys
+        )
         assert key_status["data"]["result"] == "up:Enter"
 
         _run_cli_json(["key-down", "Shift"], capsys)
-        key_down_status = _run_cli_json(["eval", "() => document.getElementById('key-status').textContent"], capsys)
+        key_down_status = _run_cli_json(
+            ["eval", "() => document.getElementById('key-status').textContent"], capsys
+        )
         assert key_down_status["data"]["result"] == "down:Shift"
 
         _run_cli_json(["key-up", "Shift"], capsys)
-        key_up_status = _run_cli_json(["eval", "() => document.getElementById('key-status').textContent"], capsys)
+        key_up_status = _run_cli_json(
+            ["eval", "() => document.getElementById('key-status').textContent"], capsys
+        )
         assert key_up_status["data"]["result"] == "up:Shift"
 
         rect_payload = _run_cli_json(
@@ -415,22 +447,36 @@ def test_keyboard_mouse_wait_and_eval_commands(monkeypatch, tmp_path: Path, caps
 
         _run_cli_json(["mouse-move", str(coords["x"]), str(coords["y"])], capsys)
         _run_cli_json(["mouse-down"], capsys)
-        down_status = _run_cli_json(["eval", "() => document.getElementById('mouse-status').textContent"], capsys)
+        down_status = _run_cli_json(
+            ["eval", "() => document.getElementById('mouse-status').textContent"], capsys
+        )
         assert down_status["data"]["result"].startswith("mousedown:")
 
         _run_cli_json(["mouse-up"], capsys)
-        up_status = _run_cli_json(["eval", "() => document.getElementById('mouse-status').textContent"], capsys)
+        up_status = _run_cli_json(
+            ["eval", "() => document.getElementById('mouse-status').textContent"], capsys
+        )
         assert up_status["data"]["result"].startswith(("mouseup:", "click:"))
 
         _run_cli_json(["mouse-click", str(coords["x2"]), str(coords["y2"])], capsys)
-        click_status = _run_cli_json(["eval", "() => document.getElementById('mouse-status').textContent"], capsys)
+        click_status = _run_cli_json(
+            ["eval", "() => document.getElementById('mouse-status').textContent"], capsys
+        )
         assert click_status["data"]["result"].startswith("click:")
 
         _run_cli_json(
-            ["mouse-drag", str(coords["x"]), str(coords["y"]), str(coords["x2"]), str(coords["y2"])],
+            [
+                "mouse-drag",
+                str(coords["x"]),
+                str(coords["y"]),
+                str(coords["x2"]),
+                str(coords["y2"]),
+            ],
             capsys,
         )
-        drag_status = _run_cli_json(["eval", "() => document.getElementById('mouse-status').textContent"], capsys)
+        drag_status = _run_cli_json(
+            ["eval", "() => document.getElementById('mouse-status').textContent"], capsys
+        )
         assert drag_status["data"]["result"].startswith(("mousemove:", "mouseup:", "click:"))
 
         scroll_payload = _run_cli_json(["scroll", "--dy", "900"], capsys)
@@ -452,7 +498,9 @@ def test_keyboard_mouse_wait_and_eval_commands(monkeypatch, tmp_path: Path, caps
 
 
 @pytest.mark.skipif(not _can_launch_daemon_browser(), reason="Stable Chrome runtime unavailable")
-def test_capture_network_dialog_storage_trace_and_video_commands(monkeypatch, tmp_path: Path, capsys) -> None:
+def test_capture_network_dialog_storage_trace_and_video_commands(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
     with run_fixture_server() as base_url:
         _configure_runtime(monkeypatch, tmp_path)
         open_payload = _run_cli_json(["open", f"{base_url}/interactive"], capsys)
@@ -469,7 +517,9 @@ def test_capture_network_dialog_storage_trace_and_video_commands(monkeypatch, tm
 
         _run_cli_json(["console-start"], capsys)
         _run_cli_json(["click", fetch_ref], capsys)
-        waited_record = _run_cli_json(["network-wait", "--url-contains", "/api/ping?from=button", "--timeout", "5"], capsys)
+        waited_record = _run_cli_json(
+            ["network-wait", "--url-contains", "/api/ping?from=button", "--timeout", "5"], capsys
+        )
         assert waited_record["data"]["record"]["status"] == 200
         assert waited_record["data"]["record"]["body"]["kind"] == "text"
         assert waited_record["data"]["record"]["body"]["text"] == '{"ok":true}'
@@ -485,8 +535,15 @@ def test_capture_network_dialog_storage_trace_and_video_commands(monkeypatch, tm
         urls = [record["url"] for record in network_payload["data"]["records"]]
         assert any("/api/ping?from=button" in url for url in urls)
         assert not any("/asset.js" in url for url in urls)
-        api_records = [record for record in network_payload["data"]["records"] if "/api/ping?from=button" in record["url"]]
-        assert any(record["response_headers"]["content-type"].startswith("application/json") for record in api_records)
+        api_records = [
+            record
+            for record in network_payload["data"]["records"]
+            if "/api/ping?from=button" in record["url"]
+        ]
+        assert any(
+            record["response_headers"]["content-type"].startswith("application/json")
+            for record in api_records
+        )
 
         network_static_payload = _run_cli_json(["network", "--include-static"], capsys)
         static_urls = [record["url"] for record in network_static_payload["data"]["records"]]
@@ -494,7 +551,9 @@ def test_capture_network_dialog_storage_trace_and_video_commands(monkeypatch, tm
         assert any("/styles.css" in url for url in static_urls)
 
         console_payload = _run_cli_json(["console", "--type", "error", "--no-clear"], capsys)
-        assert any(message["text"] == "fixture-error" for message in console_payload["data"]["messages"])
+        assert any(
+            message["text"] == "fixture-error" for message in console_payload["data"]["messages"]
+        )
         console_stopped = _run_cli_json(["console-stop"], capsys)
         assert console_stopped["data"]["capturing"] is False
         network_stopped = _run_cli_json(["network-stop"], capsys)
@@ -502,7 +561,9 @@ def test_capture_network_dialog_storage_trace_and_video_commands(monkeypatch, tm
 
         screenshot_path = tmp_path / "shot.png"
         pdf_path = tmp_path / "page.pdf"
-        screenshot_payload = _run_cli_json(["screenshot", str(screenshot_path), "--full-page"], capsys)
+        screenshot_payload = _run_cli_json(
+            ["screenshot", str(screenshot_path), "--full-page"], capsys
+        )
         assert Path(screenshot_payload["data"]["path"]).exists()
         pdf_payload = _run_cli_json(["pdf", str(pdf_path)], capsys)
         assert Path(pdf_payload["data"]["path"]).exists()
@@ -522,7 +583,9 @@ def test_capture_network_dialog_storage_trace_and_video_commands(monkeypatch, tm
         _run_cli_json(["wait", "5", "--text", "alert:done"], capsys)
 
         _run_cli_json(["click", storage_ref], capsys)
-        storage_status = _run_cli_json(["eval", "() => document.getElementById('storage-status').textContent"], capsys)
+        storage_status = _run_cli_json(
+            ["eval", "() => document.getElementById('storage-status').textContent"], capsys
+        )
         assert storage_status["data"]["result"] == "stored-token"
 
         _run_cli_json(["cookie-set", "theme", "dark"], capsys)
@@ -538,7 +601,10 @@ def test_capture_network_dialog_storage_trace_and_video_commands(monkeypatch, tm
         assert cleared_cookies["data"]["cookies"] == []
 
         cleared_storage = _run_cli_json(
-            ["eval", "() => { localStorage.clear(); return localStorage.getItem('fixture-token'); }"],
+            [
+                "eval",
+                "() => { localStorage.clear(); return localStorage.getItem('fixture-token'); }",
+            ],
             capsys,
         )
         assert cleared_storage["data"]["result"] is None
@@ -549,7 +615,9 @@ def test_capture_network_dialog_storage_trace_and_video_commands(monkeypatch, tm
         loaded_cookie = _run_cli_json(["cookies", "--name", "theme"], capsys)
         assert any(cookie["name"] == "theme" for cookie in loaded_cookie["data"]["cookies"])
 
-        loaded_storage = _run_cli_json(["eval", "() => localStorage.getItem('fixture-token')"], capsys)
+        loaded_storage = _run_cli_json(
+            ["eval", "() => localStorage.getItem('fixture-token')"], capsys
+        )
         assert loaded_storage["data"]["result"] == "stored-token"
 
         trace_path = tmp_path / "trace.zip"

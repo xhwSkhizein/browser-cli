@@ -18,7 +18,7 @@ def run_action_command(args: Namespace) -> str:
     except ValueError as exc:
         raise InvalidInputError(str(exc)) from exc
     response = send_command(
-        getattr(args, "action_name"),
+        args.action_name,
         request_payload,
         start_if_needed=bool(getattr(args, "action_start_if_needed", True)),
     )

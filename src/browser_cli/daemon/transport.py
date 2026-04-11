@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import socket
@@ -17,10 +18,8 @@ DAEMON_RUNTIME_VERSION = "2026-04-10-dual-driver-extension-v1"
 def ensure_run_dir() -> Path:
     run_dir = get_app_paths().run_dir
     run_dir.mkdir(parents=True, exist_ok=True)
-    try:
+    with contextlib.suppress(OSError):
         os.chmod(run_dir, 0o700)
-    except OSError:
-        pass
     return run_dir
 
 
@@ -30,10 +29,8 @@ def write_run_info(info: dict[str, Any]) -> None:
     tmp_path = run_info_path.with_suffix(".tmp")
     tmp_path.write_text(json.dumps(info), encoding="utf-8")
     tmp_path.replace(run_info_path)
-    try:
+    with contextlib.suppress(OSError):
         os.chmod(run_info_path, 0o600)
-    except OSError:
-        pass
 
 
 def read_run_info() -> dict[str, Any] | None:
@@ -45,10 +42,8 @@ def read_run_info() -> dict[str, Any] | None:
 
 
 def remove_run_info() -> None:
-    try:
+    with contextlib.suppress(OSError):
         get_app_paths().run_info_path.unlink()
-    except OSError:
-        pass
 
 
 def safe_remove_socket(path: Path | None = None) -> None:

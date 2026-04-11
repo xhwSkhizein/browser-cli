@@ -4,14 +4,14 @@ from .protocol import (
     ALL_EXTENSION_CAPABILITIES,
     ARTIFACT_CHUNK_SIZE,
     CORE_EXTENSION_CAPABILITIES,
+    OPTIONAL_EXTENSION_CAPABILITIES,
+    REQUIRED_EXTENSION_CAPABILITIES,
     ExtensionArtifactBegin,
     ExtensionArtifactChunk,
     ExtensionArtifactEnd,
     ExtensionHello,
     ExtensionRequest,
     ExtensionResponse,
-    OPTIONAL_EXTENSION_CAPABILITIES,
-    REQUIRED_EXTENSION_CAPABILITIES,
 )
 from .session import ExtensionHub, ExtensionSession
 
