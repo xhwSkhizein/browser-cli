@@ -1,0 +1,121 @@
+{
+  "task": {
+    "id": "karpathy_nitter_latest_five",
+    "name": "Karpathy Nitter Latest Five",
+    "goal": "Open Andrej Karpathy's Nitter profile, extract the latest five timeline entries with detailed fields, and save the structured result as JSON.",
+    "inputs": {
+      "url": {
+        "required": false,
+        "type": "string",
+        "default": "https://nitter.net/karpathy"
+      },
+      "limit": {
+        "required": false,
+        "type": "integer",
+        "default": 5
+      },
+      "wait_seconds": {
+        "required": false,
+        "type": "number",
+        "default": 3.0
+      }
+    },
+    "expected_outputs": {
+      "tweets": "Latest tweet objects with ids, URLs, author info, publish label, content text, links, media, and reply/retweet flags.",
+      "artifacts.result_path": "Path to the persisted result.json artifact.",
+      "artifacts.profile_state_path": "Path to the persisted profile-state.json diagnostic artifact."
+    }
+  },
+  "environment": {
+    "site": "nitter.net",
+    "entry_url": "https://nitter.net/karpathy",
+    "requires_login": false,
+    "agent_scope": "caller-provided X_AGENT_ID or the default public scope",
+    "profile_expectation": "Uses the shared browser-cli daemon and currently succeeds when the daemon is running on the extension driver.",
+    "browser_assumptions": [
+      "The Nitter profile page renders a public timeline as HTML with .timeline-item entries.",
+      "The task should avoid large snapshot or HTML payloads and instead extract compact structured data directly from the page."
+    ]
+  },
+  "success_path": {
+    "steps": [
+      "Open the public Nitter profile for Andrej Karpathy.",
+      "Wait for the page to settle and capture a compact page-state diagnostic object.",
+      "Run a compact in-page extraction over the first five .timeline-item nodes and normalize the result into JSON.",
+      "Persist profile-state.json and result.json in the task artifacts directory."
+    ],
+    "key_refs": [],
+    "key_assertions": [
+      "A valid run should produce exactly five extracted tweet objects.",
+      "The extraction should not rely on snapshot refs or full HTML capture.",
+      "If no tweets are extracted, result.json must fail explicitly instead of inventing tweet content."
+    ],
+    "artifacts": [
+      "profile-state.json",
+      "result.json"
+    ]
+  },
+  "recovery_hints": {
+    "retryable_steps": [
+      "Retry later if Nitter itself is unavailable or returns a sparse profile page.",
+      "Increase wait_seconds slightly if the profile title loads before the timeline content."
+    ],
+    "alternate_paths": [
+      "If the page structure changes, adjust the extraction query set around .timeline-item and the tweet-date/tweet-content selectors.",
+      "If browser-cli transport limits are raised later, snapshot or HTML artifacts can be reintroduced as optional diagnostics."
+    ],
+    "stale_ref_strategy": "This task intentionally avoids semantic refs because a full-page snapshot currently risks exceeding the daemon response size limit on large timelines.",
+    "known_wait_points": [
+      "Initial profile render after opening https://nitter.net/karpathy."
+    ],
+    "anti_bot_recovery": [
+      "If the profile page title resolves but the timeline count is zero, treat it as a source-side or rendering issue and fail explicitly."
+    ]
+  },
+  "failures": [
+    {
+      "attempt": "2026-04-09 managed-profile exploration",
+      "step": "Profile and RSS reachability",
+      "reason": "The current environment produced an empty DOM for both the profile and RSS routes.",
+      "signal": "browser-cli html returned an empty HTML shell and page state showed body length 0.",
+      "resolution": "Do not fabricate data; mark the source as unavailable."
+    },
+    {
+      "attempt": "2026-04-11 extension-mode exploration",
+      "step": "Task artifact convergence",
+      "reason": "Full snapshot capture exceeded the current daemon line-based transport limit on the Nitter profile page.",
+      "signal": "Flow.snapshot() failed with 'Separator is not found, and chunk exceed the limit'.",
+      "resolution": "Converge the task to compact self-executing eval extraction instead of snapshot/html artifacts."
+    },
+    {
+      "attempt": "2026-04-11 extension-mode exploration",
+      "step": "JavaScript evaluation semantics",
+      "reason": "Arrow-function eval payloads returned null under the current extension driver implementation.",
+      "signal": "browser-cli eval '() => document.title' returned result=null while '(() => document.title)()' returned the expected string.",
+      "resolution": "Use self-executing JavaScript expressions in this task until extension eval semantics are aligned with Playwright."
+    }
+  ],
+  "knowledge": {
+    "stable_selectors_or_roles": [
+      ".timeline-item",
+      ".tweet-date a[href*='/status/']",
+      ".tweet-content",
+      ".fullname",
+      ".username",
+      ".replying-to",
+      ".tweet-stats"
+    ],
+    "semantic_ref_notes": [
+      "This task currently avoids refs on purpose; the page is better handled as compact structured extraction."
+    ],
+    "pagination_pattern": "Timeline feed, latest items first.",
+    "lazy_load_pattern": null,
+    "anti_bot_notes": [
+      "This target behaves differently between managed and extension drivers; extension mode currently renders the profile correctly."
+    ],
+    "output_interpretation_notes": [
+      "result.json is authoritative only when ok=true.",
+      "The published_label field may be relative for very recent entries, because Nitter renders mixed absolute and relative labels."
+    ]
+  }
+}

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -61,3 +62,62 @@ class SemanticSnapshot:
     tree: str
     refs: dict[str, RefData]
     metadata: SnapshotMetadata
+
+
+@dataclass(slots=True, frozen=True)
+class SnapshotInput:
+    raw_snapshot: str
+    captured_url: str
+    captured_at: float = field(default_factory=time.time)
+
+
+@dataclass(slots=True, frozen=True)
+class LocatorSpec:
+    ref: str
+    role: str
+    name: str | None = None
+    text_content: str | None = None
+    match_text: str | None = None
+    child_text: str | None = None
+    nth: int | None = None
+    tag: str | None = None
+    interactive: bool = False
+    frame_path: tuple[int, ...] = ()
+    selector_recipe: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "ref": self.ref,
+            "role": self.role,
+            "name": self.name,
+            "text_content": self.text_content,
+            "match_text": self.match_text,
+            "child_text": self.child_text,
+            "nth": self.nth,
+            "tag": self.tag,
+            "interactive": self.interactive,
+            "frame_path": list(self.frame_path),
+            "selector_recipe": self.selector_recipe,
+        }
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "LocatorSpec":
+        return cls(
+            ref=str(payload.get("ref") or "").strip(),
+            role=str(payload.get("role") or "").strip(),
+            name=(str(payload["name"]) if payload.get("name") is not None else None),
+            text_content=(
+                str(payload["text_content"]) if payload.get("text_content") is not None else None
+            ),
+            match_text=(str(payload["match_text"]) if payload.get("match_text") is not None else None),
+            child_text=(str(payload["child_text"]) if payload.get("child_text") is not None else None),
+            nth=(int(payload["nth"]) if payload.get("nth") is not None else None),
+            tag=(str(payload["tag"]) if payload.get("tag") is not None else None),
+            interactive=bool(payload.get("interactive")),
+            frame_path=tuple(int(item) for item in (payload.get("frame_path") or [])),
+            selector_recipe=(
+                str(payload["selector_recipe"])
+                if payload.get("selector_recipe") is not None
+                else None
+            ),
+        )

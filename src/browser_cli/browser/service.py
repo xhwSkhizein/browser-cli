@@ -11,13 +11,19 @@ import urllib.parse
 from pathlib import Path
 from typing import Any
 
-from browser_cli.browser.models import BrowserLaunchConfig
+from browser_cli.browser.models import BrowserLaunchConfig, default_headless
 from browser_cli.browser.snapshot import SnapshotCapture, capture_snapshot
-from browser_cli.browser.stealth import STEALTH_INIT_SCRIPT, build_launch_args
+from browser_cli.browser.stealth import (
+    build_context_options,
+    build_ignore_default_args,
+    build_init_script,
+    build_launch_args,
+)
 from browser_cli.constants import get_app_paths
 from browser_cli.errors import (
     AmbiguousRefError,
     BrowserUnavailableError,
+    EmptyContentError,
     InvalidInputError,
     NoSnapshotContextError,
     OperationFailedError,
@@ -28,18 +34,25 @@ from browser_cli.errors import (
 )
 from browser_cli.profiles.discovery import ChromeEnvironment, discover_chrome_environment
 from browser_cli.refs import SemanticRefResolver, SnapshotRegistry
-from browser_cli.refs.models import RefData, SemanticSnapshot, SnapshotMetadata
+from browser_cli.refs.generator import SemanticSnapshotGenerator
+from browser_cli.refs.models import LocatorSpec, RefData, SemanticSnapshot, SnapshotInput, SnapshotMetadata
 
 
 class BrowserService:
+    READ_NAVIGATION_TIMEOUT_SECONDS = 30.0
+    READ_SETTLE_TIMEOUT_MS = 1_200
+    READ_SCROLL_PAUSE_MS = 450
+    READ_SCROLL_MAX_ROUNDS = 8
+    READ_SCROLL_STABLE_ROUNDS = 2
+
     def __init__(
         self,
         chrome_environment: ChromeEnvironment | None = None,
         *,
-        headless: bool = True,
+        headless: bool | None = None,
     ) -> None:
         self._chrome_environment = chrome_environment
-        self._headless = headless
+        self._headless = default_headless() if headless is None else headless
         self._playwright: Any | None = None
         self._context: Any | None = None
         self._pages: dict[str, Any] = {}
@@ -60,6 +73,13 @@ class BrowserService:
     @property
     def chrome_environment(self) -> ChromeEnvironment | None:
         return self._chrome_environment
+
+    def configure_environment(self, chrome_environment: ChromeEnvironment) -> None:
+        if self._context is not None and self._chrome_environment not in (None, chrome_environment):
+            raise OperationFailedError(
+                "Browser daemon is already running with a different Chrome profile."
+            )
+        self._chrome_environment = chrome_environment
 
     async def ensure_started(self) -> None:
         async with self._start_lock:
@@ -89,6 +109,11 @@ class BrowserService:
             chromium = self._playwright.chromium
             video_dir = get_app_paths().artifacts_dir / "playwright-video"
             video_dir.mkdir(parents=True, exist_ok=True)
+            context_options = build_context_options(
+                viewport_width=launch_config.viewport_width,
+                viewport_height=launch_config.viewport_height,
+                locale=launch_config.locale,
+            )
             self._context = await chromium.launch_persistent_context(
                 user_data_dir=str(launch_config.user_data_dir),
                 executable_path=str(launch_config.executable_path) if launch_config.executable_path else None,
@@ -102,10 +127,21 @@ class BrowserService:
                     "width": launch_config.viewport_width,
                     "height": launch_config.viewport_height,
                 },
-                ignore_default_args=["--enable-automation"],
-                args=[*build_launch_args(), f"--profile-directory={launch_config.profile_directory}"],
+                ignore_default_args=build_ignore_default_args(),
+                args=[
+                    *build_launch_args(
+                        headless=launch_config.headless,
+                        viewport_width=launch_config.viewport_width,
+                        viewport_height=launch_config.viewport_height,
+                        locale=launch_config.locale,
+                    ),
+                    f"--profile-directory={launch_config.profile_directory}",
+                ],
+                **context_options,
             )
-            await self._context.add_init_script(STEALTH_INIT_SCRIPT)
+            init_script = build_init_script(headless=launch_config.headless, locale=launch_config.locale)
+            if init_script:
+                await self._context.add_init_script(init_script)
             for page in list(self._context.pages):
                 await page.close()
         except Exception as exc:
@@ -154,6 +190,7 @@ class BrowserService:
     async def new_tab(
         self,
         *,
+        page_id: str | None = None,
         url: str | None = None,
         wait_until: str = "load",
         timeout_seconds: float | None = None,
@@ -161,7 +198,7 @@ class BrowserService:
         await self.ensure_started()
         async with self._page_create_lock:
             page = await self._context.new_page()
-            page_id = self._next_page_id()
+            page_id = page_id or self._next_page_id()
             self._pages[page_id] = page
             if url:
                 await page.goto(
@@ -170,6 +207,97 @@ class BrowserService:
                     timeout=(timeout_seconds or 30.0) * 1000.0,
                 )
             return await self.get_page_summary(page_id)
+
+    async def capture_snapshot_input(
+        self,
+        page_id: str,
+        *,
+        interactive: bool = False,
+        full_page: bool = True,
+    ) -> SnapshotInput:
+        _ = interactive
+        _ = full_page
+        page = self._require_page(page_id)
+        raw_snapshot = await SemanticSnapshotGenerator().page_snapshot_for_ai(page)
+        return SnapshotInput(
+            raw_snapshot=raw_snapshot,
+            captured_url=str(page.url),
+            captured_at=time.time(),
+        )
+
+    async def capture_semantic_snapshot(
+        self,
+        page_id: str,
+        *,
+        interactive: bool = False,
+        full_page: bool = True,
+    ) -> SemanticSnapshot:
+        page = self._require_page(page_id)
+        raw_snapshot = await SemanticSnapshotGenerator().page_snapshot_for_ai(page)
+        return SemanticSnapshotGenerator().snapshot_from_raw_text(
+            raw_snapshot,
+            page_id=page_id,
+            captured_url=str(page.url),
+            interactive=interactive,
+            full_page=full_page,
+            captured_at=time.time(),
+        )
+
+    async def read_page(
+        self,
+        *,
+        url: str,
+        output_mode: str = "html",
+        scroll_bottom: bool = False,
+    ) -> dict[str, Any]:
+        if output_mode not in {"html", "snapshot"}:
+            raise InvalidInputError(f"Unsupported read output mode: {output_mode}")
+        await self.ensure_started()
+        page_id: str | None = None
+        page: Any | None = None
+        try:
+            async with self._page_create_lock:
+                page = await self._context.new_page()
+                page_id = self._next_page_id()
+                self._pages[page_id] = page
+            await page.goto(
+                self._normalize_url(url),
+                wait_until="load",
+                timeout=self.READ_NAVIGATION_TIMEOUT_SECONDS * 1000.0,
+            )
+            await self._settle_page(page)
+            if scroll_bottom:
+                await self._scroll_page_to_bottom(page)
+                await self._settle_page(page)
+            if output_mode == "snapshot":
+                snapshot = await capture_snapshot(page, page_id=page_id, interactive=False, full_page=True)
+                body = snapshot.tree
+            else:
+                body = await self._capture_html_from_page(page)
+            if not body.strip():
+                raise EmptyContentError()
+            payload = {
+                "page_id": page_id,
+                "body": body,
+                "output_mode": output_mode,
+                "url": page.url,
+            }
+            chrome_environment = self._chrome_environment
+            if chrome_environment is not None:
+                payload["used_fallback_profile"] = chrome_environment.source == "fallback"
+                if chrome_environment.source == "fallback":
+                    payload["fallback_profile_dir"] = str(chrome_environment.user_data_dir)
+                    payload["fallback_reason"] = chrome_environment.fallback_reason
+                if chrome_environment.profile_name:
+                    payload["profile_name"] = chrome_environment.profile_name
+                payload["profile_directory"] = chrome_environment.profile_directory
+            return payload
+        finally:
+            if page_id is not None and page_id in self._pages:
+                try:
+                    await self._close_page(page_id)
+                except Exception:
+                    pass
 
     async def close_tab(self, page_id: str) -> dict[str, Any]:
         return await self._close_page(page_id)
@@ -205,14 +333,7 @@ class BrowserService:
 
     async def capture_html(self, page_id: str) -> dict[str, Any]:
         page = self._require_page(page_id)
-        html = await page.evaluate(
-            """() => {
-                const doctype = document.doctype
-                    ? `<!DOCTYPE ${document.doctype.name}>`
-                    : '';
-                return `${doctype}${document.documentElement.outerHTML}`;
-            }"""
-        )
+        html = await self._capture_html_from_page(page)
         return {
             "page_id": page_id,
             "html": html,
@@ -268,6 +389,137 @@ class BrowserService:
         page = self._require_page(page_id)
         await page.set_viewport_size({"width": width, "height": height})
         return {"page_id": page_id, "width": width, "height": height}
+
+    async def click_locator(self, page_id: str, locator_spec: LocatorSpec) -> dict[str, Any]:
+        locator = await self._get_locator_by_spec(page_id, locator_spec)
+        await locator.click()
+        return {"page_id": page_id, "ref": locator_spec.ref, "action": "click"}
+
+    async def double_click_locator(self, page_id: str, locator_spec: LocatorSpec) -> dict[str, Any]:
+        locator = await self._get_locator_by_spec(page_id, locator_spec)
+        await locator.dblclick()
+        return {"page_id": page_id, "ref": locator_spec.ref, "action": "double-click"}
+
+    async def hover_locator(self, page_id: str, locator_spec: LocatorSpec) -> dict[str, Any]:
+        locator = await self._get_locator_by_spec(page_id, locator_spec)
+        await locator.hover()
+        return {"page_id": page_id, "ref": locator_spec.ref, "action": "hover"}
+
+    async def focus_locator(self, page_id: str, locator_spec: LocatorSpec) -> dict[str, Any]:
+        locator = await self._get_locator_by_spec(page_id, locator_spec)
+        await locator.focus()
+        return {"page_id": page_id, "ref": locator_spec.ref, "action": "focus"}
+
+    async def fill_locator(
+        self,
+        page_id: str,
+        locator_spec: LocatorSpec,
+        text: str,
+        *,
+        submit: bool = False,
+    ) -> dict[str, Any]:
+        locator = await self._get_locator_by_spec(page_id, locator_spec)
+        await locator.fill(text)
+        if submit:
+            await locator.press("Enter")
+        return {"page_id": page_id, "ref": locator_spec.ref, "filled": True, "submitted": submit}
+
+    async def select_locator(self, page_id: str, locator_spec: LocatorSpec, text: str) -> dict[str, Any]:
+        locator = await self._get_locator_by_spec(page_id, locator_spec)
+        await locator.select_option(label=text)
+        return {"page_id": page_id, "ref": locator_spec.ref, "selected": text}
+
+    async def list_locator_options(self, page_id: str, locator_spec: LocatorSpec) -> dict[str, Any]:
+        locator = await self._get_locator_by_spec(page_id, locator_spec)
+        options = await locator.locator("option").all_inner_texts()
+        normalized = [item.strip() for item in options if item.strip()]
+        return {"page_id": page_id, "ref": locator_spec.ref, "options": normalized}
+
+    async def set_checked_locator(
+        self,
+        page_id: str,
+        locator_spec: LocatorSpec,
+        *,
+        checked: bool,
+    ) -> dict[str, Any]:
+        locator = await self._get_locator_by_spec(page_id, locator_spec)
+        if checked:
+            await locator.check()
+        else:
+            await locator.uncheck()
+        return {"page_id": page_id, "ref": locator_spec.ref, "checked": checked}
+
+    async def scroll_to_locator(self, page_id: str, locator_spec: LocatorSpec) -> dict[str, Any]:
+        locator = await self._get_locator_by_spec(page_id, locator_spec)
+        await locator.scroll_into_view_if_needed()
+        return {"page_id": page_id, "ref": locator_spec.ref, "scrolled": True}
+
+    async def drag_between_locators(
+        self,
+        page_id: str,
+        start_locator_spec: LocatorSpec,
+        end_locator_spec: LocatorSpec,
+    ) -> dict[str, Any]:
+        source = await self._get_locator_by_spec(page_id, start_locator_spec)
+        target = await self._get_locator_by_spec(page_id, end_locator_spec)
+        await source.drag_to(target)
+        return {
+            "page_id": page_id,
+            "start_ref": start_locator_spec.ref,
+            "end_ref": end_locator_spec.ref,
+            "dragged": True,
+        }
+
+    async def upload_to_locator(
+        self,
+        page_id: str,
+        locator_spec: LocatorSpec,
+        file_path: str,
+    ) -> dict[str, Any]:
+        locator = await self._get_locator_by_spec(page_id, locator_spec)
+        await locator.set_input_files(file_path)
+        return {"page_id": page_id, "ref": locator_spec.ref, "file_path": str(Path(file_path).resolve())}
+
+    async def evaluate_on_locator(self, page_id: str, locator_spec: LocatorSpec, code: str) -> dict[str, Any]:
+        locator = await self._get_locator_by_spec(page_id, locator_spec)
+        result = await locator.evaluate(code)
+        return {"page_id": page_id, "ref": locator_spec.ref, "result": self._normalize_json_value(result)}
+
+    async def verify_state_locator(self, page_id: str, locator_spec: LocatorSpec, *, state: str) -> dict[str, Any]:
+        locator = await self._get_locator_by_spec(page_id, locator_spec)
+        normalized = state.strip().lower()
+        if normalized in {"checked", "unchecked"}:
+            actual = await locator.is_checked()
+            expected = normalized == "checked"
+        elif normalized == "disabled":
+            actual = await locator.is_disabled()
+            expected = True
+        elif normalized == "enabled":
+            actual = await locator.is_enabled()
+            expected = True
+        elif normalized == "editable":
+            actual = await locator.is_editable()
+            expected = True
+        elif normalized == "visible":
+            actual = await locator.is_visible()
+            expected = True
+        elif normalized == "hidden":
+            actual = not await locator.is_visible()
+            expected = True
+        else:
+            raise InvalidInputError(f"Unsupported verify-state value: {state}")
+        return {"page_id": page_id, "ref": locator_spec.ref, "state": normalized, "passed": actual == expected}
+
+    async def verify_value_locator(
+        self,
+        page_id: str,
+        locator_spec: LocatorSpec,
+        *,
+        expected: str,
+    ) -> dict[str, Any]:
+        locator = await self._get_locator_by_spec(page_id, locator_spec)
+        actual = await locator.input_value()
+        return {"page_id": page_id, "ref": locator_spec.ref, "expected": expected, "actual": actual, "passed": actual == expected}
 
     async def click_ref(self, page_id: str, ref: str) -> dict[str, Any]:
         locator = await self._get_locator_by_ref(page_id, ref)
@@ -368,8 +620,38 @@ class BrowserService:
 
     async def wheel(self, page_id: str, *, dx: int = 0, dy: int = 700) -> dict[str, Any]:
         page = self._require_page(page_id)
+        before = await page.evaluate(
+            """() => ({
+                scrollX: window.scrollX,
+                scrollY: window.scrollY
+            })"""
+        )
         await page.mouse.wheel(dx, dy)
-        return {"page_id": page_id, "dx": dx, "dy": dy}
+        await page.wait_for_timeout(50)
+        after = await page.evaluate(
+            """() => ({
+                scrollX: window.scrollX,
+                scrollY: window.scrollY
+            })"""
+        )
+        if (after["scrollX"], after["scrollY"]) == (before["scrollX"], before["scrollY"]) and (dx or dy):
+            after = await page.evaluate(
+                """({ dx, dy }) => {
+                    window.scrollBy(dx, dy);
+                    return {
+                        scrollX: window.scrollX,
+                        scrollY: window.scrollY
+                    };
+                }""",
+                {"dx": dx, "dy": dy},
+            )
+        return {
+            "page_id": page_id,
+            "dx": dx,
+            "dy": dy,
+            "scroll_x": after["scrollX"],
+            "scroll_y": after["scrollY"],
+        }
 
     async def mouse_move(self, page_id: str, *, x: int, y: int) -> dict[str, Any]:
         page = self._require_page(page_id)
@@ -850,6 +1132,18 @@ class BrowserService:
             raise AmbiguousRefError()
         return locator.first
 
+    async def _get_locator_by_spec(self, page_id: str, locator_spec: LocatorSpec) -> Any:
+        page = self._require_page(page_id)
+        locator = self._ref_resolver.get_locator_from_spec(page, locator_spec)
+        if locator is None:
+            raise RefNotFoundError()
+        count = await locator.count()
+        if count == 0:
+            raise StaleSnapshotError()
+        if count > 1:
+            raise AmbiguousRefError()
+        return locator.first
+
     def _remove_page_handlers(self, page_id: str) -> None:
         page = self._pages.get(page_id)
         self._console_messages.pop(page_id, None)
@@ -884,6 +1178,42 @@ class BrowserService:
     def _next_page_id(self) -> str:
         self._page_counter += 1
         return f"page_{self._page_counter:04d}"
+
+    @staticmethod
+    async def _capture_html_from_page(page: Any) -> str:
+        return await page.evaluate(
+            """() => {
+                const doctype = document.doctype
+                    ? `<!DOCTYPE ${document.doctype.name}>`
+                    : '';
+                return `${doctype}${document.documentElement.outerHTML}`;
+            }"""
+        )
+
+    async def _settle_page(self, page: Any) -> None:
+        await page.wait_for_timeout(self.READ_SETTLE_TIMEOUT_MS)
+
+    async def _scroll_page_to_bottom(self, page: Any) -> None:
+        stable_rounds = 0
+        previous_height = -1
+        for _ in range(self.READ_SCROLL_MAX_ROUNDS):
+            current_height = await page.evaluate(
+                "() => Math.max(document.body.scrollHeight, document.documentElement.scrollHeight)"
+            )
+            await page.evaluate(
+                "() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'instant' })"
+            )
+            await page.wait_for_timeout(self.READ_SCROLL_PAUSE_MS)
+            next_height = await page.evaluate(
+                "() => Math.max(document.body.scrollHeight, document.documentElement.scrollHeight)"
+            )
+            if next_height == current_height == previous_height:
+                stable_rounds += 1
+            else:
+                stable_rounds = 0
+            previous_height = next_height
+            if stable_rounds >= self.READ_SCROLL_STABLE_ROUNDS - 1:
+                break
 
     @staticmethod
     def _normalize_json_value(value: Any) -> Any:

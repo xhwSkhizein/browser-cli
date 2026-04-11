@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Awaitable, Callable
 
 from browser_cli import error_codes
@@ -14,6 +15,7 @@ from browser_cli.errors import (
     OperationFailedError,
     TabNotFoundError,
 )
+from browser_cli.profiles.discovery import ChromeEnvironment
 
 from .models import DaemonRequest, DaemonResponse
 from .state import DaemonState
@@ -25,6 +27,7 @@ class BrowserDaemonApp:
     def __init__(self, state: DaemonState | None = None) -> None:
         self._state = state or DaemonState()
         self._handlers: dict[str, Handler] = {
+            "runtime-status": self._handle_runtime_status,
             "open": self._handle_open,
             "search": self._handle_search,
             "tabs": self._handle_tabs,
@@ -34,6 +37,7 @@ class BrowserDaemonApp:
             "close": self._handle_close,
             "stop": self._handle_stop,
             "info": self._handle_info,
+            "read-page": self._handle_read_page,
             "html": self._handle_html,
             "snapshot": self._handle_snapshot,
             "reload": self._handle_reload,
@@ -109,19 +113,34 @@ class BrowserDaemonApp:
                 InvalidInputError(f"Unknown command: {request.action}"),
                 request=request,
             )
+        runtime_meta: dict[str, Any] = {}
+        command_started = False
         try:
+            self._maybe_configure_browser_environment(request.args)
+            if request.action not in {"runtime-status", "stop"}:
+                await self._state.browser_service.begin_command(request.action)
+                command_started = True
             data = await handler(request)
             meta = {
                 "action": request.action,
                 "agent_id": agent_id,
             }
+            if command_started:
+                runtime_meta = await self._state.browser_service.end_command()
+                meta.update(runtime_meta)
+            else:
+                meta["driver"] = self._state.browser_service.active_driver_name
             chrome_environment = self._state.browser_service.chrome_environment
             if chrome_environment is not None:
                 meta["profile_source"] = chrome_environment.source
             return DaemonResponse.success(data, meta=meta)
         except BrowserCliError as exc:
+            if command_started:
+                runtime_meta = await self._state.browser_service.end_command()
             return self._error_response(exc, request=request)
         except Exception as exc:  # pragma: no cover - last-resort daemon guard
+            if command_started:
+                runtime_meta = await self._state.browser_service.end_command()
             return self._error_response(
                 OperationFailedError(f"Unexpected daemon failure: {exc}", error_code=error_codes.INTERNAL_ERROR),
                 request=request,
@@ -134,6 +153,7 @@ class BrowserDaemonApp:
             meta={
                 "action": request.action,
                 "agent_id": request.agent_id,
+                "driver": self._state.browser_service.active_driver_name,
             },
         )
 
@@ -141,6 +161,30 @@ class BrowserDaemonApp:
         shutdown = await self._state.browser_service.stop()
         self._state.shutdown_event.set()
         return {"stopped": True, **shutdown}
+
+    async def _handle_runtime_status(self, request: DaemonRequest) -> dict[str, Any]:
+        warmup = bool(request.args.get("warmup"))
+        browser = await self._state.browser_service.runtime_status(warmup=warmup)
+        records, active_by_agent = await self._state.tabs.snapshot_state()
+        return {
+            **browser,
+            "tabs": {
+                "count": len(records),
+                "busy_count": sum(1 for record in records if record.busy is not None),
+                "active_by_agent": active_by_agent,
+                "records": [
+                    {
+                        "page_id": record.page_id,
+                        "owner_agent_id": record.owner_agent_id,
+                        "url": record.url,
+                        "title": record.title,
+                        "busy": record.busy is not None,
+                        "last_snapshot_id": record.last_snapshot_id,
+                    }
+                    for record in records
+                ],
+            },
+        }
 
     async def _handle_open(self, request: DaemonRequest) -> dict[str, Any]:
         url = self._require_str(request.args, "url")
@@ -244,6 +288,17 @@ class BrowserDaemonApp:
     async def _handle_info(self, request: DaemonRequest) -> dict[str, Any]:
         page = await self._run_active_page_action(request, self._state.browser_service.get_page_info)
         return {"page": page}
+
+    async def _handle_read_page(self, request: DaemonRequest) -> dict[str, Any]:
+        url = self._require_str(request.args, "url")
+        output_mode = str(request.args.get("output_mode") or "html").strip() or "html"
+        scroll_bottom = bool(request.args.get("scroll_bottom"))
+        payload = await self._state.browser_service.read_page(
+            url=url,
+            output_mode=output_mode,
+            scroll_bottom=scroll_bottom,
+        )
+        return payload
 
     async def _handle_html(self, request: DaemonRequest) -> dict[str, Any]:
         payload = await self._run_active_page_action(request, self._state.browser_service.capture_html)
@@ -715,3 +770,19 @@ class BrowserDaemonApp:
     def _optional_str(args: dict[str, Any], key: str) -> str | None:
         value = str(args.get(key) or "").strip()
         return value or None
+
+    def _maybe_configure_browser_environment(self, args: dict[str, Any]) -> None:
+        chrome_environment_payload = args.get("chrome_environment")
+        if not isinstance(chrome_environment_payload, dict):
+            return
+        executable_path = self._optional_str(chrome_environment_payload, "executable_path")
+        self._state.browser_service.configure_environment(
+            ChromeEnvironment(
+                executable_path=Path(executable_path) if executable_path else None,
+                user_data_dir=Path(self._require_str(chrome_environment_payload, "user_data_dir")),
+                profile_directory=str(chrome_environment_payload.get("profile_directory") or "Default"),
+                profile_name=self._optional_str(chrome_environment_payload, "profile_name"),
+                source=str(chrome_environment_payload.get("source") or "chrome"),
+                fallback_reason=self._optional_str(chrome_environment_payload, "fallback_reason"),
+            )
+        )

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import socket
+import sys
 from pathlib import Path
 
 import pytest
 
-from browser_cli.browser.models import BrowserLaunchConfig
-from browser_cli.browser.session import BrowserSession
+from browser_cli.daemon.client import send_command
+from browser_cli.profiles.discovery import ChromeEnvironment
 from browser_cli.runtime.read_runner import ReadRequest, ReadRunner
 from tests.integration.fixture_server import run_fixture_server
 
@@ -34,70 +36,106 @@ def _can_launch_playwright_browser() -> bool:
 pytestmark = pytest.mark.integration
 
 
+def _unused_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
+
+
+def _configure_runtime(monkeypatch, tmp_path: Path) -> None:
+    real_home = Path.home()
+    if not (real_home / "Library" / "Caches" / "ms-playwright").exists() and sys.platform.startswith("linux"):
+        playwright_cache = real_home / ".cache" / "ms-playwright"
+    else:
+        playwright_cache = real_home / "Library" / "Caches" / "ms-playwright"
+    monkeypatch.setenv("PLAYWRIGHT_BROWSERS_PATH", str(playwright_cache))
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("BROWSER_CLI_HOME", str(tmp_path / ".browser-cli-runtime"))
+    monkeypatch.setenv("X_AGENT_ID", "read-agent")
+    monkeypatch.setenv("BROWSER_CLI_HEADLESS", "1")
+    monkeypatch.setenv("BROWSER_CLI_EXTENSION_PORT", str(_unused_port()))
+
+
+def _build_chrome_environment(tmp_path: Path) -> ChromeEnvironment:
+    user_data_dir = tmp_path / "user-data"
+    (user_data_dir / "Default").mkdir(parents=True)
+    return ChromeEnvironment(
+        executable_path=None,
+        user_data_dir=user_data_dir,
+        profile_directory="Default",
+    )
+
+
+def _serialize_environment(chrome_environment: ChromeEnvironment) -> dict[str, str | None]:
+    return {
+        "executable_path": (
+            str(chrome_environment.executable_path)
+            if chrome_environment.executable_path is not None
+            else None
+        ),
+        "user_data_dir": str(chrome_environment.user_data_dir),
+        "profile_directory": chrome_environment.profile_directory,
+        "profile_name": chrome_environment.profile_name,
+        "source": chrome_environment.source,
+        "fallback_reason": chrome_environment.fallback_reason,
+    }
+
+
 @pytest.mark.skipif(not _can_launch_playwright_browser(), reason="Playwright browser runtime unavailable")
-def test_capture_html_from_dynamic_fixture(tmp_path: Path) -> None:
-    async def _run() -> str:
-        config = BrowserLaunchConfig(
-            executable_path=None,
-            user_data_dir=tmp_path / "user-data",
-            headless=True,
+def test_read_runner_capture_html_from_dynamic_fixture(monkeypatch, tmp_path: Path) -> None:
+    _configure_runtime(monkeypatch, tmp_path)
+    chrome_environment = _build_chrome_environment(tmp_path)
+    with run_fixture_server() as base_url:
+        result = asyncio.run(
+            ReadRunner(chrome_environment=chrome_environment).run(
+                ReadRequest(url=f"{base_url}/dynamic", output_mode="html")
+            )
         )
-        config.user_data_dir.mkdir(parents=True)
-        async with BrowserSession(config) as browser:
-            with run_fixture_server() as base_url:
-                await browser.navigate(f"{base_url}/dynamic")
-                await browser.settle()
-                return await browser.capture_html()
+        assert "Dynamic Fixture" in result.body
+        assert "Rendered content." in result.body
 
-    html = asyncio.run(_run())
-    assert "Dynamic Fixture" in html
-    assert "Rendered content." in html
+        tabs = send_command("tabs", start_if_needed=False)
+        assert tabs["data"]["tabs"] == []
+        send_command("stop", start_if_needed=False)
 
 
 @pytest.mark.skipif(not _can_launch_playwright_browser(), reason="Playwright browser runtime unavailable")
-def test_capture_snapshot_from_static_fixture(tmp_path: Path) -> None:
-    async def _run() -> str:
-        config = BrowserLaunchConfig(
-            executable_path=None,
-            user_data_dir=tmp_path / "user-data",
-            headless=True,
+def test_read_runner_capture_snapshot_from_static_fixture(monkeypatch, tmp_path: Path) -> None:
+    _configure_runtime(monkeypatch, tmp_path)
+    chrome_environment = _build_chrome_environment(tmp_path)
+    with run_fixture_server() as base_url:
+        result = asyncio.run(
+            ReadRunner(chrome_environment=chrome_environment).run(
+                ReadRequest(url=f"{base_url}/static", output_mode="snapshot")
+            )
         )
-        config.user_data_dir.mkdir(parents=True)
-        async with BrowserSession(config) as browser:
-            with run_fixture_server() as base_url:
-                await browser.navigate(f"{base_url}/static")
-                await browser.settle()
-                return await browser.capture_snapshot()
-
-    snapshot = asyncio.run(_run())
-    assert "heading" in snapshot
-    assert "Static Fixture" in snapshot
+        assert "heading" in result.body
+        assert "Static Fixture" in result.body
+        send_command("stop", start_if_needed=False)
 
 
 @pytest.mark.skipif(not _can_launch_playwright_browser(), reason="Playwright browser runtime unavailable")
-def test_read_runner_scroll_bottom_loads_more_content(tmp_path: Path) -> None:
-    async def _run() -> str:
-        with run_fixture_server() as base_url:
-            runner = ReadRunner()
-            runner._chrome_environment = type(  # noqa: SLF001
-                "Env",
-                (),
-                {
-                    "executable_path": None,
-                    "user_data_dir": tmp_path / "user-data",
-                    "profile_directory": "Default",
-                },
-            )()
-            (tmp_path / "user-data" / "Default").mkdir(parents=True)
-            result = await runner.run(
+def test_read_runner_scroll_bottom_loads_more_content_without_leaking_tabs(monkeypatch, tmp_path: Path) -> None:
+    _configure_runtime(monkeypatch, tmp_path)
+    chrome_environment = _build_chrome_environment(tmp_path)
+    with run_fixture_server() as base_url:
+        existing_page = send_command(
+            "open",
+            {"url": f"{base_url}/static", "chrome_environment": _serialize_environment(chrome_environment)},
+        )
+        existing_page_id = existing_page["data"]["page"]["page_id"]
+
+        result = asyncio.run(
+            ReadRunner(chrome_environment=chrome_environment).run(
                 ReadRequest(
                     url=f"{base_url}/lazy",
                     output_mode="html",
                     scroll_bottom=True,
                 )
             )
-            return result.body
+        )
+        assert "Lazy Item 4" in result.body
 
-    html = asyncio.run(_run())
-    assert "Lazy Item 4" in html
-
+        tabs = send_command("tabs", start_if_needed=False)
+        assert [tab["page_id"] for tab in tabs["data"]["tabs"]] == [existing_page_id]
+        send_command("stop", start_if_needed=False)

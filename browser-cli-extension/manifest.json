@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "Browser CLI Bridge",
+  "version": "0.1.0",
+  "description": "Browser CLI real-Chrome backend extension.",
+  "minimum_chrome_version": "116",
+  "permissions": [
+    "activeTab",
+    "tabs",
+    "debugger",
+    "scripting",
+    "cookies",
+    "storage",
+    "offscreen",
+    "alarms"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Browser CLI Bridge",
+    "default_popup": "popup.html"
+  }
+}

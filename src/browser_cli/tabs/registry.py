@@ -158,6 +158,35 @@ class TabRegistry:
     async def current_active_page_id(self, agent_id: str) -> str:
         return (await self.get_active_tab(agent_id)).page_id
 
+    async def snapshot_state(self) -> tuple[list[TabRecord], dict[str, str]]:
+        async with self._lock:
+            records = [self._copy_record(record) for record in self._tabs.values()]
+            records.sort(key=lambda item: item.created_at)
+            return records, dict(self._active_tab_by_agent)
+
+    async def replace_tab_ids(self, replacements: dict[str, str]) -> None:
+        if not replacements:
+            return
+        async with self._lock:
+            new_tabs: dict[str, TabRecord] = {}
+            for old_page_id, record in list(self._tabs.items()):
+                new_page_id = replacements.get(old_page_id, old_page_id)
+                new_record = self._copy_record(record)
+                new_record.page_id = new_page_id
+                new_tabs[new_page_id] = new_record
+            self._tabs = new_tabs
+            for agent_id, page_id in list(self._active_tab_by_agent.items()):
+                self._active_tab_by_agent[agent_id] = replacements.get(page_id, page_id)
+
+    async def clear_snapshot_state(self) -> None:
+        async with self._lock:
+            for record in self._tabs.values():
+                record.last_snapshot_refs = set()
+                record.last_snapshot_id = None
+                record.last_snapshot_ref_count = 0
+                record.last_snapshot_url = ""
+                record.last_snapshot_at = None
+
     async def is_visible(self, agent_id: str, page_id: str) -> bool:
         async with self._lock:
             record = self._tabs.get(page_id)

@@ -8,7 +8,12 @@ from typing import Any
 
 from browser_cli.browser.models import BrowserLaunchConfig
 from browser_cli.browser.snapshot import capture_snapshot
-from browser_cli.browser.stealth import STEALTH_INIT_SCRIPT, build_launch_args
+from browser_cli.browser.stealth import (
+    build_context_options,
+    build_ignore_default_args,
+    build_init_script,
+    build_launch_args,
+)
 from browser_cli.errors import BrowserUnavailableError, ProfileUnavailableError, TemporaryReadError
 
 
@@ -42,6 +47,11 @@ class BrowserSession:
         try:
             self._playwright = await async_playwright().start()
             chromium = self._playwright.chromium
+            context_options = build_context_options(
+                viewport_width=self._config.viewport_width,
+                viewport_height=self._config.viewport_height,
+                locale=self._config.locale,
+            )
             self._context = await chromium.launch_persistent_context(
                 user_data_dir=str(self._config.user_data_dir),
                 executable_path=str(self._config.executable_path) if self._config.executable_path else None,
@@ -50,10 +60,21 @@ class BrowserSession:
                     "width": self._config.viewport_width,
                     "height": self._config.viewport_height,
                 },
-                ignore_default_args=["--enable-automation"],
-                args=[*build_launch_args(), f"--profile-directory={self._config.profile_directory}"],
+                ignore_default_args=build_ignore_default_args(),
+                args=[
+                    *build_launch_args(
+                        headless=self._config.headless,
+                        viewport_width=self._config.viewport_width,
+                        viewport_height=self._config.viewport_height,
+                        locale=self._config.locale,
+                    ),
+                    f"--profile-directory={self._config.profile_directory}",
+                ],
+                **context_options,
             )
-            await self._context.add_init_script(STEALTH_INIT_SCRIPT)
+            init_script = build_init_script(headless=self._config.headless, locale=self._config.locale)
+            if init_script:
+                await self._context.add_init_script(init_script)
             self._page = self._context.pages[0] if self._context.pages else await self._context.new_page()
             self._page.set_default_navigation_timeout(self._config.navigation_timeout_ms)
         except Exception as exc:

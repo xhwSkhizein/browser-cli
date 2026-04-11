@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import signal
 import subprocess
 import sys
 import time
@@ -12,24 +13,40 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from browser_cli import __version__
 from browser_cli.agent_scope import resolve_agent_id
 from browser_cli.constants import get_app_paths
 from browser_cli.errors import (
     AmbiguousRefError,
     BrowserCliError,
+    BrowserUnavailableError,
     BusyTabError,
     DaemonNotAvailableError,
+    EmptyContentError,
     InvalidInputError,
     NoSnapshotContextError,
     NoActiveTabError,
     NoVisibleTabsError,
     OperationFailedError,
+    ProfileUnavailableError,
     RefNotFoundError,
     StaleSnapshotError,
+    TemporaryReadError,
     TabNotFoundError,
 )
 
-from .transport import ensure_run_dir, probe_socket, read_run_info
+from .transport import (
+    DAEMON_RUNTIME_VERSION,
+    ensure_run_dir,
+    probe_socket,
+    read_run_info,
+    remove_run_info,
+    safe_remove_socket,
+)
+
+STARTUP_TIMEOUT_SECONDS = 15.0
+STARTUP_PROBE_INTERVAL_SECONDS = 0.1
+TERMINATE_GRACE_SECONDS = 3.0
 
 
 def send_command(
@@ -80,9 +97,37 @@ async def _send_command_async(action: str, args: dict[str, Any]) -> dict[str, An
 
 
 def ensure_daemon_running() -> None:
+    run_info = read_run_info()
+    if probe_socket() and _run_info_is_compatible(run_info):
+        return
+    if probe_socket():
+        _cleanup_stale_runtime()
+        if probe_socket():
+            return
+    _cleanup_stale_runtime()
     if probe_socket():
         return
     _spawn_daemon()
+
+
+def wait_for_daemon_stop(*, timeout_seconds: float = TERMINATE_GRACE_SECONDS) -> bool:
+    deadline = time.time() + timeout_seconds
+    while time.time() < deadline:
+        if not probe_socket():
+            return True
+        time.sleep(0.1)
+    return not probe_socket()
+
+
+def cleanup_runtime() -> bool:
+    app_paths = get_app_paths()
+    had_runtime_state = bool(read_run_info() is not None or app_paths.socket_path.exists())
+    _cleanup_stale_runtime()
+    return had_runtime_state
+
+
+def run_info_is_compatible(run_info: dict[str, Any] | None) -> bool:
+    return _run_info_is_compatible(run_info)
 
 
 def _spawn_daemon() -> None:
@@ -96,21 +141,107 @@ def _spawn_daemon() -> None:
     env = os.environ.copy()
     env["PYTHONPATH"] = os.pathsep.join(pythonpath_parts)
     log_handle = app_paths.daemon_log_path.open("ab")
-    subprocess.Popen(
-        [sys.executable, "-m", "browser_cli.daemon"],
-        stdout=log_handle,
-        stderr=subprocess.STDOUT,
-        env=env,
-        start_new_session=True,
-    )
-    deadline = time.time() + 15.0
-    while time.time() < deadline:
-        if probe_socket():
-            return
-        time.sleep(0.1)
+    process = None
+    try:
+        process = subprocess.Popen(
+            _build_daemon_command(app_paths.home),
+            stdout=log_handle,
+            stderr=subprocess.STDOUT,
+            env=env,
+            start_new_session=True,
+        )
+    finally:
+        log_handle.close()
+    if _wait_for_socket(timeout_seconds=STARTUP_TIMEOUT_SECONDS):
+        return
+    if process is not None:
+        _terminate_process_tree(process.pid)
     run_info = read_run_info()
     details = f"run_info={run_info}" if run_info else f"log={app_paths.daemon_log_path}"
     raise DaemonNotAvailableError(f"Timed out waiting for browser daemon startup ({details}).")
+
+
+def _build_daemon_command(home: Path) -> list[str]:
+    return [sys.executable, "-m", "browser_cli.daemon", "--home", str(home)]
+
+
+def _wait_for_socket(*, timeout_seconds: float) -> bool:
+    deadline = time.time() + timeout_seconds
+    while time.time() < deadline:
+        if probe_socket():
+            return True
+        time.sleep(STARTUP_PROBE_INTERVAL_SECONDS)
+    return False
+
+
+def _cleanup_stale_runtime() -> None:
+    run_info = read_run_info()
+    if run_info is not None:
+        pid = _coerce_pid(run_info.get("pid"))
+        if pid is not None and _pid_exists(pid):
+            _terminate_process_tree(pid)
+    remove_run_info()
+    try:
+        safe_remove_socket()
+    except FileNotFoundError:
+        pass
+
+
+def _run_info_is_compatible(run_info: dict[str, Any] | None) -> bool:
+    if not isinstance(run_info, dict):
+        return False
+    return (
+        str(run_info.get("package_version") or "") == __version__
+        and str(run_info.get("runtime_version") or "") == DAEMON_RUNTIME_VERSION
+    )
+
+
+def _coerce_pid(value: Any) -> int | None:
+    try:
+        pid = int(value)
+    except (TypeError, ValueError):
+        return None
+    return pid if pid > 0 else None
+
+
+def _pid_exists(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    else:
+        return True
+
+
+def _terminate_process_tree(pid: int) -> None:
+    _signal_process_tree(pid, signal.SIGTERM)
+    if _wait_for_pid_exit(pid, timeout_seconds=TERMINATE_GRACE_SECONDS):
+        return
+    _signal_process_tree(pid, signal.SIGKILL)
+    _wait_for_pid_exit(pid, timeout_seconds=1.0)
+
+
+def _signal_process_tree(pid: int, sig: signal.Signals) -> None:
+    try:
+        os.killpg(pid, sig)
+    except ProcessLookupError:
+        return
+    except OSError:
+        try:
+            os.kill(pid, sig)
+        except OSError:
+            return
+
+
+def _wait_for_pid_exit(pid: int, *, timeout_seconds: float) -> bool:
+    deadline = time.time() + timeout_seconds
+    while time.time() < deadline:
+        if not _pid_exists(pid):
+            return True
+        time.sleep(0.1)
+    return not _pid_exists(pid)
 
 
 def _error_from_payload(payload: dict[str, Any]) -> BrowserCliError:
@@ -136,4 +267,12 @@ def _error_from_payload(payload: dict[str, Any]) -> BrowserCliError:
         return StaleSnapshotError(message)
     if error_code == "DAEMON_NOT_AVAILABLE":
         return DaemonNotAvailableError(message)
+    if error_code == "BROWSER_UNAVAILABLE":
+        return BrowserUnavailableError(message)
+    if error_code == "PROFILE_UNAVAILABLE":
+        return ProfileUnavailableError(message)
+    if error_code == "EMPTY_CONTENT":
+        return EmptyContentError(message)
+    if error_code == "TEMPORARY_FAILURE":
+        return TemporaryReadError(message)
     return OperationFailedError(message, error_code=error_code)

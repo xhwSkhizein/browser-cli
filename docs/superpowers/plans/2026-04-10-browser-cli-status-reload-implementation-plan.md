@@ -37,7 +37,7 @@ The final implementation should satisfy these approved requirements:
 
 The following are intentionally excluded:
 
-- any replacement of the existing page action `reload`
+- any replacement of the existing page reload action semantics
 - any attempt to close arbitrary user Chrome tabs or windows
 - adding a broader operator suite such as `doctor` or `restart --hard`
 - first-pass JSON output for `status`

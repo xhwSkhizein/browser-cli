@@ -154,13 +154,31 @@ class SemanticSnapshotGenerator:
         full_page: bool = True,
     ) -> SemanticSnapshot:
         raw_snapshot = await self.page_snapshot_for_ai(page)
+        return self.snapshot_from_raw_text(
+            raw_snapshot,
+            page_id=page_id,
+            captured_url=str(page.url),
+            interactive=interactive,
+            full_page=full_page,
+        )
+
+    def snapshot_from_raw_text(
+        self,
+        raw_snapshot: str,
+        *,
+        page_id: str,
+        captured_url: str,
+        interactive: bool = False,
+        full_page: bool = True,
+        captured_at: float | None = None,
+    ) -> SemanticSnapshot:
         if not raw_snapshot:
-            captured_at = time.time()
+            snapshot_time = time.time() if captured_at is None else captured_at
             metadata = SnapshotMetadata(
                 snapshot_id=f"snap_{uuid.uuid4().hex[:12]}",
                 page_id=page_id,
-                captured_url=str(page.url),
-                captured_at=captured_at,
+                captured_url=captured_url,
+                captured_at=snapshot_time,
                 interactive=interactive,
                 full_page=full_page,
             )
@@ -168,12 +186,12 @@ class SemanticSnapshotGenerator:
 
         normalized = self._normalize_raw_snapshot(raw_snapshot)
         snapshot_id = f"snap_{uuid.uuid4().hex[:12]}"
-        captured_at = time.time()
+        snapshot_time = time.time() if captured_at is None else captured_at
         metadata = SnapshotMetadata(
             snapshot_id=snapshot_id,
             page_id=page_id,
-            captured_url=str(page.url),
-            captured_at=captured_at,
+            captured_url=captured_url,
+            captured_at=snapshot_time,
             interactive=interactive,
             full_page=full_page,
         )
@@ -284,8 +302,8 @@ class SemanticSnapshotGenerator:
                     selector_recipe=self._build_selector(role_lower, name, text_content),
                     snapshot_id=snapshot_id,
                     page_id=page_id,
-                    captured_url=str(page.url),
-                    captured_at=captured_at,
+                    captured_url=captured_url,
+                    captured_at=snapshot_time,
                 )
                 refs[ref] = ref_data
                 enhanced += f" [ref={ref}]"

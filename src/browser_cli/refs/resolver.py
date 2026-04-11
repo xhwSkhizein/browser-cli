@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from browser_cli.refs.models import RefData
+from browser_cli.refs.models import LocatorSpec, RefData
 
 
 class SemanticRefResolver:
@@ -89,13 +89,86 @@ class SemanticRefResolver:
         ref_arg: str,
         refs: dict[str, RefData],
     ) -> Any | None:
+        locator_spec = self.build_locator_spec(ref_arg, refs)
+        if locator_spec is None:
+            return None
+        return self.get_locator_from_spec(page, locator_spec)
+
+    def get_locator_from_spec(
+        self,
+        page: Any,
+        locator_spec: LocatorSpec,
+    ) -> Any | None:
+        if not locator_spec.role:
+            return None
+
+        normalized_name = locator_spec.name.strip() if locator_spec.name and locator_spec.name.strip() else None
+        normalized_text = (
+            locator_spec.text_content.strip()
+            if locator_spec.text_content and locator_spec.text_content.strip()
+            else None
+        )
+        match_text = locator_spec.match_text
+        child_text = locator_spec.child_text
+
+        scope: Any = page
+        if locator_spec.frame_path:
+            for local_nth in locator_spec.frame_path:
+                scope = scope.frame_locator("iframe").nth(local_nth)
+
+        skip_nth = False
+
+        if (
+            normalized_name
+            and locator_spec.role not in self.ROLE_TEXT_MATCH_ROLES
+            and locator_spec.role not in self.STRUCTURAL_NOISE_ROLES
+            and locator_spec.role not in self.TEXT_LEAF_ROLES
+        ):
+            locator = scope.get_by_role(locator_spec.role, name=normalized_name, exact=True)
+        elif locator_spec.role in self.ROLE_TEXT_MATCH_ROLES and match_text:
+            if locator_spec.role == "row":
+                locator = scope.get_by_role("row").filter(has_text=self._text_pattern(match_text, exact=False))
+            else:
+                locator = scope.get_by_role(locator_spec.role).filter(
+                    has_text=self._text_pattern(match_text, exact=True)
+                )
+        elif locator_spec.role in self.TEXT_LEAF_ROLES and match_text:
+            locator = scope.get_by_text(match_text, exact=True)
+            skip_nth = True
+        elif locator_spec.role in self.STRUCTURAL_NOISE_ROLES and match_text:
+            css = self.STRUCTURAL_NOISE_CSS.get(locator_spec.role)
+            if css:
+                locator = scope.locator(css).filter(has_text=self._text_pattern(match_text, exact=True))
+            else:
+                locator = scope.get_by_text(match_text, exact=True)
+                skip_nth = True
+        elif locator_spec.role in self.STRUCTURAL_NOISE_ROLES:
+            if child_text:
+                css = self.STRUCTURAL_NOISE_CSS.get(locator_spec.role)
+                if css:
+                    locator = scope.locator(css).filter(has_text=self._text_pattern(child_text, exact=True))
+                else:
+                    locator = scope.get_by_text(child_text, exact=True)
+                skip_nth = True
+            else:
+                locator = scope.get_by_role(locator_spec.role)
+        elif normalized_text:
+            locator = scope.get_by_text(normalized_text, exact=True)
+            skip_nth = True
+        else:
+            locator = scope.get_by_role(locator_spec.role, name=re.compile(r"^$"))
+
+        if not skip_nth and locator_spec.nth is not None:
+            locator = locator.nth(locator_spec.nth)
+        return locator
+
+    def build_locator_spec(self, ref_arg: str, refs: dict[str, RefData]) -> LocatorSpec | None:
         ref = self.parse_ref(ref_arg)
         if not ref:
             return None
         ref_data = refs.get(ref)
         if ref_data is None:
             return None
-
         normalized_name = ref_data.name.strip() if ref_data.name and ref_data.name.strip() else None
         normalized_text = (
             ref_data.text_content.strip()
@@ -103,39 +176,8 @@ class SemanticRefResolver:
             else None
         )
         match_text = normalized_name or normalized_text
-
-        scope: Any = page
-        if ref_data.frame_path:
-            for local_nth in ref_data.frame_path:
-                scope = scope.frame_locator("iframe").nth(local_nth)
-
-        skip_nth = False
-
-        if (
-            normalized_name
-            and ref_data.role not in self.ROLE_TEXT_MATCH_ROLES
-            and ref_data.role not in self.STRUCTURAL_NOISE_ROLES
-            and ref_data.role not in self.TEXT_LEAF_ROLES
-        ):
-            locator = scope.get_by_role(ref_data.role, name=normalized_name, exact=True)
-        elif ref_data.role in self.ROLE_TEXT_MATCH_ROLES and match_text:
-            if ref_data.role == "row":
-                locator = scope.get_by_role("row").filter(has_text=self._text_pattern(match_text, exact=False))
-            else:
-                locator = scope.get_by_role(ref_data.role).filter(
-                    has_text=self._text_pattern(match_text, exact=True)
-                )
-        elif ref_data.role in self.TEXT_LEAF_ROLES and match_text:
-            locator = scope.get_by_text(match_text, exact=True)
-            skip_nth = True
-        elif ref_data.role in self.STRUCTURAL_NOISE_ROLES and match_text:
-            css = self.STRUCTURAL_NOISE_CSS.get(ref_data.role)
-            if css:
-                locator = scope.locator(css).filter(has_text=self._text_pattern(match_text, exact=True))
-            else:
-                locator = scope.get_by_text(match_text, exact=True)
-                skip_nth = True
-        elif ref_data.role in self.STRUCTURAL_NOISE_ROLES:
+        child_text = None
+        if ref_data.role in self.STRUCTURAL_NOISE_ROLES:
             child_text = next(
                 (
                     (child.name or child.text_content or "").strip()
@@ -146,21 +188,16 @@ class SemanticRefResolver:
                 ),
                 None,
             )
-            if child_text:
-                css = self.STRUCTURAL_NOISE_CSS.get(ref_data.role)
-                if css:
-                    locator = scope.locator(css).filter(has_text=self._text_pattern(child_text, exact=True))
-                else:
-                    locator = scope.get_by_text(child_text, exact=True)
-                skip_nth = True
-            else:
-                locator = scope.get_by_role(ref_data.role)
-        elif normalized_text:
-            locator = scope.get_by_text(normalized_text, exact=True)
-            skip_nth = True
-        else:
-            locator = scope.get_by_role(ref_data.role, name=re.compile(r"^$"))
-
-        if not skip_nth and ref_data.nth is not None:
-            locator = locator.nth(ref_data.nth)
-        return locator
+        return LocatorSpec(
+            ref=ref,
+            role=ref_data.role,
+            name=normalized_name,
+            text_content=normalized_text,
+            match_text=match_text,
+            child_text=child_text,
+            nth=ref_data.nth,
+            tag=ref_data.tag,
+            interactive=ref_data.interactive,
+            frame_path=ref_data.frame_path,
+            selector_recipe=ref_data.selector_recipe,
+        )

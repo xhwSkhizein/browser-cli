@@ -1,169 +1,186 @@
 # browser-cli
 
-`browser-cli` is a `CLI-first`, `Python-first` browser tool with four connected layers:
+<p align="center">
+  <b>CLI-first browser automation for AI agents</b>
+</p>
 
-- `read`: one-shot rendered page reading
-- daemon-backed browser actions: long-lived browser control for agents
-- semantic refs: bridgic-style ref reconstruction for resilient replay
-- task/workflow runtime: reusable `task.py`, `task.meta.json`, and `workflow.toml`
+<p align="center">
+  <a href="#features">Features</a> •
+  <a href="#installation">Installation</a> •
+  <a href="#quick-start">Quick Start</a> •
+  <a href="#documentation">Documentation</a> •
+  <a href="#acknowledgements">Acknowledgements</a>
+</p>
 
-## Status
+---
 
-Current scope now has four layers:
+`browser-cli` is a browser automation tool designed for **AI agents** and **developers** who need reliable, scriptable browser control from the command line. It provides four integrated layers:
 
-```bash
-browser-cli read <url>
-browser-cli read <url> --snapshot
-browser-cli read <url> --scroll-bottom
+| Layer | Purpose |
+|-------|---------|
+| **`read`** | One-shot rendered page reading for quick content extraction |
+| **Daemon Actions** | Long-lived browser control for complex agent workflows |
+| **Semantic Refs** | Resilient element identification using bridgic-style ref reconstruction |
+| **Task/Workflow** | Reusable automation packages via `task.py` + `task.meta.json` + `workflow.toml` |
 
-browser-cli open https://example.com
-browser-cli tabs
-browser-cli snapshot
-browser-cli click @8d4b03a9
-browser-cli html
+## Features
 
-browser-cli workflow validate tasks/interactive_reveal_capture/workflow.toml
-browser-cli workflow run tasks/interactive_reveal_capture/workflow.toml --set url=https://example.com
-browser-cli stop
-```
+- **Dual Backend Architecture** — Managed Playwright profile mode by default; optional real-Chrome extension mode for higher fidelity
+- **Semantic Ref System** — Stable element references that persist across DOM re-renders
+- **Agent Isolation** — `X_AGENT_ID` support for multi-agent tab isolation
+- **JSON-First API** — All daemon commands return structured JSON for programmatic use
+- **Stealth Mode** — Anti-detection strategies for headless and headed browser modes
+- **Workflow Runtime** — Package and reuse browser automation tasks
+- **Extension Support** — Chrome extension for driving real Chrome instances
 
-`read` stays content-first. The daemon-backed commands and workflow surface are JSON-first and are designed for agents and reusable delivery.
+## Installation
 
-## Requirements
-
+**Requirements:**
 - Python 3.11+
-- Playwright Python package
 - Stable Google Chrome installed
-- For the real profile-reuse path:
-  - closing the regular Chrome app is preferred if you want to reuse the real Chrome profile directly
+- Playwright Python package
 
-## Install
+**Install from source:**
 
 ```bash
+# Clone the repository
+git clone https://github.com/hongv/browser-cli.git
+cd browser-cli
+
+# Install in editable mode
 python3 -m pip install -e .
 python3 -m playwright install chromium
 ```
 
-The CLI itself targets stable Google Chrome. The Playwright Chromium install is mainly useful for local integration testing.
+The CLI targets stable Google Chrome. Playwright Chromium is mainly useful for local integration testing.
 
-## Usage
+### Optional: Real-Chrome Extension Mode
 
-### One-Shot Read
+For the highest-fidelity browser control:
+
+1. Open `chrome://extensions`
+2. Enable `Developer mode`
+3. Click `Load unpacked`
+4. Select the `browser-cli-extension/` folder from this repo
+
+Once connected, the daemon automatically upgrades to extension-backed real-Chrome mode.
+
+The extension can also be loaded directly from the repo:
+- Extension root: [`browser-cli-extension/manifest.json`](browser-cli-extension/manifest.json)
+- Background worker: [`browser-cli-extension/src/background.js`](browser-cli-extension/src/background.js)
+
+Once connected, `browser-cli status` reports extension capability status.
+
+## Quick Start
+
+### One-Shot Page Reading
+
+Extract rendered HTML or structured snapshot from any URL:
 
 ```bash
+# Get rendered DOM HTML
 browser-cli read https://example.com
+
+# Get structured accessibility tree with stable refs
 browser-cli read https://example.com --snapshot
+
+# Scroll to bottom before capture (for lazy-loaded content)
 browser-cli read https://example.com --scroll-bottom
 ```
 
-Default output is rendered DOM HTML. `--snapshot` returns a bridgic-style tree snapshot. `--scroll-bottom` performs an extra lazy-load pass before capture.
+### Daemon-Backed Browser Control
 
-If the real Chrome profile is unavailable, `browser-cli` falls back to a managed profile root at `~/.browser-cli/default-profile`.
-
-### Daemon-Backed Agent Actions
-
-The first daemon-backed call auto-starts a local browser daemon. The daemon keeps one long-lived browser instance alive until you explicitly stop it.
+The first daemon command auto-starts a persistent browser instance:
 
 ```bash
+# Check daemon status
+browser-cli status
+
+# Open a URL
 browser-cli open https://example.com
-browser-cli tabs
+
+# Get page snapshot with refs
 browser-cli snapshot
-browser-cli html
+
+# Click an element by ref
 browser-cli click @8d4b03a9
+
+# Get rendered HTML
+browser-cli html
+
+# Stop the daemon
 browser-cli stop
 ```
 
-Agent isolation is controlled by `X_AGENT_ID`:
+### Multi-Agent Support
+
+Isolate tabs between different agents using `X_AGENT_ID`:
 
 ```bash
+# Agent A
 X_AGENT_ID=agent-a browser-cli open https://example.com
 X_AGENT_ID=agent-a browser-cli tabs
 
+# Agent B (separate tab context)
 X_AGENT_ID=agent-b browser-cli open https://example.org
 X_AGENT_ID=agent-b browser-cli tabs
 ```
 
-Tabs are isolated by `X_AGENT_ID`, but cookies and local storage are still shared because all commands reuse the same browser profile and browser instance.
+### Lifecycle Commands
 
-Representative action families:
+| Command | Purpose |
+|---------|---------|
+| `browser-cli status` | First-line diagnosis: daemon state, backend, workspace |
+| `browser-cli reload` | **Runtime reset**: restart daemon and browser |
+| `browser-cli page-reload` | Page action: reload current tab |
+| `browser-cli stop` | Stop daemon and browser instance |
 
-- navigation and page state: `open`, `search`, `info`, `html`, `snapshot`, `reload`, `back`, `forward`
-- tab management and lifecycle: `tabs`, `new-tab`, `switch-tab`, `close-tab`, `close`, `resize`, `stop`
-- ref actions: `click`, `double-click`, `hover`, `focus`, `fill`, `select`, `check`, `uncheck`, `scroll-to`, `drag`, `upload`
-- keyboard, mouse, script, waits: `type`, `press`, `key-down`, `key-up`, `scroll`, `mouse-*`, `eval`, `eval-on`, `wait`, `wait-network`
-- observation and state: `console-*`, `network-*`, `dialog-*`, `trace-*`, `video-*`, `screenshot`, `pdf`, `cookies`, `cookie-set`, `cookies-clear`, `storage-save`, `storage-load`
-- verification: `verify-text`, `verify-visible`, `verify-url`, `verify-title`, `verify-state`, `verify-value`
+## Task & Workflow Packaging
 
-Use `browser-cli -h` and per-command help like `browser-cli click -h` to inspect the full surface.
-
-The daemon-backed action catalog is now kept in parity with the current `bridgic-browser` command surface. `browser-cli` intentionally adds two extra commands on top of that surface:
-
-- `html`: return rendered DOM HTML for the active tab
-- `stop`: stop the local daemon and shared browser instance
-
-Semantic refs now use bridgic-style reconstruction rather than DOM-injected `data-*` markers. This means:
-
-- refs remain stable across DOM re-renders when page semantics stay the same
-- stale and ambiguous ref failures are explicit
-- iframe-local refs are reconstructed against the correct frame path
-
-## Task Runtime And Workflow Packaging
-
-Reusable task artifacts now live under [`tasks/`](/Users/hongv/workspace/m-projects/browser-cli/tasks).
-
-Representative layout:
+Package reusable browser automation as versioned artifacts:
 
 ```text
 tasks/
-  interactive_reveal_capture/
-    task.py
-    task.meta.json
-    workflow.toml
+  my_task/
+    task.py          # Implementation
+    task.meta.json   # Metadata (inputs, outputs, version)
+    workflow.toml    # Published workflow definition
 ```
 
-`task.py` uses the thin Python runtime:
+### Example Task
 
 ```python
 from browser_cli.task_runtime.flow import Flow
 
-
 def run(flow: Flow, inputs: dict) -> dict:
     flow.open(inputs["url"])
     snapshot = flow.snapshot()
-    ref = snapshot.find_ref(role="button", name="Reveal Message")
+    ref = snapshot.find_ref(role="button", name="Submit")
     flow.click(ref)
-    flow.wait_text("Revealed", timeout=5)
     return {"html": flow.html()}
 ```
 
-`workflow.toml` is the published wrapper around a task. Validate and run it with:
+### Run Workflows
 
 ```bash
-browser-cli workflow validate tasks/interactive_reveal_capture/workflow.toml
-browser-cli workflow run tasks/interactive_reveal_capture/workflow.toml --set url=https://example.com
+# Validate workflow
+browser-cli workflow validate tasks/my_task/workflow.toml
+
+# Execute with parameters
+browser-cli workflow run tasks/my_task/workflow.toml --set url=https://example.com
 ```
 
-The included reference tasks are:
-
-- [`interactive_reveal_capture`](/Users/hongv/workspace/m-projects/browser-cli/tasks/interactive_reveal_capture/task.py)
-- [`lazy_scroll_capture`](/Users/hongv/workspace/m-projects/browser-cli/tasks/lazy_scroll_capture/task.py)
-
-Reusable task scaffolds live under [`tasks/_templates/`](/Users/hongv/workspace/m-projects/browser-cli/tasks/_templates/task.py).
+**Included examples:**
+- [`interactive_reveal_capture`](tasks/interactive_reveal_capture/task.py)
+- [`lazy_scroll_capture`](tasks/lazy_scroll_capture/task.py)
 
 ## Explore Skill
 
-A reusable skill for agent-driven exploration now lives in:
+For agent-driven exploration, install the skill from [`skills/browser-cli-explore-delivery/SKILL.md`](skills/browser-cli-explore-delivery/SKILL.md). It standardizes:
 
-- repo source: [`skills/browser-cli-explore-delivery/SKILL.md`](/Users/hongv/workspace/m-projects/browser-cli/skills/browser-cli-explore-delivery/SKILL.md)
-- installed discovery path: `/Users/hongv/.agents/skills/browser-cli-explore-delivery`
-
-The skill standardizes:
-
-- preflight checks
-- install approval gating
+- Preflight checks and install approval
 - Browser CLI-first exploration
-- convergence into `task.py + task.meta.json`
-- optional publish gating for `workflow.toml`
+- Convergence to `task.py + task.meta.json`
 
 ## Output Contracts
 
@@ -195,12 +212,22 @@ Exit codes:
   - `STALE_SNAPSHOT`
   - `AMBIGUOUS_REF`
 
-## Notes
+## Documentation
 
-- If the real Chrome profile is unavailable or locked, the CLI falls back to `~/.browser-cli/default-profile`.
-- If both the real profile and the fallback profile are unavailable, the command fails.
-- `read` is intentionally small. More complex flows belong in the daemon-backed action layer and future exploration/workflow layers.
-- The daemon uses one shared browser instance. `X_AGENT_ID` isolates tab visibility and active-tab state only, not storage.
+### Architecture Notes
+
+- **Managed Profile Mode** — Default backend using Playwright with isolated Chrome profile at `~/.browser-cli/default-profile`
+- **Extension Mode** — Real-Chrome backend via Chrome extension; controls dedicated workspace window only
+- **Driver Rebinding** — Automatic backend switching at safe idle points, reported as `state_reset` in metadata
+- **Agent Isolation** — `X_AGENT_ID` isolates tab visibility, but cookies/storage are shared within the same browser instance
+
+### Response Metadata
+
+| Field | Meaning |
+|-------|---------|
+| `meta.driver == "playwright"` | Command handled by managed profile backend |
+| `meta.driver == "extension"` | Command handled by real-Chrome extension backend |
+| `meta.state_reset == true` | Driver rebind occurred; old refs are invalid |
 
 ## Testing
 
@@ -208,6 +235,22 @@ Run the full suite with:
 
 ```bash
 pytest -q
+```
+
+Run repository lint and architecture guards with:
+
+```bash
+./scripts/lint.sh
+python scripts/guards/run_all.py
+./scripts/check.sh
+```
+
+When the runtime behaves unexpectedly, use:
+
+```bash
+browser-cli status
+browser-cli reload
+browser-cli status
 ```
 
 The integration coverage is fixture-driven and local-first. The suite uses a local HTTP fixture app that exercises:
@@ -225,3 +268,17 @@ The integration coverage is fixture-driven and local-first. The suite uses a loc
 - task runtime, workflow validation, and workflow execution against local fixtures
 
 The action catalog also has a parity test that fails if the daemon-backed command surface drops below the current `bridgic-browser` catalog.
+
+## Acknowledgements
+
+This project is deeply inspired by and built upon the excellent work of [**bridgic-browser**](https://github.com/bitsky-tech/bridgic-browser), a Python library for LLM-driven browser automation created by [bitsky-tech](https://github.com/bitsky-tech).
+
+**What we learned from bridgic-browser:**
+
+- **Semantic Ref System** - bridgic-browser's innovative approach to element identification using stable refs that persist across page reloads
+- **Snapshot Model** - The accessibility tree-based page representation with semantic invariance
+- **CLI Design Patterns** - The daemon-backed architecture enabling fast, stateful browser control
+- **Stealth Mode Implementation** - Anti-detection strategies for headless and headed browser modes
+- **Comprehensive Tool Organization** - The 67-tool catalog spanning 15 categories that we aim to maintain parity with
+
+We are grateful to the bridgic-browser team for pioneering many of the concepts that make browser-cli possible. This project stands on their shoulders while pursuing a CLI-first approach with additional layers for task packaging and workflow execution.

@@ -21,6 +21,7 @@ class ActionSpec:
     add_arguments: ArgumentBuilder
     build_request: RequestBuilder
     start_if_needed: bool = True
+    cli_name: str | None = None
 
 
 def get_action_specs() -> list[ActionSpec]:
@@ -30,7 +31,7 @@ def get_action_specs() -> list[ActionSpec]:
         ActionSpec("info", "Show the current page info.", "Return the current active tab metadata.", _no_arguments, _default_request),
         ActionSpec("html", "Capture rendered DOM HTML.", "Return rendered DOM HTML for the active tab.", _no_arguments, _default_request),
         ActionSpec("snapshot", "Capture a bridgic-style snapshot.", "Return the accessibility-style snapshot tree for the active tab.", _add_snapshot_arguments, _default_request),
-        ActionSpec("reload", "Reload the current page.", "Reload the current active tab.", _no_arguments, _default_request),
+        ActionSpec("reload", "Reload the current page.", "Reload the current active tab.", _no_arguments, _default_request, True, "page-reload"),
         ActionSpec("back", "Go back in history.", "Navigate back in the current active tab history.", _no_arguments, _default_request),
         ActionSpec("forward", "Go forward in history.", "Navigate forward in the current active tab history.", _no_arguments, _default_request),
         ActionSpec("tabs", "List visible tabs.", "List tabs visible to the current agent domain.", _no_arguments, _default_request),

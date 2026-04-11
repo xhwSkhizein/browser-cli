@@ -10,6 +10,8 @@ from browser_cli.actions import get_action_specs
 from browser_cli import __version__, exit_codes
 from browser_cli.commands.action import run_action_command
 from browser_cli.commands.read import run_read_command
+from browser_cli.commands.reload import run_reload_command
+from browser_cli.commands.status import run_status_command
 from browser_cli.commands.workflow import run_workflow_command
 from browser_cli.errors import BrowserCliError
 
@@ -72,9 +74,24 @@ def build_parser() -> argparse.ArgumentParser:
     workflow_validate_parser.add_argument("path", help="Path to workflow.toml.")
     workflow_validate_parser.set_defaults(handler=run_workflow_command)
 
+    status_parser = subparsers.add_parser(
+        "status",
+        help="Show daemon, backend, and workspace runtime status.",
+        description="Inspect Browser CLI runtime state and print operational guidance.",
+    )
+    status_parser.set_defaults(handler=run_status_command)
+
+    reload_parser = subparsers.add_parser(
+        "reload",
+        help="Reset Browser CLI runtime and restart the daemon/browser backend.",
+        description="Clear Browser CLI runtime state, restart the daemon, and print the refreshed status.",
+    )
+    reload_parser.set_defaults(handler=run_reload_command)
+
     for spec in get_action_specs():
+        parser_name = spec.cli_name or spec.name
         action_parser = subparsers.add_parser(
-            spec.name,
+            parser_name,
             help=spec.help,
             description=spec.description,
         )

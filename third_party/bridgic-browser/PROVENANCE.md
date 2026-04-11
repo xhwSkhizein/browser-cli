@@ -9,9 +9,9 @@ Selected implementation ideas and limited adapted source were taken from the loc
 
 Current adapted areas:
 
-- `browser_cli.browser.stealth.STEALTH_INIT_SCRIPT`
+- `browser_cli.browser.stealth`
   - adapted from `bridgic/browser/session/_stealth.py`
-  - purpose: minimal anti-detection init script for `v1`
+  - purpose: expanded anti-detection init script plus launch/context helpers
 - `browser_cli.refs.generator.SemanticSnapshotGenerator`
   - adapted from `bridgic/browser/session/_snapshot.py`
   - purpose: semantic snapshot capture built on Playwright `snapshotForAI`

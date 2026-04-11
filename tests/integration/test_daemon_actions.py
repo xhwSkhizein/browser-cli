@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import socket
 import sys
 import tempfile
 import threading
@@ -52,6 +53,12 @@ def _can_launch_daemon_browser() -> bool:
 pytestmark = pytest.mark.integration
 
 
+def _unused_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
+
+
 def _configure_runtime(
     monkeypatch,
     tmp_path: Path,
@@ -68,6 +75,8 @@ def _configure_runtime(
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("BROWSER_CLI_HOME", str(tmp_path / ".browser-cli-runtime"))
     monkeypatch.setenv("X_AGENT_ID", agent_id)
+    monkeypatch.setenv("BROWSER_CLI_HEADLESS", "1")
+    monkeypatch.setenv("BROWSER_CLI_EXTENSION_PORT", str(_unused_port()))
     if search_url_template:
         monkeypatch.setenv("BROWSER_CLI_SEARCH_URL_TEMPLATE", search_url_template)
 
@@ -77,6 +86,13 @@ def _run_cli_json(args: list[str], capsys) -> dict:
     captured = capsys.readouterr()
     assert exit_code == 0, captured.err
     return json.loads(captured.out)
+
+
+def _run_cli_text(args: list[str], capsys) -> str:
+    exit_code = main(args)
+    captured = capsys.readouterr()
+    assert exit_code == 0, captured.err
+    return captured.out
 
 
 def _stop_daemon(capsys) -> None:
@@ -93,6 +109,28 @@ def _find_ref(refs_summary: list[dict], *, role: str, name: str) -> str:
 
 def _snapshot_refs(capsys) -> list[dict]:
     return _run_cli_json(["snapshot"], capsys)["data"]["refs_summary"]
+
+
+@pytest.mark.skipif(not _can_launch_daemon_browser(), reason="Stable Chrome runtime unavailable")
+def test_status_and_reload_lifecycle_commands(monkeypatch, tmp_path: Path, capsys) -> None:
+    with run_fixture_server() as base_url:
+        _configure_runtime(monkeypatch, tmp_path)
+
+        initial_status = _run_cli_text(["status"], capsys)
+        assert "Status: stopped" in initial_status
+
+        reload_status = _run_cli_text(["reload"], capsys)
+        assert "Reload: complete" in reload_status
+        assert "result: healthy" in reload_status
+
+        current_status = _run_cli_text(["status"], capsys)
+        assert "Status: healthy" in current_status
+        assert "profile source: -" in current_status
+
+        open_payload = _run_cli_json(["open", f"{base_url}/static"], capsys)
+        assert open_payload["data"]["page"]["url"].endswith("/static")
+
+        _stop_daemon(capsys)
 
 
 @pytest.mark.skipif(not _can_launch_daemon_browser(), reason="Stable Chrome runtime unavailable")
@@ -119,7 +157,7 @@ def test_navigation_and_lifecycle_commands(monkeypatch, tmp_path: Path, capsys) 
         forward_payload = _run_cli_json(["forward"], capsys)
         assert forward_payload["data"]["page"]["url"].endswith("/nav-two")
 
-        reload_payload = _run_cli_json(["reload"], capsys)
+        reload_payload = _run_cli_json(["page-reload"], capsys)
         assert reload_payload["data"]["page"]["title"] == "Nav Two"
 
         resize_payload = _run_cli_json(["resize", "1200", "820"], capsys)
@@ -325,7 +363,7 @@ def test_semantic_ref_errors_are_explicit(monkeypatch, tmp_path: Path, capsys) -
         with pytest.raises(AmbiguousRefError):
             send_command("click", {"ref": target_ref})
 
-        _run_cli_json(["reload"], capsys)
+        _run_cli_json(["page-reload"], capsys)
         semantic_refs = _snapshot_refs(capsys)
         target_ref = _find_ref(semantic_refs, role="button", name="Semantic Target")
         rename_ref = _find_ref(semantic_refs, role="button", name="Rename Semantic Target")

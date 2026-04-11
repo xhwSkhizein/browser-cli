@@ -13,6 +13,7 @@ def test_top_level_help(capsys) -> None:
     assert exit_code == 0
     assert "browser-cli" in captured.out
     assert "read" in captured.out
+    assert "status" in captured.out
     assert "open" in captured.out
     assert "click" in captured.out
 
@@ -30,6 +31,20 @@ def test_click_help(capsys) -> None:
     captured = capsys.readouterr()
     assert exit_code == 0
     assert "Element ref" in captured.out
+
+
+def test_status_help(capsys) -> None:
+    exit_code = main(["status", "--help"])
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "runtime state" in captured.out
+
+
+def test_page_reload_help(capsys) -> None:
+    exit_code = main(["page-reload", "--help"])
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "Reload the current active tab" in captured.out
 
 
 def test_missing_command_returns_usage_error(capsys) -> None:
@@ -69,3 +84,19 @@ def test_fallback_profile_reports_to_stderr(capsys) -> None:
     assert exit_code == 0
     assert captured.out == "ok"
     assert "using fallback profile" in captured.err
+
+
+def test_status_command_renders_report(capsys) -> None:
+    with patch("browser_cli.cli.main.run_status_command", return_value="Status: healthy\n"):
+        exit_code = main(["status"])
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert captured.out == "Status: healthy\n"
+
+
+def test_reload_command_renders_summary(capsys) -> None:
+    with patch("browser_cli.cli.main.run_reload_command", return_value="Reload: complete\n"):
+        exit_code = main(["reload"])
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert captured.out == "Reload: complete\n"

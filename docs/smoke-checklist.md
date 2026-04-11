@@ -5,21 +5,26 @@ Use this checklist before calling Browser CLI done on a real workstation.
 ## Environment
 
 - Stable Google Chrome is installed.
-- The target profile exists under the Chrome user data directory.
-- `~/.browser-cli/default-profile` is available as the fallback profile root.
+- Browser CLI managed profile root exists at `~/.browser-cli/default-profile`.
+- If testing extension mode, the unpacked extension from [`browser-cli-extension/`](/Users/hongv/workspace/m-projects/browser-cli/browser-cli-extension) is loaded in Chrome developer mode.
 
 ## Basic Checks
 
 - `browser-cli --help`
+- `browser-cli status`
 - `browser-cli read https://example.com`
 - `browser-cli read https://example.com --snapshot`
 - `browser-cli read https://example.com --scroll-bottom`
+- `browser-cli reload`
 - `browser-cli open https://example.com`
 - `browser-cli tabs`
 - `browser-cli snapshot`
 - `browser-cli html`
+- `browser-cli page-reload`
 - `browser-cli workflow validate tasks/interactive_reveal_capture/workflow.toml`
 - `browser-cli stop`
+- Confirm `browser-cli read ...` does not leave an extra visible tab behind after it exits.
+- Confirm the JSON metadata for daemon-backed commands includes `meta.driver`.
 
 ## Multi-Agent Checks
 
@@ -31,22 +36,46 @@ Use this checklist before calling Browser CLI done on a real workstation.
 - Confirm only agent B tabs are visible.
 - Confirm logging in under one agent is reflected under the other agent, because storage is shared.
 
-## Authenticated Checks
+## Managed Profile Checks
 
-- Open an already-authenticated site in normal Chrome first.
-- Close Chrome.
-- Run `browser-cli read <authenticated-url>`.
-- Confirm the output reflects the logged-in state rather than a logged-out page.
+- Run `browser-cli open <authenticated-or-test-url>`.
+- Confirm Browser CLI starts from its managed profile without touching the primary Chrome user data directory.
+- Log in manually inside the Browser CLI window if needed.
+- Run `browser-cli read <authenticated-url>` again and confirm the output reflects the managed-profile login state.
+
+## Extension Mode Checks
+
+- Load the unpacked extension from [`browser-cli-extension/`](/Users/hongv/workspace/m-projects/browser-cli/browser-cli-extension).
+- Open the extension popup and confirm it reports `connected` once the daemon is up.
+- Run `browser-cli status` and confirm the backend section shows whether any required extension capabilities are missing.
+- Confirm the popup also shows `Missing Caps: none` on the healthy extension build.
+- Run `browser-cli open https://example.com`.
+- Confirm Browser CLI creates or reuses a dedicated workspace window rather than attaching to arbitrary user tabs.
+- Confirm the response metadata reports `meta.driver = extension`.
+- Disable the extension or disconnect it, then issue another command.
+- Confirm Browser CLI falls back at a safe idle point and the response metadata reports `meta.state_reset = true`.
 
 ## Daemon Checks
 
+- Run `browser-cli status`.
+- Confirm it prints a clear runtime summary and guidance section.
+- Run `browser-cli reload`.
+- Confirm it restarts Browser CLI and prints a refreshed status block.
 - Run `browser-cli open <authenticated-url>`.
 - Run `browser-cli snapshot`.
 - Run `browser-cli html`.
 - Run `browser-cli info`.
+- Run `browser-cli page-reload`.
 - Run `browser-cli resize 1200 800`.
 - Run `browser-cli stop`.
 - Confirm the first command starts the daemon automatically and `stop` tears it down cleanly.
+- If the extension is loaded, confirm the daemon prefers `extension` over `playwright` after a safe idle point.
+
+## Troubleshooting Checks
+
+- With the daemon stopped, run `browser-cli status` and confirm it reports `Status: stopped`.
+- Start Browser CLI, then run `browser-cli status` again and confirm it reports a live backend state.
+- If the runtime gets wedged, run `browser-cli reload` and confirm Browser CLI returns to a usable state without touching arbitrary user tabs.
 
 ## Semantic Ref Checks
 
@@ -64,7 +93,9 @@ Use this checklist before calling Browser CLI done on a real workstation.
 - Exercise one keyboard/mouse flow: `focus`, `type`, `press`, `mouse-click`, `scroll`.
 - Exercise one observation flow: `console-start`, `network-start`, perform a click, then `console`, `network`, `console-stop`, `network-stop`.
 - Exercise one dialog flow: `dialog-setup` or `dialog`, then trigger `alert`, `confirm`, or `prompt`.
-- Exercise one artifact flow: `screenshot`, `pdf`, `trace-start`, `trace-chunk`, `trace-stop`, `video-start`, `video-stop`, then close the tab and confirm the trace/video artifacts exist.
+- Exercise one artifact flow: `screenshot`, `pdf`, then confirm the artifacts exist.
+- Exercise one trace flow: `trace-start`, perform a page action, `trace-chunk`, `trace-stop`, then confirm the `.zip` exists and includes `trace.trace`, `trace.network`, `trace.console`, and `trace.metadata.json`.
+- Exercise one video flow: `video-start`, perform a page action, `video-stop`, then `close-tab` and confirm the deferred `.webm` is written from the extension screencast pipeline.
 - Exercise one storage flow: `cookie-set`, `cookies`, `cookies-clear`, `storage-save`, `storage-load`.
 
 ## Task And Workflow Checks
@@ -77,10 +108,9 @@ Use this checklist before calling Browser CLI done on a real workstation.
 
 ## Failure Checks
 
-- Start normal Chrome and keep it open so the primary profile is locked.
-- Run `browser-cli read https://example.com`.
-- Confirm the command succeeds with a fallback-profile notice on `stderr`.
 - Create a lock under `~/.browser-cli/default-profile`.
-- Confirm the command now fails with a profile-unavailable error.
+- Confirm `browser-cli read https://example.com` now fails with a profile-unavailable error.
 - Start one long-running command on an active tab, then issue another page-bound command with the same `X_AGENT_ID`.
 - Confirm the second command fails with an explicit busy-tab error instead of silently waiting forever.
+- While the extension backend is active, disconnect the extension mid-session.
+- Confirm the current in-flight command is not interrupted, but the next safe-point response reports a `state_reset` downgrade.

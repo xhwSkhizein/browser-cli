@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Browser CLI Bridge</title>
+    <link rel="stylesheet" href="./src/popup.css" />
+  </head>
+  <body>
+    <main class="popup">
+      <header class="header">
+        <div>
+          <p class="eyebrow">Browser CLI Bridge</p>
+          <h1>Connection Panel</h1>
+        </div>
+        <span id="connection-badge" class="badge badge-disconnected">disconnected</span>
+      </header>
+
+      <section class="card">
+        <h2>Status</h2>
+        <dl class="meta-list">
+          <div class="meta-row">
+            <dt>Connection</dt>
+            <dd id="connection-status">disconnected</dd>
+          </div>
+          <div class="meta-row">
+            <dt>Daemon</dt>
+            <dd id="daemon-address">127.0.0.1:19825</dd>
+          </div>
+          <div class="meta-row">
+            <dt>Backend</dt>
+            <dd id="backend-status">waiting for daemon</dd>
+          </div>
+          <div class="meta-row">
+            <dt>Missing Caps</dt>
+            <dd id="missing-capabilities">none</dd>
+          </div>
+          <div class="meta-row">
+            <dt>Workspace</dt>
+            <dd id="workspace-status">No workspace window</dd>
+          </div>
+          <div class="meta-row">
+            <dt>Last Connected</dt>
+            <dd id="last-connected">Never</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="card">
+        <h2>Daemon Config</h2>
+        <label class="field">
+          <span>Host</span>
+          <input id="daemon-host" type="text" autocomplete="off" spellcheck="false" />
+        </label>
+        <label class="field">
+          <span>Port</span>
+          <input id="daemon-port" type="number" min="1" max="65535" />
+        </label>
+        <div class="actions">
+          <button id="save-config" class="button button-secondary" type="button">Save Host/Port</button>
+          <button id="reconnect-now" class="button" type="button">Reconnect Now</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Last Error</h2>
+        <p id="last-error" class="error-text empty">No recent errors</p>
+      </section>
+    </main>
+    <script type="module" src="./src/popup.js"></script>
+  </body>
+  </html>

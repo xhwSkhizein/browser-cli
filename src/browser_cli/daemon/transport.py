@@ -11,6 +11,8 @@ from typing import Any
 
 from browser_cli.constants import get_app_paths
 
+DAEMON_RUNTIME_VERSION = "2026-04-10-dual-driver-extension-v1"
+
 
 def ensure_run_dir() -> Path:
     run_dir = get_app_paths().run_dir

@@ -64,7 +64,7 @@ the daemon, but there is no single top-level command that:
 
 ## Non-Goals
 
-- No replacement of existing page-level `reload` action.
+- No replacement of the existing daemon page-reload action semantics.
 - No conversion of `status` into a normal daemon action command.
 - No attempt to close arbitrary user-visible Chrome tabs outside Browser CLI's
   managed workspace.
@@ -434,7 +434,9 @@ Result:
 
 ## Interaction With Existing Commands
 
-- Existing page action `reload` remains unchanged.
+- Existing page action semantics remain unchanged, but the public CLI spelling
+  becomes `page-reload` so top-level `reload` can be reserved for lifecycle
+  reset.
 - Existing `stop` action remains available.
 - `status` and top-level `reload` are new lifecycle commands, not replacements
   for action commands.

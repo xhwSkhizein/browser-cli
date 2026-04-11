@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import socket
 import shutil
 import sys
 import tempfile
@@ -48,6 +49,11 @@ def _can_launch_daemon_browser() -> bool:
 
 
 def _configure_runtime(monkeypatch, tmp_path: Path) -> None:
+    def _unused_port() -> int:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.bind(("127.0.0.1", 0))
+            return int(sock.getsockname()[1])
+
     real_home = Path.home()
     if not (real_home / "Library" / "Caches" / "ms-playwright").exists() and sys.platform.startswith("linux"):
         playwright_cache = real_home / ".cache" / "ms-playwright"
@@ -57,6 +63,8 @@ def _configure_runtime(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("BROWSER_CLI_HOME", str(tmp_path / ".browser-cli-runtime"))
     monkeypatch.setenv("X_AGENT_ID", "workflow-agent")
+    monkeypatch.setenv("BROWSER_CLI_HEADLESS", "1")
+    monkeypatch.setenv("BROWSER_CLI_EXTENSION_PORT", str(_unused_port()))
 
 
 def _run_cli_json(args: list[str], capsys) -> dict:

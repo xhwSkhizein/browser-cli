@@ -10,6 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
   "playwright>=1.52,<2",
+  "websockets>=12,<16",
 ]
 
 [project.optional-dependencies]
@@ -32,4 +33,3 @@ markers = [
   "integration: tests that use a real browser runtime",
   "smoke: tests or checks intended for manual smoke validation",
 ]
-
