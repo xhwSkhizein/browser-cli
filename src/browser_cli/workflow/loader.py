@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 import json
-import tomllib
+import sys
 from pathlib import Path
 from typing import Any
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
 
 from browser_cli.errors import InvalidInputError
 from browser_cli.task_runtime.models import validate_task_metadata

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import traceback
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
@@ -18,6 +20,8 @@ from browser_cli.profiles.discovery import ChromeEnvironment
 
 from .models import DaemonRequest, DaemonResponse
 from .state import DaemonState
+
+logger = logging.getLogger(__name__)
 
 Handler = Callable[[DaemonRequest], Awaitable[dict[str, Any]]]
 
@@ -141,9 +145,11 @@ class BrowserDaemonApp:
         except Exception as exc:  # pragma: no cover - last-resort daemon guard
             if command_started:
                 runtime_meta = await self._state.browser_service.end_command()
+            logger.exception("Unexpected daemon failure in action=%s", request.action)
             return self._error_response(
                 OperationFailedError(
-                    f"Unexpected daemon failure: {exc}", error_code=error_codes.INTERNAL_ERROR
+                    f"Unexpected daemon failure: {exc}\n{traceback.format_exc()}",
+                    error_code=error_codes.INTERNAL_ERROR,
                 ),
                 request=request,
             )

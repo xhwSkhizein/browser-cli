@@ -135,6 +135,12 @@ class _FailingStopExtensionDriver(_FakeExtensionDriver):
         raise browser_service_module.OperationFailedError("No tab with id: 685338567.")
 
 
+class _TimeoutExtensionHub(_FakeExtensionHub):
+    async def wait_for_session(self, timeout_seconds: float):
+        _ = timeout_seconds
+        raise TimeoutError("timed out waiting for extension session")
+
+
 @pytest.fixture
 def _patched_browser_service(monkeypatch: pytest.MonkeyPatch):
     fake_hub = _FakeExtensionHub()
@@ -148,6 +154,28 @@ def test_browser_service_uses_playwright_by_default(
     _patched_browser_service: _FakeExtensionHub,
 ) -> None:
     async def _scenario() -> None:
+        tabs = TabRegistry()
+        service = browser_service_module.BrowserService(tabs)
+
+        await service.begin_command("info")
+        meta = await service.end_command()
+
+        assert service.active_driver_name == "playwright"
+        assert meta["driver"] == "playwright"
+        await service.stop()
+
+    asyncio.run(_scenario())
+
+
+def test_browser_service_falls_back_to_playwright_when_extension_wait_times_out(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def _scenario() -> None:
+        fake_hub = _TimeoutExtensionHub()
+        monkeypatch.setattr(browser_service_module, "ExtensionHub", lambda: fake_hub)
+        monkeypatch.setattr(browser_service_module, "PlaywrightDriver", _FakePlaywrightDriver)
+        monkeypatch.setattr(browser_service_module, "ExtensionDriver", _FakeExtensionDriver)
+
         tabs = TabRegistry()
         service = browser_service_module.BrowserService(tabs)
 

@@ -7,10 +7,11 @@ name = "browser-cli"
 version = "0.1.0"
 description = "CLI-first browser reader for rendered HTML and page snapshots"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 dependencies = [
   "playwright>=1.52,<2",
   "websockets>=12,<16",
+  "tomli>=1.2.0; python_version<'3.11'",
 ]
 
 [project.optional-dependencies]
@@ -37,7 +38,7 @@ markers = [
 ]
 
 [tool.ruff]
-target-version = "py311"
+target-version = "py310"
 line-length = 100
 src = ["src", "tests", "scripts"]
 
@@ -66,7 +67,7 @@ indent-style = "space"
 skip-magic-trailing-comma = false
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.10"
 warn_return_any = true
 warn_unused_ignores = true
 disallow_untyped_defs = false
