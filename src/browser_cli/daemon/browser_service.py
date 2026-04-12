@@ -104,7 +104,23 @@ class BrowserService:
             self._watch_task = asyncio.create_task(self._watch_extension_changes())
         if self._driver is not None:
             return
-        session = await self._extension_hub.wait_for_session(self.INITIAL_EXTENSION_WAIT_SECONDS)
+        session = None
+        try:
+            session = await self._extension_hub.wait_for_session(
+                self.INITIAL_EXTENSION_WAIT_SECONDS
+            )
+        except asyncio.CancelledError:
+            raise
+        except TimeoutError:
+            logger.info(
+                "Extension did not connect within %.1fs; falling back to playwright",
+                self.INITIAL_EXTENSION_WAIT_SECONDS,
+            )
+        except Exception:
+            logger.warning(
+                "Extension startup wait failed; falling back to playwright",
+                exc_info=True,
+            )
         target = (
             "extension" if session and session.hello.has_required_capabilities() else "playwright"
         )

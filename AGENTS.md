@@ -144,6 +144,7 @@ Use this section first. Start from the user question, then jump to the owning im
   inspect `src/browser_cli/commands/read.py` and `src/browser_cli/runtime/read_runner.py` first, then `src/browser_cli/daemon/browser_service.py::read_page`.
 - If the user reports daemon startup, stale socket, or reload issues:
   inspect `src/browser_cli/daemon/client.py`, `src/browser_cli/daemon/transport.py`, `src/browser_cli/commands/status.py`, and `src/browser_cli/commands/reload.py`.
+  If startup fails while waiting for an extension session, inspect `src/browser_cli/daemon/browser_service.py::ensure_started`; extension handshake wait is a best-effort preference signal and must fall back to Playwright instead of aborting daemon startup.
 - If the user reports a driver mismatch or extension/Playwright inconsistency:
   start at `src/browser_cli/drivers/base.py`, then compare `playwright_driver.py`, `extension_driver.py`, and `daemon/browser_service.py`.
 - If the user reports broken refs, stale snapshots, or element targeting failures:
