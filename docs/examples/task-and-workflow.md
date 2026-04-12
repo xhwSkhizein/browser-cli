@@ -5,6 +5,11 @@ Browser CLI now ships with two reference task directories:
 - [`interactive_reveal_capture`](/Users/hongv/workspace/m-projects/browser-cli/tasks/interactive_reveal_capture/task.py)
 - [`lazy_scroll_capture`](/Users/hongv/workspace/m-projects/browser-cli/tasks/lazy_scroll_capture/task.py)
 
+Both reference tasks also ship with publishable workflow wrappers:
+
+- [`interactive_reveal_capture/workflow.toml`](/Users/hongv/workspace/m-projects/browser-cli/tasks/interactive_reveal_capture/workflow.toml)
+- [`lazy_scroll_capture/workflow.toml`](/Users/hongv/workspace/m-projects/browser-cli/tasks/lazy_scroll_capture/workflow.toml)
+
 ## Direct Task Runtime Pattern
 
 Use the thin Python runtime inside `task.py`:
@@ -38,6 +43,24 @@ The workflow runner:
 - loads the task entrypoint
 - runs the task with `browser_cli.task_runtime`
 - writes `artifacts/result.json` when configured
+
+## Workflow Service Pattern
+
+For durable recurring automation, publish the workflow into the local workflow
+service and manage it through the local Web UI:
+
+```bash
+browser-cli workflow import tasks/interactive_reveal_capture/workflow.toml
+browser-cli workflow ui
+browser-cli workflow service-status
+```
+
+The workflow service:
+
+- persists workflow definitions and run history in the Browser CLI home
+- schedules repeated execution for supported workflow schedule modes
+- exposes a local Web UI for editing workflow parameters and schedule settings
+- still executes the underlying task through `task.py + browser_cli.task_runtime + browser daemon`
 
 ## Explore Skill
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+from contextlib import nullcontext, redirect_stderr, redirect_stdout
 from pathlib import Path
 from typing import Any
 
@@ -38,17 +39,6 @@ def run_workflow(
     if input_overrides:
         merged_inputs.update(input_overrides)
 
-    flow = Flow(
-        client=BrowserCliTaskClient(),
-        context=FlowContext(
-            task_path=manifest.task.path,
-            task_dir=manifest.task.path.parent,
-            artifacts_dir=manifest.outputs.artifact_dir,
-            workflow_path=manifest.manifest_path,
-            workflow_name=manifest.workflow.name,
-        ),
-    )
-
     hook_env = {
         "BROWSER_CLI_WORKFLOW_ID": manifest.workflow.id,
         "BROWSER_CLI_WORKFLOW_NAME": manifest.workflow.name,
@@ -59,11 +49,13 @@ def run_workflow(
         manifest.hooks.before_run, cwd=manifest.manifest_path.parent, extra_env=hook_env
     )
     try:
-        result = _run_task_module(
-            manifest.task.path,
+        result = run_task_entrypoint(
+            task_path=manifest.task.path,
             entrypoint=manifest.task.entrypoint,
-            flow=flow,
             inputs=merged_inputs,
+            artifacts_dir=manifest.outputs.artifact_dir,
+            workflow_path=manifest.manifest_path,
+            workflow_name=manifest.workflow.name,
         )
     except Exception:
         run_hook_commands(
@@ -106,6 +98,36 @@ def run_workflow(
             "after_success": success_hooks,
         },
     }
+
+
+def run_task_entrypoint(
+    *,
+    task_path: Path,
+    entrypoint: str,
+    inputs: dict[str, Any],
+    artifacts_dir: Path,
+    workflow_path: Path | None = None,
+    workflow_name: str | None = None,
+    client: BrowserCliTaskClient | None = None,
+    stdout_handle: Any | None = None,
+    stderr_handle: Any | None = None,
+) -> dict[str, Any]:
+    flow = Flow(
+        client=client or BrowserCliTaskClient(),
+        context=FlowContext(
+            task_path=task_path,
+            task_dir=task_path.parent,
+            artifacts_dir=artifacts_dir,
+            workflow_path=workflow_path,
+            workflow_name=workflow_name,
+        ),
+    )
+    if stdout_handle is None and stderr_handle is None:
+        return _run_task_module(task_path, entrypoint=entrypoint, flow=flow, inputs=inputs)
+    stdout_ctx = redirect_stdout(stdout_handle) if stdout_handle is not None else nullcontext()
+    stderr_ctx = redirect_stderr(stderr_handle) if stderr_handle is not None else nullcontext()
+    with stdout_ctx, stderr_ctx:
+        return _run_task_module(task_path, entrypoint=entrypoint, flow=flow, inputs=inputs)
 
 
 def _run_task_module(

@@ -102,7 +102,7 @@ def _check_read_contract(parser: argparse.ArgumentParser) -> list[Finding]:
 def _check_workflow_contract(parser: argparse.ArgumentParser) -> list[Finding]:
     findings: list[Finding] = []
     subcommands = _subcommand_parsers(parser)
-    expected = {"run", "validate"}
+    expected = {"export", "import", "run", "service-status", "service-stop", "ui", "validate"}
     actual = set(subcommands)
     if actual != expected:
         findings.append(

@@ -76,6 +76,53 @@ def build_parser() -> argparse.ArgumentParser:
     workflow_validate_parser.add_argument("path", help="Path to workflow.toml.")
     workflow_validate_parser.set_defaults(handler=run_workflow_command)
 
+    workflow_ui_parser = workflow_subparsers.add_parser(
+        "ui",
+        help="Start the local workflow service if needed and print the UI URL.",
+        description="Ensure the workflow service is running and print the local Web UI URL.",
+    )
+    workflow_ui_parser.set_defaults(handler=run_workflow_command)
+
+    workflow_service_status_parser = workflow_subparsers.add_parser(
+        "service-status",
+        help="Show local workflow-service status.",
+        description="Inspect workflow-service health without forcing a browser action.",
+    )
+    workflow_service_status_parser.set_defaults(handler=run_workflow_command)
+
+    workflow_service_stop_parser = workflow_subparsers.add_parser(
+        "service-stop",
+        help="Stop the local workflow service.",
+        description="Request workflow-service shutdown and clean stale runtime metadata.",
+    )
+    workflow_service_stop_parser.set_defaults(handler=run_workflow_command)
+
+    workflow_import_parser = workflow_subparsers.add_parser(
+        "import",
+        help="Import a workflow.toml into the persistent workflow service.",
+        description="Load workflow.toml and publish it into the local workflow-service database.",
+    )
+    workflow_import_parser.add_argument("path", help="Path to workflow.toml.")
+    workflow_import_parser.add_argument(
+        "--enable",
+        action="store_true",
+        help="Enable the imported workflow immediately.",
+    )
+    workflow_import_parser.set_defaults(handler=run_workflow_command)
+
+    workflow_export_parser = workflow_subparsers.add_parser(
+        "export",
+        help="Export one persisted workflow to workflow.toml.",
+        description="Write a persisted workflow definition back out as workflow.toml.",
+    )
+    workflow_export_parser.add_argument("workflow_id", help="Persisted workflow id.")
+    workflow_export_parser.add_argument(
+        "--output",
+        required=True,
+        help="Path to write workflow.toml.",
+    )
+    workflow_export_parser.set_defaults(handler=run_workflow_command)
+
     status_parser = subparsers.add_parser(
         "status",
         help="Show daemon, backend, and workspace runtime status.",

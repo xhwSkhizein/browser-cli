@@ -109,3 +109,17 @@ class AmbiguousRefError(BrowserCliError):
 class OperationFailedError(BrowserCliError):
     def __init__(self, message: str, *, error_code: str = error_codes.OPERATION_FAILED) -> None:
         super().__init__(message, exit_codes.TEMPORARY_FAILURE, error_code)
+
+
+class WorkflowServiceNotAvailableError(BrowserCliError):
+    def __init__(self, message: str = "Workflow service is not available.") -> None:
+        super().__init__(
+            message,
+            exit_codes.TEMPORARY_FAILURE,
+            error_codes.WORKFLOW_SERVICE_NOT_AVAILABLE,
+        )
+
+
+class WorkflowInvalidError(BrowserCliError):
+    def __init__(self, message: str) -> None:
+        super().__init__(message, exit_codes.USAGE_ERROR, error_codes.WORKFLOW_INVALID)

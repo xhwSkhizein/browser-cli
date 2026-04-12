@@ -1,0 +1,81 @@
+from __future__ import annotations
+
+import http.client
+import json
+import threading
+from pathlib import Path
+
+from browser_cli.workflow.api import WorkflowHttpServer, WorkflowRequestHandler
+from browser_cli.workflow.persistence import WorkflowStore
+from browser_cli.workflow.service.runtime import WorkflowServiceRuntime
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _request(
+    base_host: str, base_port: int, method: str, path: str, body: dict | None = None
+) -> dict:
+    connection = http.client.HTTPConnection(base_host, base_port, timeout=5.0)
+    try:
+        raw = json.dumps(body).encode("utf-8") if body is not None else None
+        headers = {"Content-Type": "application/json"} if raw is not None else {}
+        connection.request(method, path, body=raw, headers=headers)
+        response = connection.getresponse()
+        payload = json.loads(response.read().decode("utf-8"))
+        assert response.status < 400, payload
+        return payload
+    finally:
+        connection.close()
+
+
+def test_workflow_api_crud_and_export(tmp_path: Path) -> None:
+    runtime = WorkflowServiceRuntime(store=WorkflowStore(tmp_path / "workflows.db"))
+    server = WorkflowHttpServer(("127.0.0.1", 0), WorkflowRequestHandler, runtime)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    host, port = server.server_address[:2]
+    try:
+        create_payload = _request(
+            host,
+            int(port),
+            "POST",
+            "/api/workflows",
+            {
+                "id": "interactive_reveal_capture",
+                "name": "Interactive Reveal Capture",
+                "task_path": str(REPO_ROOT / "tasks" / "interactive_reveal_capture" / "task.py"),
+                "task_meta_path": str(
+                    REPO_ROOT / "tasks" / "interactive_reveal_capture" / "task.meta.json"
+                ),
+                "schedule_kind": "manual",
+                "schedule_payload": {},
+                "timezone": "UTC",
+                "output_dir": str(tmp_path / "runs"),
+                "input_overrides": {"url": "https://example.com"},
+            },
+        )
+        assert create_payload["data"]["id"] == "interactive_reveal_capture"
+
+        list_payload = _request(host, int(port), "GET", "/api/workflows")
+        assert len(list_payload["data"]) == 1
+
+        run_payload = _request(
+            host,
+            int(port),
+            "POST",
+            "/api/workflows/interactive_reveal_capture/run",
+        )
+        assert run_payload["data"]["status"] == "queued"
+
+        export_payload = _request(
+            host,
+            int(port),
+            "GET",
+            "/api/workflows/interactive_reveal_capture/export",
+        )
+        assert "[workflow]" in export_payload["data"]["toml"]
+        assert 'id = "interactive_reveal_capture"' in export_payload["data"]["toml"]
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2.0)

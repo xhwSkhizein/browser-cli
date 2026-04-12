@@ -7,6 +7,7 @@ Browser CLI is a `CLI-first`, `Agent-first` browser tool for AI agents. The repo
 - `browser-cli read` for one-shot rendered HTML or snapshot capture
 - daemon-backed browser actions for persistent interactive control
 - `task.py + task.meta.json + workflow.toml` for reusable packaged workflows
+- Workflow Publish Layer is a persistent local workflow service with a Web UI primary control surface.
 
 The job of this file is not to restate every file in the repo. It should help an agent answer: what is the contract, where is the implementation, and where should a change land first.
 
@@ -55,6 +56,8 @@ Use this section first. Start from the user question, then jump to the owning im
   `src/browser_cli/commands/reload.py`
 - Workflow CLI entrypoints:
   `src/browser_cli/commands/workflow.py`
+- Workflow service client, local API, scheduler, persistence, and Web UI:
+  `src/browser_cli/workflow/service/*`, `src/browser_cli/workflow/api/*`, `src/browser_cli/workflow/persistence/*`, `src/browser_cli/workflow/scheduler/*`, `src/browser_cli/workflow/web/*`
 
 - Daemon socket startup, shutdown, compatibility checks, and request transport:
   `src/browser_cli/daemon/client.py`, `src/browser_cli/daemon/transport.py`
@@ -153,6 +156,8 @@ Use this section first. Start from the user question, then jump to the owning im
   start at `src/browser_cli/tabs/registry.py` and the tab-related handlers in `src/browser_cli/daemon/app.py`.
 - If the user wants task/workflow behavior changed:
   inspect `src/browser_cli/task_runtime/*` and `src/browser_cli/workflow/*`, then validate against example tasks under `tasks/`.
+- If the user reports recurring-run, workflow history, local Web UI, or workflow-service state issues:
+  start at `src/browser_cli/workflow/service/*`, `src/browser_cli/workflow/persistence/*`, `src/browser_cli/workflow/scheduler/*`, and `src/browser_cli/workflow/api/*`.
 - If the user mentions extension capability gaps, artifacts, or real Chrome behavior:
   inspect both `src/browser_cli/extension/*` and `browser-cli-extension/src/*`; many bugs live in protocol drift between Python and extension JS.
 - If a change touches architecture or public product contracts:
@@ -174,13 +179,14 @@ Use this section first. Start from the user question, then jump to the owning im
 - `browser_cli.runtime` owns the one-shot read orchestration layer. `browser_cli.runtime.read_runner` owns the one-shot read contract and routes it through the daemon-managed browser lifecycle.
 - `browser_cli.tabs` owns agent-visible tab state, active-tab tracking, and busy-state conflict rules.
 - `browser_cli.task_runtime` owns the thin Python runtime used by `task.py`.
-- `browser_cli.workflow` owns workflow manifest loading, validation, hooks, and workflow execution.
+- `browser_cli.workflow` owns workflow manifest loading, import/export, persistent workflow-service state, scheduler logic, local API/Web UI, hooks, and workflow execution.
 
 Keep these boundaries intact. Do not push browser internals into CLI handlers, do not move semantic-ref logic into drivers, and do not bypass the daemon for public interactive commands.
 
 ## Implementation Conventions
 
 - Top-level parser registration lives in `src/browser_cli/cli/main.py`. Only `read`, `workflow`, `status`, and lifecycle `reload` are hand-wired there; the rest come from `get_action_specs()`.
+- `browser-cli workflow` now contains both one-shot manifest helpers (`run`, `validate`) and workflow-service helpers (`ui`, `service-status`, `service-stop`, `import`, `export`). The Web UI remains the primary management surface.
 - Public daemon-backed actions should be added through `ActionSpec`, not by manually bolting ad hoc parsers into `main.py`.
 - The lifecycle command `browser-cli reload` and the page action `browser-cli page-reload` are intentionally different surfaces. Do not collapse them.
 - Public daemon commands return JSON payloads. Preserve `ok/data/meta` shape and machine-readable error codes.
@@ -190,6 +196,7 @@ Keep these boundaries intact. Do not push browser internals into CLI handlers, d
 - Extension and Playwright backends must stay behaviorally aligned on the same public contract even if their internal mechanics differ.
 - Prefer `browser-cli status` before manual daemon cleanup. Prefer `browser-cli reload` over ad hoc process killing when runtime state is bad.
 - `task.py` contains reusable automation logic. `workflow.toml` packages and configures that logic; it should not become a second implementation surface.
+- Runtime workflow state belongs to the workflow service persistence layer, not `workflow.toml`. `workflow.toml` remains import/export and reviewable packaging.
 - When adapting third-party logic from `third_party/bridgic-browser`, keep provenance clear and the adapted code understandable. Do not add a runtime dependency on the external package just to shortcut implementation.
 
 ## Testing And Validation
