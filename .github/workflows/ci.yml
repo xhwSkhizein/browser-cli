@@ -101,7 +101,7 @@ jobs:
 
       - name: Install Playwright
         run: |
-          playwright install chromium
+          playwright install --with-deps chromium
 
       - name: Run integration tests
         run: pytest tests/integration -v --tb=short -m "not smoke"
