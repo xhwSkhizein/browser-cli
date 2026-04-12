@@ -277,10 +277,24 @@ class ExtensionHub:
                 )
 
     @classmethod
-    def _process_request(cls, _connection: ServerConnection, request: Request) -> Response | None:
-        if cls._is_websocket_upgrade(request):
+    def _process_request(
+        cls, connection_or_path: ServerConnection | str, request_or_headers: Request | Headers
+    ) -> Response | None:
+        # Support both websockets 12/13 (old API: process_request(path, headers))
+        # and websockets 14+ (new API: process_request(connection, request))
+        if hasattr(request_or_headers, "headers"):
+            # websockets 14+ API: request_or_headers is a Request object
+            request = request_or_headers
+            path = request.path
+            headers = request.headers
+        else:
+            # websockets 12/13 API: request_or_headers is a Headers object
+            path = str(connection_or_path)
+            headers = request_or_headers
+
+        if cls._is_websocket_upgrade(headers):
             return None
-        if request.path == cls.PROBE_PATH:
+        if path == cls.PROBE_PATH:
             return cls._build_response(
                 HTTPStatus.UPGRADE_REQUIRED,
                 b"Browser CLI extension endpoint expects a WebSocket upgrade.\n",
@@ -289,9 +303,9 @@ class ExtensionHub:
         return cls._build_response(HTTPStatus.NOT_FOUND, b"Not Found\n")
 
     @staticmethod
-    def _is_websocket_upgrade(request: Request) -> bool:
-        upgrade = request.headers.get("Upgrade", "")
-        connection = request.headers.get("Connection", "")
+    def _is_websocket_upgrade(headers: Headers) -> bool:
+        upgrade = headers.get("Upgrade", "")
+        connection = headers.get("Connection", "")
         return upgrade.lower() == "websocket" and "upgrade" in connection.lower()
 
     @staticmethod
@@ -300,10 +314,18 @@ class ExtensionHub:
         body: bytes,
         *,
         upgrade: str | None = None,
-    ) -> Response:
+    ) -> Response | tuple[int, Headers, bytes]:
         headers = Headers()
         headers["Content-Type"] = "text/plain; charset=utf-8"
         headers["Content-Length"] = str(len(body))
         if upgrade:
             headers["Upgrade"] = upgrade
-        return Response(int(status), status.phrase, headers, body)
+        # websockets 12/13 expect tuple (status, headers, body)
+        # websockets 14+ accepts Response object
+        import websockets
+
+        version_tuple = tuple(map(int, websockets.__version__.split(".")[:2]))
+        if version_tuple >= (14, 0):
+            return Response(int(status), status.phrase, headers, body)
+        else:
+            return (int(status), headers, body)
