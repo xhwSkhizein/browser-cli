@@ -31,6 +31,19 @@ browser-cli task validate tasks/interactive_reveal_capture
 browser-cli task run tasks/interactive_reveal_capture --set url=https://example.com
 ```
 
+## One-Shot Read Pattern
+
+Use `Flow.read(...)` when a task wants the same one-shot behavior as CLI `read`:
+
+```python
+from browser_cli.task_runtime.flow import Flow
+
+
+def run(flow: Flow, inputs: dict) -> dict:
+    result = flow.read(inputs["url"], output_mode="snapshot", scroll_bottom=True)
+    return {"snapshot": result.body}
+```
+
 ## Automation Pattern
 
 For durable recurring automation, publish or import an automation:

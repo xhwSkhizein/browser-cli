@@ -44,10 +44,14 @@ def test_client_read_injects_chrome_environment_when_daemon_is_cold(tmp_path: Pa
             },
         }
 
-    with patch("browser_cli.task_runtime.read.probe_socket", return_value=False), patch(
-        "browser_cli.task_runtime.read.discover_chrome_environment",
-        return_value=chrome_environment,
-    ), patch("browser_cli.task_runtime.read.send_command", side_effect=_fake_send_command):
+    with (
+        patch("browser_cli.task_runtime.read.probe_socket", return_value=False),
+        patch(
+            "browser_cli.task_runtime.read.discover_chrome_environment",
+            return_value=chrome_environment,
+        ),
+        patch("browser_cli.task_runtime.read.send_command", side_effect=_fake_send_command),
+    ):
         result = BrowserCliTaskClient().read("https://example.com", scroll_bottom=True)
 
     assert captured["action"] == "read-page"
@@ -74,12 +78,15 @@ def test_client_read_injects_chrome_environment_when_daemon_is_cold(tmp_path: Pa
 
 
 def test_client_read_raises_empty_content_error() -> None:
-    with patch("browser_cli.task_runtime.read.probe_socket", return_value=True), patch(
-        "browser_cli.task_runtime.read.send_command",
-        return_value={"ok": True, "data": {"body": "   "}},
+    with (
+        patch("browser_cli.task_runtime.read.probe_socket", return_value=True),
+        patch(
+            "browser_cli.task_runtime.read.send_command",
+            return_value={"ok": True, "data": {"body": "   "}},
+        ),
+        pytest.raises(EmptyContentError),
     ):
-        with pytest.raises(EmptyContentError):
-            BrowserCliTaskClient().read("https://example.com")
+        BrowserCliTaskClient().read("https://example.com")
 
 
 def test_flow_read_delegates_to_client(tmp_path: Path) -> None:

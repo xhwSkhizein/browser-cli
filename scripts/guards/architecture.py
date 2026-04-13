@@ -29,7 +29,7 @@ ALLOWED_DEPENDENCIES: dict[str, set[str]] = {
     "automation": {"automation", "errors", "task_runtime"},
     "browser": {"browser", "constants", "errors", "network", "profiles", "refs"},
     "cli": {"actions", "commands", "errors", "exit_codes"},
-    "commands": {"automation", "daemon", "errors", "outputs", "runtime", "task_runtime"},
+    "commands": {"automation", "daemon", "errors", "outputs", "task_runtime"},
     "daemon": {
         "agent_scope",
         "browser",
@@ -47,9 +47,8 @@ ALLOWED_DEPENDENCIES: dict[str, set[str]] = {
     "outputs": set(),
     "profiles": {"errors"},
     "refs": {"refs"},
-    "runtime": {"daemon", "errors", "profiles"},
     "tabs": {"constants", "errors"},
-    "task_runtime": {"daemon", "errors", "task_runtime"},
+    "task_runtime": {"daemon", "errors", "profiles", "task_runtime"},
 }
 
 
