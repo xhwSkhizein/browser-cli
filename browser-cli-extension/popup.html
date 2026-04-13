@@ -11,39 +11,84 @@
       <header class="header">
         <div>
           <p class="eyebrow">Browser CLI Bridge</p>
-          <h1>Connection Panel</h1>
+          <h1>Runtime Observer</h1>
         </div>
-        <span id="connection-badge" class="badge badge-disconnected">disconnected</span>
+        <span id="connection-badge" class="badge badge-idle">disconnected</span>
       </header>
 
-      <section class="card">
-        <h2>Status</h2>
+      <section class="card card-summary">
+        <div class="section-heading">
+          <h2>Runtime Summary</h2>
+          <p id="connection-status" class="section-note">disconnected</p>
+        </div>
+        <p id="summary-reason" class="summary-text">Waiting for Browser CLI runtime status.</p>
         <dl class="meta-list">
-          <div class="meta-row">
-            <dt>Connection</dt>
-            <dd id="connection-status">disconnected</dd>
-          </div>
           <div class="meta-row">
             <dt>Daemon</dt>
             <dd id="daemon-address">127.0.0.1:19825</dd>
           </div>
           <div class="meta-row">
-            <dt>Backend</dt>
-            <dd id="backend-status">waiting for daemon</dd>
+            <dt>Driver</dt>
+            <dd id="execution-driver">not-started</dd>
           </div>
           <div class="meta-row">
-            <dt>Missing Caps</dt>
-            <dd id="missing-capabilities">none</dd>
+            <dt>Pending Rebind</dt>
+            <dd id="execution-rebind">none</dd>
           </div>
           <div class="meta-row">
-            <dt>Workspace</dt>
-            <dd id="workspace-status">No workspace window</dd>
+            <dt>Last Transition</dt>
+            <dd id="last-transition">none</dd>
           </div>
           <div class="meta-row">
             <dt>Last Connected</dt>
             <dd id="last-connected">Never</dd>
           </div>
         </dl>
+      </section>
+
+      <section class="card">
+        <div class="section-heading">
+          <h2>Workspace Ownership</h2>
+          <p class="section-note">observer only</p>
+        </div>
+        <dl class="meta-list">
+          <div class="meta-row">
+            <dt>Binding</dt>
+            <dd id="workspace-binding">absent</dd>
+          </div>
+          <div class="meta-row">
+            <dt>Window</dt>
+            <dd id="workspace-window">none</dd>
+          </div>
+          <div class="meta-row">
+            <dt>Tabs</dt>
+            <dd id="workspace-tabs">0</dd>
+          </div>
+          <div class="meta-row">
+            <dt>Managed Tabs</dt>
+            <dd id="workspace-managed-tabs">0</dd>
+          </div>
+          <div class="meta-row">
+            <dt>Busy Tabs</dt>
+            <dd id="workspace-busy-tabs">0</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="card">
+        <h2>Recovery</h2>
+        <ul id="recovery-guidance" class="guidance-list">
+          <li>Open Browser CLI to initialize runtime state.</li>
+        </ul>
+        <div class="actions actions-stack">
+          <button id="refresh-status" class="button button-secondary" type="button">
+            Refresh Status
+          </button>
+          <button id="reconnect-now" class="button" type="button">Reconnect Extension</button>
+          <button id="rebuild-workspace" class="button button-secondary" type="button">
+            Rebuild Workspace
+          </button>
+        </div>
       </section>
 
       <section class="card">
@@ -57,8 +102,9 @@
           <input id="daemon-port" type="number" min="1" max="65535" />
         </label>
         <div class="actions">
-          <button id="save-config" class="button button-secondary" type="button">Save Host/Port</button>
-          <button id="reconnect-now" class="button" type="button">Reconnect Now</button>
+          <button id="save-config" class="button button-secondary" type="button">
+            Save Host/Port
+          </button>
         </div>
       </section>
 

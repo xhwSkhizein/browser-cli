@@ -22,6 +22,7 @@ const RECONNECT_ALARM = 'browser-cli-bridge-reconnect';
 const INITIAL_RECONNECT_BACKOFF_MS = 1000;
 const KEEPALIVE_INTERVAL_MS = 20 * 1000;
 const MAX_RECONNECT_BACKOFF_MS = 30000;
+const RUNTIME_REQUEST_TIMEOUT_MS = 1500;
 
 const state = {
   ws: null,
@@ -59,6 +60,14 @@ function buildHttpProbeUrl(host, port) {
   return `http://${host}:${port}/ext`;
 }
 
+function buildRuntimeStatusUrl(host, port) {
+  return `http://${host}:${port}/ext/runtime-status`;
+}
+
+function buildWorkspaceRebuildUrl(host, port) {
+  return `http://${host}:${port}/ext/workspace-rebuild`;
+}
+
 async function probeDaemon(host, port) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 1500);
@@ -74,6 +83,36 @@ async function probeDaemon(host, port) {
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+async function fetchRuntimeJson(url) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), RUNTIME_REQUEST_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      cache: 'no-store',
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      throw new Error(`Runtime request failed: ${response.status}`);
+    }
+    const payload = await response.json();
+    if (payload && payload.ok === false && payload.error) {
+      throw new Error(String(payload.error));
+    }
+    return payload;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function fetchRuntimePresentation(config) {
+  return await fetchRuntimeJson(buildRuntimeStatusUrl(config.host, config.port));
+}
+
+async function fetchWorkspaceRebuild(config) {
+  return await fetchRuntimeJson(buildWorkspaceRebuildUrl(config.host, config.port));
 }
 
 function scheduleReconnect(delayMs = state.reconnectBackoffMs) {
@@ -106,20 +145,44 @@ async function loadDaemonConfig() {
   };
 }
 
-async function buildStatusSnapshot() {
+async function buildStatusSnapshot({ runtimeSnapshot = undefined } = {}) {
   const config = await loadDaemonConfig();
-  const missingCapabilities = requiredCapabilityGap();
+  let runtimeError = null;
+  if (runtimeSnapshot === undefined) {
+    try {
+      runtimeSnapshot = await fetchRuntimePresentation(config);
+    } catch (error) {
+      runtimeSnapshot = null;
+      runtimeError = error instanceof Error ? error.message : String(error);
+    }
+  }
+  const missingCapabilities = Array.isArray(runtimeSnapshot?.extension?.missing_capabilities)
+    ? runtimeSnapshot.extension.missing_capabilities
+    : requiredCapabilityGap();
   return {
     connectionStatus: state.runtimeState.connectionStatus,
     daemonHost: config.host,
     daemonPort: Number(config.port),
-    lastError: state.runtimeState.lastError,
+    lastError: runtimeError || state.runtimeState.lastError,
     lastConnectedAt: state.runtimeState.lastConnectedAt,
-    backendStatus: state.runtimeState.connectionStatus === 'connected' ? 'extension active' : 'waiting for daemon',
-    workspaceWindowState: await getWorkspaceWindowState(),
-    capabilityComplete: missingCapabilities.length === 0,
+    backendStatus: state.runtimeState.connectionStatus === 'connected'
+      ? 'extension active'
+      : 'waiting for daemon',
+    workspaceWindowState:
+      runtimeSnapshot?.workspace_window_state || await getWorkspaceWindowState(),
+    capabilityComplete: runtimeSnapshot?.extension
+      ? Boolean(runtimeSnapshot.extension.capability_complete)
+      : missingCapabilities.length === 0,
     missingCapabilities,
+    presentation: runtimeSnapshot?.presentation || null,
+    runtimeSnapshot,
   };
+}
+
+async function rebuildWorkspaceBinding() {
+  const config = await loadDaemonConfig();
+  await fetchWorkspaceRebuild(config);
+  return await buildStatusSnapshot();
 }
 
 async function connect() {
@@ -419,7 +482,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === 'offscreen-command') {
     return false;
   }
-  if (message?.type === 'get-status') {
+  if (message?.type === 'get-status' || message?.type === 'refresh-status') {
     void buildStatusSnapshot().then(sendResponse);
     return true;
   }
@@ -432,6 +495,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
   if (message?.type === 'reconnect-now') {
     void reconnectNow().then(async () => sendResponse(await buildStatusSnapshot()));
+    return true;
+  }
+  if (message?.type === 'rebuild-workspace') {
+    void rebuildWorkspaceBinding().then(sendResponse);
     return true;
   }
   return false;
