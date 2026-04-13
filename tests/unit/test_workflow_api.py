@@ -75,6 +75,7 @@ def test_workflow_api_crud_and_export(tmp_path: Path) -> None:
         )
         assert "[workflow]" in export_payload["data"]["toml"]
         assert 'id = "interactive_reveal_capture"' in export_payload["data"]["toml"]
+        assert 'result_json_path = ""' in export_payload["data"]["toml"]
     finally:
         server.shutdown()
         server.server_close()

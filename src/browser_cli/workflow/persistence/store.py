@@ -8,7 +8,7 @@ import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import replace
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -435,7 +435,7 @@ class WorkflowStore:
         queued_at = _utcnow()
         if workflow.retry_backoff_seconds > 0:
             queued_at = (
-                datetime.now(UTC) + timedelta(seconds=workflow.retry_backoff_seconds)
+                datetime.now(timezone.utc) + timedelta(seconds=workflow.retry_backoff_seconds)
             ).isoformat()
         return self.create_run(
             source.workflow_id,
@@ -638,4 +638,4 @@ def _row_to_event(row: sqlite3.Row) -> WorkflowRunEvent:
 
 
 def _utcnow() -> str:
-    return datetime.now(UTC).isoformat()
+    return datetime.now(timezone.utc).isoformat()

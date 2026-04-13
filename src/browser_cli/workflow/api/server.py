@@ -291,6 +291,9 @@ def _workflow_to_toml(workflow: PersistedWorkflowDefinition) -> str:
             return str(value)
         return json.dumps(value, ensure_ascii=False)
 
+    result_json_value = (
+        fmt(str(workflow.result_json_path)) if workflow.result_json_path else '""'
+    )
     lines = [
         "[workflow]",
         f"id = {fmt(workflow.id)}",
@@ -325,7 +328,7 @@ def _workflow_to_toml(workflow: PersistedWorkflowDefinition) -> str:
             "",
             "[outputs]",
             f"artifact_dir = {fmt(str(workflow.output_dir))}",
-            f"result_json_path = {fmt(str(workflow.result_json_path)) if workflow.result_json_path else '\"\"'}",
+            f"result_json_path = {result_json_value}",
             f"stdout = {fmt(workflow.stdout_mode)}",
             "",
             "[hooks]",

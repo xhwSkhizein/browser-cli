@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -76,9 +76,9 @@ def compute_next_run_at(
     )
     if normalized_kind == "manual":
         return None
-    moment = now or datetime.now(UTC)
+    moment = now or datetime.now(timezone.utc)
     if moment.tzinfo is None:
-        moment = moment.replace(tzinfo=UTC)
+        moment = moment.replace(tzinfo=timezone.utc)
     if normalized_kind == "interval":
         seconds = int(normalized_payload["interval_seconds"])
         return _to_utc_iso(moment + timedelta(seconds=seconds))
@@ -90,7 +90,7 @@ def compute_next_run_at(
         candidate = local_now.replace(hour=hour, minute=minute, second=0, microsecond=0)
         if candidate <= local_now:
             candidate = candidate + timedelta(days=1)
-        return _to_utc_iso(candidate.astimezone(UTC))
+        return _to_utc_iso(candidate.astimezone(timezone.utc))
     weekday = WEEKDAY_NAMES[str(normalized_payload["weekday"])]
     hour = int(normalized_payload["hour"])
     minute = int(normalized_payload["minute"])
@@ -99,7 +99,7 @@ def compute_next_run_at(
     candidate = candidate + timedelta(days=days_ahead)
     if candidate <= local_now:
         candidate = candidate + timedelta(days=7)
-    return _to_utc_iso(candidate.astimezone(UTC))
+    return _to_utc_iso(candidate.astimezone(timezone.utc))
 
 
 def _validate_hour_minute(hour: int, minute: int) -> None:
@@ -110,4 +110,4 @@ def _validate_hour_minute(hour: int, minute: int) -> None:
 
 
 def _to_utc_iso(value: datetime) -> str:
-    return value.astimezone(UTC).isoformat()
+    return value.astimezone(timezone.utc).isoformat()
