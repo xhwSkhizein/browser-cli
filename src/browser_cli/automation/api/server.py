@@ -135,7 +135,11 @@ class AutomationRequestHandler(BaseHTTPRequestHandler):
                 automation_id = path.split("/")[3]
                 automation = self.server.runtime.store.get_automation(automation_id)
                 self._send_json(
-                    {"ok": True, "data": self._serialize_automation(automation), "meta": {}}
+                    {
+                        "ok": True,
+                        "data": self._serialize_automation(automation, include_latest_run=True),
+                        "meta": {},
+                    }
                 )
                 return
             if path.startswith("/api/automations/") and method == "PUT":

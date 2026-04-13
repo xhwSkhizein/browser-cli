@@ -38,6 +38,10 @@ def run(_root: Path) -> list[Finding]:
 
     if "read" not in top_level_commands:
         findings.append(Finding("error", "CONTRACT002", "Top-level 'read' command is required."))
+    if "doctor" not in top_level_commands:
+        findings.append(Finding("error", "CONTRACT018", "Top-level 'doctor' command is required."))
+    if "paths" not in top_level_commands:
+        findings.append(Finding("error", "CONTRACT019", "Top-level 'paths' command is required."))
     if "task" not in top_level_commands:
         findings.append(Finding("error", "CONTRACT003", "Top-level 'task' command is required."))
     if "automation" not in top_level_commands:
@@ -106,7 +110,7 @@ def _check_read_contract(parser: argparse.ArgumentParser) -> list[Finding]:
 def _check_task_contract(parser: argparse.ArgumentParser) -> list[Finding]:
     findings: list[Finding] = []
     subcommands = _subcommand_parsers(parser)
-    expected = {"run", "validate"}
+    expected = {"examples", "run", "template", "validate"}
     actual = set(subcommands)
     if actual != expected:
         findings.append(
@@ -122,7 +126,17 @@ def _check_task_contract(parser: argparse.ArgumentParser) -> list[Finding]:
 def _check_automation_contract(parser: argparse.ArgumentParser) -> list[Finding]:
     findings: list[Finding] = []
     subcommands = _subcommand_parsers(parser)
-    expected = {"export", "import", "publish", "status", "stop", "ui"}
+    expected = {
+        "export",
+        "import",
+        "inspect",
+        "list",
+        "publish",
+        "status",
+        "stop",
+        "ui",
+        "versions",
+    }
     actual = set(subcommands)
     if actual != expected:
         findings.append(

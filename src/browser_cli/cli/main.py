@@ -8,9 +8,12 @@ from collections.abc import Sequence
 
 from browser_cli import __version__, exit_codes
 from browser_cli.actions import get_action_specs
+from browser_cli.cli.error_hints import next_hint_for_error
 from browser_cli.commands.action import run_action_command
 from browser_cli.commands.automation import run_automation_command
+from browser_cli.commands.doctor import run_doctor_command
 from browser_cli.commands.install_skills import run_install_skills_command
+from browser_cli.commands.paths import run_paths_command
 from browser_cli.commands.read import run_read_command
 from browser_cli.commands.reload import run_reload_command
 from browser_cli.commands.status import run_status_command
@@ -42,10 +45,34 @@ def build_parser() -> argparse.ArgumentParser:
     )
     read_parser.set_defaults(handler=run_read_command)
 
+    doctor_parser = subparsers.add_parser(
+        "doctor",
+        help="Diagnose whether Browser CLI is ready on this machine.",
+        description="Diagnose install, browser, runtime, and service readiness with next-step guidance.",
+    )
+    doctor_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Return machine-readable diagnostic results.",
+    )
+    doctor_parser.set_defaults(handler=run_doctor_command)
+
+    paths_parser = subparsers.add_parser(
+        "paths",
+        help="Show Browser CLI runtime paths.",
+        description="Show the canonical Browser CLI runtime paths for home, tasks, automations, logs, and artifacts.",
+    )
+    paths_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Return machine-readable path data.",
+    )
+    paths_parser.set_defaults(handler=run_paths_command)
+
     task_parser = subparsers.add_parser(
         "task",
         help="Run or validate a local task directory.",
-        description="Run task.py + task.meta.json from a local task directory.",
+        description="`task` is local editable source. Run task.py + task.meta.json from a local task directory.",
     )
     task_subparsers = task_parser.add_subparsers(dest="task_subcommand", metavar="TASK_COMMAND")
 
@@ -76,10 +103,34 @@ def build_parser() -> argparse.ArgumentParser:
     task_validate_parser.add_argument("path", help="Path to the task directory.")
     task_validate_parser.set_defaults(handler=run_task_command)
 
+    task_examples_parser = task_subparsers.add_parser(
+        "examples",
+        help="List built-in task examples.",
+        description="Show canonical task examples available from the installed package.",
+    )
+    task_examples_parser.set_defaults(handler=run_task_command)
+
+    task_template_parser = task_subparsers.add_parser(
+        "template",
+        help="Print or write a minimal task template.",
+        description="Expose canonical task.py, task.meta.json, and automation.toml templates.",
+    )
+    task_template_parser.add_argument(
+        "--print",
+        dest="print_template",
+        action="store_true",
+        help="Print the template files to stdout.",
+    )
+    task_template_parser.add_argument(
+        "--output",
+        help="Write the template files into the given directory.",
+    )
+    task_template_parser.set_defaults(handler=run_task_command)
+
     automation_parser = subparsers.add_parser(
         "automation",
         help="Publish and operate versioned automations.",
-        description="Publish a task snapshot and manage automation service state.",
+        description="`automation` is a published immutable snapshot. Publish a task snapshot and manage automation service state.",
     )
     automation_subparsers = automation_parser.add_subparsers(
         dest="automation_subcommand", metavar="AUTOMATION_COMMAND"
@@ -92,6 +143,30 @@ def build_parser() -> argparse.ArgumentParser:
     )
     automation_publish_parser.add_argument("path", help="Path to the task directory.")
     automation_publish_parser.set_defaults(handler=run_automation_command)
+
+    automation_list_parser = automation_subparsers.add_parser(
+        "list",
+        help="List published automations.",
+        description="Show persisted automation ids, versions, and latest run summaries.",
+    )
+    automation_list_parser.set_defaults(handler=run_automation_command)
+
+    automation_versions_parser = automation_subparsers.add_parser(
+        "versions",
+        help="List published snapshot versions for one automation.",
+        description="Inspect the local snapshot history for a published automation.",
+    )
+    automation_versions_parser.add_argument("automation_id", help="Persisted automation id.")
+    automation_versions_parser.set_defaults(handler=run_automation_command)
+
+    automation_inspect_parser = automation_subparsers.add_parser(
+        "inspect",
+        help="Inspect one published automation.",
+        description="Combine service metadata, latest run status, and local snapshot version details.",
+    )
+    automation_inspect_parser.add_argument("automation_id", help="Persisted automation id.")
+    automation_inspect_parser.add_argument("--version", type=int, help="Specific snapshot version.")
+    automation_inspect_parser.set_defaults(handler=run_automation_command)
 
     automation_ui_parser = automation_subparsers.add_parser(
         "ui",
@@ -199,6 +274,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         result = args.handler(args)
     except BrowserCliError as exc:
         sys.stderr.write(f"Error: {exc}\n")
+        hint = next_hint_for_error(exc)
+        if hint:
+            sys.stderr.write(f"Next: {hint}\n")
         return exc.exit_code
     except KeyboardInterrupt:
         sys.stderr.write("Error: interrupted.\n")

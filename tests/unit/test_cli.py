@@ -13,6 +13,8 @@ def test_top_level_help(capsys) -> None:
     assert exit_code == 0
     assert "browser-cli" in captured.out
     assert "read" in captured.out
+    assert "doctor" in captured.out
+    assert "paths" in captured.out
     assert "task" in captured.out
     assert "automation" in captured.out
     assert "status" in captured.out
@@ -42,6 +44,48 @@ def test_status_help(capsys) -> None:
     assert "runtime state" in captured.out
 
 
+def test_doctor_help_mentions_json(capsys) -> None:
+    exit_code = main(["doctor", "--help"])
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "--json" in captured.out
+    assert "diagnose" in captured.out.lower()
+
+
+def test_paths_help_mentions_json(capsys) -> None:
+    exit_code = main(["paths", "--help"])
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "--json" in captured.out
+    assert "runtime paths" in captured.out.lower()
+
+
+def test_task_help_lists_examples_and_template(capsys) -> None:
+    exit_code = main(["task", "--help"])
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "examples" in captured.out
+    assert "template" in captured.out
+    assert "local editable source" in captured.out
+
+
+def test_task_template_help_mentions_print(capsys) -> None:
+    exit_code = main(["task", "template", "--help"])
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "--print" in captured.out
+
+
+def test_automation_help_lists_observability_commands(capsys) -> None:
+    exit_code = main(["automation", "--help"])
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "list" in captured.out
+    assert "versions" in captured.out
+    assert "inspect" in captured.out
+    assert "published immutable snapshot" in captured.out
+
+
 def test_page_reload_help(capsys) -> None:
     exit_code = main(["page-reload", "--help"])
     captured = capsys.readouterr()
@@ -66,6 +110,9 @@ def test_runtime_error_maps_to_stderr_and_exit_code(capsys) -> None:
     captured = capsys.readouterr()
     assert exit_code == 73
     assert "profile locked" in captured.err
+    assert (
+        "Next: close Browser CLI-owned Chrome windows or inspect browser-cli status" in captured.err
+    )
 
 
 def test_fallback_profile_reports_to_stderr(capsys) -> None:

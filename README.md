@@ -72,6 +72,9 @@ python3 -m playwright install chromium
 The CLI targets stable Google Chrome. Playwright Chromium is mainly useful for
 local integration testing.
 
+Installed users should start with [`docs/installed-with-pip.md`](docs/installed-with-pip.md).
+The first two commands to run are `browser-cli doctor` and `browser-cli paths`.
+
 ### Optional: Extension Mode
 
 For real-Chrome execution:
@@ -85,6 +88,16 @@ Once connected, `browser-cli status` reports extension capability state and the
 daemon can prefer the extension backend at safe idle points.
 
 ## Quick Start
+
+If you installed Browser CLI from `pip`, use the dedicated installed-user guide
+at [`docs/installed-with-pip.md`](docs/installed-with-pip.md). The short version
+is:
+
+```bash
+browser-cli doctor
+browser-cli paths
+browser-cli read https://example.com
+```
 
 ### One-Shot Read
 
@@ -120,8 +133,8 @@ X_AGENT_ID=agent-b browser-cli tabs
 
 Browser CLI separates local authoring from durable publication:
 
-- `task`: run and validate a source task directory
-- `automation`: publish immutable snapshots and operate them through the local automation service
+- `task` is local editable source
+- `automation` is a published immutable snapshot
 
 Typical task layout:
 

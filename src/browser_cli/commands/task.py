@@ -8,9 +8,36 @@ from pathlib import Path
 from browser_cli.errors import InvalidInputError
 from browser_cli.outputs.json import render_json_payload
 from browser_cli.task_runtime import parse_input_overrides, run_task_entrypoint, validate_task_dir
+from browser_cli.task_runtime.templates import (
+    EXAMPLE_CATALOG,
+    TASK_TEMPLATE_FILES,
+    render_template_bundle,
+)
 
 
 def run_task_command(args: Namespace) -> str:
+    if args.task_subcommand == "examples":
+        return "\n".join(f"{name}: {summary}" for name, summary in EXAMPLE_CATALOG) + "\n"
+
+    if args.task_subcommand == "template":
+        output = getattr(args, "output", None)
+        print_template = bool(getattr(args, "print_template", False))
+        if output:
+            output_dir = Path(output).expanduser().resolve()
+            existing_files = [name for name in TASK_TEMPLATE_FILES if (output_dir / name).exists()]
+            if existing_files:
+                joined = ", ".join(existing_files)
+                raise InvalidInputError(
+                    f"Template output would overwrite existing files in {output_dir}: {joined}"
+                )
+            output_dir.mkdir(parents=True, exist_ok=True)
+            for name, body in TASK_TEMPLATE_FILES.items():
+                (output_dir / name).write_text(body, encoding="utf-8")
+            if print_template:
+                return f"Template written to {output_dir}\n\n{render_template_bundle()}"
+            return f"Template written to {output_dir}\n"
+        return render_template_bundle()
+
     task_dir = Path(args.path).expanduser().resolve()
     if args.task_subcommand == "validate":
         metadata = validate_task_dir(task_dir)
