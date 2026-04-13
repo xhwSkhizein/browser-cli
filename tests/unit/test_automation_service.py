@@ -135,3 +135,10 @@ def test_lazy_scroll_automation_manifest_exists() -> None:
     manifest_path = REPO_ROOT / "tasks" / "lazy_scroll_capture" / "automation.toml"
     payload = manifest_path.read_text(encoding="utf-8")
     assert "[automation]" in payload
+
+
+def test_douyin_automation_manifest_exists() -> None:
+    manifest_path = REPO_ROOT / "tasks" / "douyin_video_download" / "automation.toml"
+    payload = manifest_path.read_text(encoding="utf-8")
+    assert "[automation]" in payload
+    assert 'id = "douyin_video_download"' in payload

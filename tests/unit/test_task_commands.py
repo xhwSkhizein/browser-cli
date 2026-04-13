@@ -75,6 +75,7 @@ def test_task_examples_lists_curated_examples() -> None:
     payload = run_task_command(Namespace(task_subcommand="examples"))
     assert "interactive_reveal_capture" in payload
     assert "lazy_scroll_capture" in payload
+    assert "douyin_video_download" in payload
 
 
 def test_task_template_prints_three_contract_files() -> None:

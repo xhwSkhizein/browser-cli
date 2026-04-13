@@ -35,6 +35,15 @@ def test_load_automation_manifest_resolves_repo_examples() -> None:
     assert manifest.task.meta_path.name == "task.meta.json"
 
 
+def test_load_automation_manifest_resolves_douyin_example() -> None:
+    manifest = load_automation_manifest(
+        REPO_ROOT / "tasks" / "douyin_video_download" / "automation.toml"
+    )
+    assert manifest.automation.id == "douyin_video_download"
+    assert manifest.task.path.name == "task.py"
+    assert manifest.task.meta_path.name == "task.meta.json"
+
+
 def test_run_hook_commands_executes_shell_commands(tmp_path: Path) -> None:
     marker = tmp_path / "hook.txt"
     results = run_hook_commands((f'printf done > "{marker}"',), cwd=tmp_path)

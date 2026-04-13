@@ -68,7 +68,8 @@
       "Rerun the task if the signed media URL expires before the download starts."
     ],
     "alternate_paths": [
-      "If play_addr is absent, the task falls back to play_addr_h264, play_addr_265, and bit_rate[*].play_addr from the same detail JSON."
+      "If play_addr is absent, the task falls back to play_addr_h264, play_addr_265, and bit_rate[*].play_addr from the same detail JSON.",
+      "Browser CLI's network surface can now return response bodies directly, but this task intentionally keeps the signed-request replay path because the core site-specific requirement is proving that the full browser cookie jar can be reused for the detail request and final media download."
     ],
     "stale_ref_strategy": "No semantic refs are required; the critical wait is page state becoming ready enough to expose the signed detail resource entry.",
     "known_wait_points": [
@@ -85,11 +86,6 @@
       "code": "EMPTY_DETAIL_BODY_WITH_PARTIAL_COOKIES",
       "symptom": "The aweme detail request returns HTTP 200 with Content-Length: 0 and x-whale-throughput-abort-data when replayed without the full browser cookie jar.",
       "lesson": "browser-cli cookies is required for this site; document.cookie alone is insufficient."
-    },
-    {
-      "code": "NETWORK_CAPTURE_NO_RESPONSE_BODY",
-      "symptom": "browser-cli network capture exposes request metadata only, not response bodies.",
-      "lesson": "For Douyin detail extraction, performance resource entries plus requests replay currently work more reliably than trying to read the detail JSON directly from browser-cli network capture."
     }
   ],
   "knowledge": {
@@ -101,7 +97,7 @@
     "lazy_load_pattern": "Hydration/resource discovery rather than infinite scroll",
     "anti_bot_notes": [
       "Douyin signs detail requests in-browser and couples successful replay to the active browser cookie jar.",
-      "The current browser-cli network capture layer records fetch/XHR request metadata but not response bodies."
+      "The current task uses performance resource discovery plus requests replay as a site strategy, not because Browser CLI lacks response-body capture."
     ],
     "output_interpretation_notes": [
       "detail.json preserves the exact JSON used for media URL derivation.",

@@ -169,9 +169,23 @@ browser-cli automation export my_task --output /tmp/my_task.automation.toml
 
 Included examples:
 
-- [`tasks/interactive_reveal_capture/task.py`](tasks/interactive_reveal_capture/task.py)
-- [`tasks/lazy_scroll_capture/task.py`](tasks/lazy_scroll_capture/task.py)
-- [`docs/examples/task-and-automation.md`](docs/examples/task-and-automation.md)
+- Automation-packaged reference and real-site tasks:
+  - [`tasks/interactive_reveal_capture/task.py`](tasks/interactive_reveal_capture/task.py)
+  - [`tasks/lazy_scroll_capture/task.py`](tasks/lazy_scroll_capture/task.py)
+  - [`tasks/douyin_video_download/task.py`](tasks/douyin_video_download/task.py)
+- Additional real-site task examples:
+  - [`tasks/karpathy_nitter_latest_five/task.py`](tasks/karpathy_nitter_latest_five/task.py)
+- Additional usage notes:
+  - [`docs/examples/task-and-automation.md`](docs/examples/task-and-automation.md)
+
+Real-site publish example:
+
+```bash
+browser-cli task validate tasks/douyin_video_download
+browser-cli automation publish tasks/douyin_video_download
+browser-cli automation inspect douyin_video_download
+browser-cli automation status
+```
 
 ## Output Contracts
 

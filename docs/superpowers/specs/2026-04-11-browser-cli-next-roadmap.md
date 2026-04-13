@@ -12,7 +12,7 @@
 接下来的重点不应再是继续堆 driver 能力，而应转向：
 
 - 用真实任务验证交付链是否稳定
-- 把 `task.py + task.meta.json + workflow.toml` 这条用户交付路径补完整
+- 把 `task.py + task.meta.json + automation.toml + automation publish` 这条用户交付路径补完整
 - 把 runtime 生命周期与长期运行稳定性打磨到日用级别
 
 ## Roadmap
@@ -37,24 +37,24 @@
 - task 产物能脱离对话独立执行
 - 暴露出来的 parity 或 runtime 问题被收敛记录
 
-### 2. Workflow Publish Layer
+### 2. Automation Publish Layer
 
 目标：
 
-- 把已经稳定的 `task.py` 提升为用户侧可交付的 `workflow.toml`
-- 实现 workflow 的运行、调度、输出、hooks 包装
+- 把已经稳定的 `task.py` 提升为用户侧可交付的 `automation.toml`
+- 通过 `browser-cli automation publish` 把本地 task 包装为 automation service 中的不可变快照
 
 范围：
 
-- `workflow validate`
-- `workflow run`
-- `workflow.toml` 中的 schedule / outputs / hooks 约定
+- `automation publish`
+- `automation export`
+- `automation.toml` 中的 schedule / outputs / hooks 约定
 - 任务参数注入与默认值覆盖
 
 完成标准：
 
-- 至少有 1-2 个真实 task 能发布成 workflow
-- workflow 层不复制任务逻辑，只做包装
+- 至少有 1-2 个真实 task 能发布成 automation snapshot
+- automation 层不复制任务逻辑，只做包装
 - 用户可以明确配置何时运行、输出到哪里、执行后做什么
 
 ### 3. Real-Browser Runtime Polish
@@ -126,7 +126,7 @@
 - 测试结构要服务于产品边界，而不是只跟着文件名增长：
   - parity 测试明确回答 extension 与 Playwright 是否仍满足同一公开契约
   - lifecycle 测试明确覆盖 status / reload / reconnect / rebind / state_reset 等运行态语义
-  - task delivery / workflow 测试明确覆盖从 `task.py` 到 `workflow.toml` 的真实交付链
+  - task delivery / automation 测试明确覆盖从 `task.py` 到 `automation.toml` 与 published snapshot 的真实交付链
 - docs、guards、capabilities 要继续与真实行为同步：
   - 新增或调整产品契约时，同步更新 AGENTS、相关 specs、guards
   - extension capability 声明、daemon runtime 暴露、popup 展示逻辑不能长期漂移
@@ -137,14 +137,14 @@
 - 后续新增能力时，不需要继续把产品逻辑堆回 `background.js`、单个 driver 文件或单个 daemon 大文件
 - 测试目录和测试命名能更直接映射 parity、lifecycle、task delivery 这些真实产品维度
 - docs、guards、capabilities 与运行时行为保持同步，减少“代码已变、文档和约束没跟上”的回归源
-- 结构整理以持续小步进行，不应成为打断 Real Task Validation、Workflow Publish、Long-Run soak 收敛的独立大项目
+- 结构整理以持续小步进行，不应成为打断 Real Task Validation、Automation Publish、Long-Run soak 收敛的独立大项目
 
 ## Recommended Sequence
 
 建议顺序固定为：
 
 1. Real Task Validation
-2. Workflow Publish Layer
+2. Automation Publish Layer
 3. Real-Browser Runtime Polish
 4. Long-Run Stability
 5. Structural Cleanup
@@ -152,7 +152,7 @@
 原因：
 
 - 真实任务最能暴露当前系统是否真的可交付
-- workflow 应建立在已验证稳定的 task 之上
+- automation publish 应建立在已验证稳定的 task 之上
 - runtime polish 和长期稳定性应服务于真实使用，而不是先于真实使用空转
 - 结构整理应在主要产品路径验证后持续进行，而不是再次打断交付节奏
 
@@ -160,9 +160,8 @@
 
 下一步最值得做的事情是：
 
-- 选择一个真实站点任务
-- 用 `[$browser-cli-explore-delivery](/Users/hongv/workspace/m-projects/browser-cli/skills/browser-cli-explore-delivery/SKILL.md)` 跑完整探索链
-- 先稳定产出 `task.py + task.meta.json`
-- 暂不急于发布 `workflow.toml`
+- 选择一个已经稳定的真实站点任务
+- 在 `tasks/douyin_video_download` 已进入 `automation.toml + automation publish` 交付链之后，继续把下一个真实 task-first 目录推进到同样层级
+- 同步收口 README、examples、smoke 文档，避免文档继续只把两个参考任务当作全部现实样本
 
-这会直接验证当前系统是否已经到达“可持续交付”的阶段。
+这会直接验证当前系统是否已经到达“可持续发布”的阶段。

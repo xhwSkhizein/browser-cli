@@ -45,6 +45,7 @@ timezone = "UTC"
 EXAMPLE_CATALOG: tuple[tuple[str, str], ...] = (
     ("interactive_reveal_capture", "Capture progressively revealed content."),
     ("lazy_scroll_capture", "Scroll and capture lazy-loaded pages."),
+    ("douyin_video_download", "Download a Douyin video via the browser-minted detail flow."),
 )
 
 

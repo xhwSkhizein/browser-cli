@@ -1,0 +1,33 @@
+[automation]
+id = "douyin_video_download"
+name = "Douyin Video Download"
+description = "Open a Douyin share link, replay the signed detail request with browser cookies, and download the resolved video artifact."
+version = "0.1.0"
+
+[task]
+path = "task.py"
+meta_path = "task.meta.json"
+entrypoint = "run"
+
+[inputs]
+url = "https://v.douyin.com/6Zy2Ip3kk-g"
+wait_rounds = 8
+wait_seconds = 1.0
+timeout_seconds = 30.0
+
+[schedule]
+mode = "manual"
+timezone = "Asia/Shanghai"
+
+[outputs]
+artifact_dir = "artifacts"
+stdout = "json"
+
+[hooks]
+before_run = []
+after_success = []
+after_failure = []
+
+[runtime]
+retry_attempts = 0
+log_level = "info"

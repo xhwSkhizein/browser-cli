@@ -46,3 +46,14 @@ def test_publish_task_dir_creates_versioned_snapshot(tmp_path: Path, monkeypatch
     assert published.automation_id == "demo"
     assert published.version == 1
     assert (published.snapshot_dir / "automation.toml").exists()
+
+
+def test_publish_task_dir_accepts_douyin_example(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("BROWSER_CLI_HOME", str(tmp_path / "home"))
+    published = publish_task_dir(
+        Path(__file__).resolve().parents[2] / "tasks" / "douyin_video_download",
+        app_paths=get_app_paths(),
+    )
+    assert published.automation_id == "douyin_video_download"
+    assert published.manifest_path.exists()
+    assert (published.snapshot_dir / "automation.toml").exists()
