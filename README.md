@@ -288,23 +288,40 @@ Exit codes:
 
 ## Testing
 
-Run the full suite with:
+For the fastest local feedback, run lint-only checks:
 
 ```bash
-pytest -q
+./scripts/lint.sh
 ```
 
-Run repository lint and architecture guards with:
+Run the Python test suite separately with:
 
 ```bash
-python scripts/guards/python_compatibility.py
-python scripts/guards/run_all.py
-./scripts/lint.sh
-./scripts/guard.sh
+./scripts/test.sh
+```
+
+Run the full local validation flow with:
+
+```bash
 ./scripts/check.sh
 ```
 
+If you want to run the guard layer directly:
+
+```bash
+./scripts/guard.sh
+python scripts/guards/run_all.py
+```
+
 `python scripts/guards/python_compatibility.py` is the fastest local check for Python 3.10 compatibility when you are developing on a newer interpreter.
+
+CI keeps a more granular split:
+
+- lint runs as its own job
+- unit tests and integration tests run as separate jobs
+- guards run independently
+
+That means local scripts and CI stay aligned in responsibility, while CI keeps better parallelism and failure isolation.
 
 When the runtime behaves unexpectedly, use:
 
