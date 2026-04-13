@@ -168,6 +168,15 @@ Use this section first. Start from the user question, then jump to the owning im
   inspect both `src/browser_cli/extension/*` and `browser-cli-extension/src/*`; many bugs live in protocol drift between Python and extension JS.
 - If the user reports popup/runtime observer drift:
   start at `src/browser_cli/daemon/runtime_presentation.py`, then `src/browser_cli/extension/session.py`, then `browser-cli-extension/src/background.js`, `browser-cli-extension/src/popup_view.js`, and `browser-cli-extension/src/popup.js`.
+- If the user reports long-run stability drift across repeated reloads, reconnects, or artifact runs:
+  start at `src/browser_cli/daemon/browser_service.py`, `src/browser_cli/daemon/runtime_presentation.py`, `src/browser_cli/commands/status.py`, and `src/browser_cli/extension/session.py`.
+  Symptom -> root cause -> where to inspect:
+  `status`, popup, and command `meta` disagree after repeated reconnect or reload
+  -> runtime truth path drift
+  -> inspect `browser_service.runtime_status`, `build_runtime_presentation`, `commands/status.py`, and popup-facing extension status endpoints.
+  Repeated artifact failures poison later requests
+  -> extension artifact buffers or disconnect cleanup are not bounded
+  -> inspect `src/browser_cli/extension/session.py` and `tests/unit/test_extension_transport.py`.
 - If a change touches architecture or public product contracts:
   inspect `scripts/guards/architecture.py`, `scripts/guards/product_contracts.py`, and `scripts/guards/docs_sync.py` before making the change final.
 
@@ -219,11 +228,13 @@ Keep these boundaries intact. Do not push browser internals into CLI handlers, d
 - `scripts/guards/python_compatibility.py` owns the static Python 3.10 compatibility check; keep new syntax and stdlib-API regression rules there so local 3.12 development fails before CI does.
 - Tests and workflow fixtures must resolve repo assets relative to the checked-out repository, not a developer-specific absolute workspace path; CI runners will fail on hard-coded local paths first in workflow/task fixture coverage.
 - `scripts/lint.sh` owns repository lint execution.
+- `scripts/test.sh` owns repository test execution.
 - `scripts/guard.sh` owns architecture, product-contract, and doc-sync guards.
-- `scripts/check.sh` runs both lint and guard in the expected order.
+- `scripts/check.sh` runs lint, tests, and guard in the expected order.
 - The guard implementations live under `scripts/guards/`.
-- After each code change, run lint and guard.
-- After each code change, run `scripts/lint.sh` and `scripts/guard.sh`, or run `scripts/check.sh`.
+- After each code change, run lint and guard as part of the full validation flow.
+- After each code change, run lint, tests, and guard.
+- After each code change, run `scripts/lint.sh`, `scripts/test.sh`, and `scripts/guard.sh`, or run `scripts/check.sh`.
 - When architecture, package boundaries, or frozen product decisions change, update `AGENTS.md` and the corresponding guard rules in the same change.
 - When a new top-level `browser_cli` package, public CLI surface, or major runtime contract is introduced, update both this file and the guard expectations before considering the change complete.
 

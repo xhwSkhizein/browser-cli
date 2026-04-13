@@ -13,6 +13,7 @@ REQUIRED_AGENT_PHRASES = [
     "`browser_cli.runtime.read_runner` owns the one-shot read contract and routes it through the daemon-managed browser lifecycle.",
     "`scripts/guards/python_compatibility.py`",
     "`scripts/lint.sh`",
+    "`scripts/test.sh`",
     "`scripts/guard.sh`",
     "`scripts/check.sh`",
 ]
@@ -22,6 +23,7 @@ REQUIRED_README_PHRASES = [
     "python scripts/guards/python_compatibility.py",
     "python scripts/guards/run_all.py",
     "./scripts/lint.sh",
+    "./scripts/test.sh",
     "./scripts/check.sh",
 ]
 
@@ -73,12 +75,12 @@ def _check_agents_process(agents_text: str) -> list[Finding]:
                     f"AGENTS.md must include the maintained rule or command: {phrase}",
                 )
             )
-    if "After each code change, run lint and guard" not in agents_text:
+    if "After each code change, run lint, tests, and guard." not in agents_text:
         findings.append(
             Finding(
                 "error",
                 "DOC003",
-                "AGENTS.md must state that lint and guard run after each code change.",
+                "AGENTS.md must state that lint, tests, and guard run after each code change.",
             )
         )
     return findings

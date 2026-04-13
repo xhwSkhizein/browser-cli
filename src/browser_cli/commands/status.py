@@ -28,6 +28,7 @@ class StatusReport:
     browser: dict[str, Any]
     guidance: list[str]
     presentation: dict[str, Any] = field(default_factory=dict)
+    stability: dict[str, Any] = field(default_factory=dict)
     workflow_service: dict[str, Any] = field(default_factory=dict)
     live_error: str | None = None
 
@@ -112,6 +113,7 @@ def collect_status_report(*, warmup: bool = False) -> StatusReport:
     backend_section = _build_backend_section(live_payload, live_error=live_error)
     browser_section = _build_browser_section(live_payload)
     presentation = dict((live_payload or {}).get("presentation") or {})
+    stability = dict((live_payload or {}).get("stability") or {})
     overall_status = str(presentation.get("overall_state") or "") or _classify_overall_status(
         daemon_state=daemon_state,
         compatibility=compatibility,
@@ -134,6 +136,7 @@ def collect_status_report(*, warmup: bool = False) -> StatusReport:
         browser=browser_section,
         guidance=guidance,
         presentation=presentation,
+        stability=stability,
         live_error=live_error,
     )
 
@@ -201,6 +204,16 @@ def render_status_report(report: StatusReport) -> str:
             f"  workspace tab count: {report.browser['tab_count']}",
             f"  active tab: {report.browser['active_tab']}",
             f"  busy tab count: {report.browser['busy_tab_count']}",
+            "",
+            "Stability",
+            f"  active command: {_display_value(report.stability.get('active_command'))}",
+            f"  command depth: {_display_value(report.stability.get('command_depth'))}",
+            f"  commands started: {_display_value(report.stability.get('commands_started'))}",
+            f"  driver switches: {_display_value(report.stability.get('driver_switches'))}",
+            f"  workspace rebuilds: {_display_value(report.stability.get('workspace_rebuilds'))}",
+            f"  extension disconnects: {_display_value(report.stability.get('extension_disconnects'))}",
+            f"  cleanup failures: {_display_value(report.stability.get('cleanup_failures'))}",
+            f"  last cleanup error: {_display_value(report.stability.get('last_cleanup_error'))}",
             "",
             "Guidance",
         ]
