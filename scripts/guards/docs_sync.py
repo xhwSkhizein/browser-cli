@@ -10,7 +10,7 @@ REQUIRED_AGENT_PHRASES = [
     "Managed profile mode is the default browser backend.",
     "Extension mode is the preferred real-Chrome backend when the Browser CLI extension is connected and healthy.",
     "Driver rebinding may happen automatically only at safe idle points, and it must be reported as `state_reset` rather than treated as perfectly continuous state.",
-    "`browser_cli.runtime.read_runner` owns the one-shot read contract and routes it through the daemon-managed browser lifecycle.",
+    "`browser_cli.task_runtime` owns the public Python read contract and routes one-shot read through the daemon-managed browser lifecycle.",
     "`scripts/guards/python_compatibility.py`",
     "`scripts/lint.sh`",
     "`scripts/test.sh`",

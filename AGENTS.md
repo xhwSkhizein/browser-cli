@@ -57,9 +57,9 @@ the implementation, and where should a change land first.
   `src/browser_cli/commands/action.py`
 - One-shot read contract and URL normalization:
   `src/browser_cli/commands/read.py`
-- One-shot read orchestration and daemon bootstrap path:
-  `src/browser_cli/runtime/read_runner.py`
-- `browser_cli.runtime.read_runner` owns the one-shot read contract and routes it through the daemon-managed browser lifecycle.
+- One-shot read runtime contract, shared Python orchestration, and daemon bootstrap path:
+  `src/browser_cli/task_runtime/client.py`, `src/browser_cli/task_runtime/read.py`
+- `browser_cli.task_runtime` owns the public Python read contract and routes one-shot read through the daemon-managed browser lifecycle.
 - Runtime diagnosis and user-facing lifecycle guidance:
   `src/browser_cli/commands/status.py`
 - Shared daemon runtime presentation classifier:
@@ -158,7 +158,7 @@ the implementation, and where should a change land first.
 - If the user wants a new daemon-backed CLI command:
   update `src/browser_cli/actions/cli_specs.py`, then add the daemon handler in `src/browser_cli/daemon/app.py`, then implement the browser behavior in `src/browser_cli/daemon/browser_service.py` and the relevant driver(s).
 - If the user wants to change `read` behavior:
-  inspect `src/browser_cli/commands/read.py` and `src/browser_cli/runtime/read_runner.py` first, then `src/browser_cli/daemon/browser_service.py::read_page`.
+  inspect `src/browser_cli/commands/read.py`, `src/browser_cli/task_runtime/client.py`, and `src/browser_cli/task_runtime/read.py` first, then `src/browser_cli/daemon/browser_service.py::read_page`.
 - If the user reports daemon startup, stale socket, or reload issues:
   inspect `src/browser_cli/daemon/client.py`, `src/browser_cli/daemon/transport.py`, `src/browser_cli/commands/status.py`, and `src/browser_cli/commands/reload.py`.
   If startup fails while waiting for an extension session, inspect `src/browser_cli/daemon/browser_service.py::ensure_started`; extension handshake wait is a best-effort preference signal and must fall back to Playwright instead of aborting daemon startup.
@@ -208,9 +208,8 @@ the implementation, and where should a change land first.
 - `browser_cli.outputs` owns final rendering for content-first and JSON-first surfaces.
 - `browser_cli.profiles` owns Chrome executable discovery, managed profile directories, profile naming, and lock detection.
 - `browser_cli.refs` owns semantic ref models, snapshot generation, latest-snapshot registry state, and locator reconstruction.
-- `browser_cli.runtime` owns the one-shot read orchestration layer. `browser_cli.runtime.read_runner` owns the one-shot read contract and routes it through the daemon-managed browser lifecycle.
 - `browser_cli.tabs` owns agent-visible tab state, active-tab tracking, and busy-state conflict rules.
-- `browser_cli.task_runtime` owns the thin Python runtime used by `task.py`.
+- `browser_cli.task_runtime` owns the public Python runtime used by `task.py`, including one-shot read orchestration and flow helpers.
 
 Keep these boundaries intact. Do not push browser internals into CLI handlers,
 do not move semantic-ref logic into drivers, and do not bypass the daemon for
