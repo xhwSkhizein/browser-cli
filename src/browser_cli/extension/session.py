@@ -5,12 +5,13 @@ from __future__ import annotations
 import asyncio
 import base64
 import contextlib
+import inspect
 import json
 import logging
 import uuid
 from dataclasses import dataclass, field
 from http import HTTPStatus
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 import websockets
 from websockets.datastructures import Headers
@@ -166,14 +167,25 @@ class ExtensionSession:
 
 class ExtensionHub:
     PROBE_PATH = "/ext"
+    STATUS_PATH = "/ext/runtime-status"
+    REBUILD_PATH = "/ext/workspace-rebuild"
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        status_provider: Callable[[], Awaitable[dict[str, Any]] | dict[str, Any]] | None = None,
+        workspace_rebuild_handler: (
+            Callable[[], Awaitable[dict[str, Any]] | dict[str, Any]] | None
+        ) = None,
+    ) -> None:
         self._server: websockets.server.Serve | None = None
         self._session: ExtensionSession | None = None
         self._session_ready = asyncio.Event()
         self._started = False
         self._lock = asyncio.Lock()
         self._session_changed = asyncio.Event()
+        self._status_provider = status_provider
+        self._workspace_rebuild_handler = workspace_rebuild_handler
 
     @property
     def session(self) -> ExtensionSession | None:
@@ -231,6 +243,32 @@ class ExtensionHub:
         await self._session_changed.wait()
         self._session_changed.clear()
 
+    def set_status_provider(
+        self, provider: Callable[[], Awaitable[dict[str, Any]] | dict[str, Any]] | None
+    ) -> None:
+        self._status_provider = provider
+
+    def set_workspace_rebuild_handler(
+        self, handler: Callable[[], Awaitable[dict[str, Any]] | dict[str, Any]] | None
+    ) -> None:
+        self._workspace_rebuild_handler = handler
+
+    async def get_runtime_status_payload(self) -> dict[str, Any]:
+        if self._status_provider is None:
+            return {"ok": False, "error": "status unavailable"}
+        payload = self._status_provider()
+        if inspect.isawaitable(payload):
+            payload = await payload
+        return dict(payload)
+
+    async def rebuild_workspace_payload(self) -> dict[str, Any]:
+        if self._workspace_rebuild_handler is None:
+            return {"ok": False, "error": "workspace rebuild unavailable"}
+        payload = self._workspace_rebuild_handler()
+        if inspect.isawaitable(payload):
+            payload = await payload
+        return dict(payload)
+
     async def _handle_websocket(self, websocket: ServerConnection) -> None:
         hello_payload = json.loads(await websocket.recv())
         if hello_payload.get("type") != "hello":
@@ -276,9 +314,8 @@ class ExtensionHub:
                     getattr(websocket, "close_reason", None),
                 )
 
-    @classmethod
-    def _process_request(
-        cls, connection_or_path: ServerConnection | str, request_or_headers: Request | Headers
+    async def _process_request(
+        self, connection_or_path: ServerConnection | str, request_or_headers: Request | Headers
     ) -> Response | None:
         # Support both websockets 12/13 (old API: process_request(path, headers))
         # and websockets 14+ (new API: process_request(connection, request))
@@ -292,15 +329,25 @@ class ExtensionHub:
             path = str(connection_or_path)
             headers = request_or_headers
 
-        if cls._is_websocket_upgrade(headers):
+        if self._is_websocket_upgrade(headers):
             return None
-        if path == cls.PROBE_PATH:
-            return cls._build_response(
+        if path == self.PROBE_PATH:
+            return self._build_response(
                 HTTPStatus.UPGRADE_REQUIRED,
                 b"Browser CLI extension endpoint expects a WebSocket upgrade.\n",
                 upgrade="websocket",
             )
-        return cls._build_response(HTTPStatus.NOT_FOUND, b"Not Found\n")
+        if path == self.STATUS_PATH:
+            payload = await self.get_runtime_status_payload()
+            body = json.dumps(payload).encode("utf-8")
+            return self._build_json_response(HTTPStatus.OK, body)
+        if path == self.REBUILD_PATH:
+            # websockets only parses GET upgrade requests on this listener, so
+            # popup control endpoints must remain body-less GET requests.
+            payload = await self.rebuild_workspace_payload()
+            body = json.dumps(payload).encode("utf-8")
+            return self._build_json_response(HTTPStatus.OK, body)
+        return self._build_response(HTTPStatus.NOT_FOUND, b"Not Found\n")
 
     @staticmethod
     def _is_websocket_upgrade(headers: Headers) -> bool:
@@ -324,6 +371,20 @@ class ExtensionHub:
         # websockets 14+ accepts Response object
         import websockets
 
+        version_tuple = tuple(map(int, websockets.__version__.split(".")[:2]))
+        if version_tuple >= (14, 0):
+            return Response(int(status), status.phrase, headers, body)
+        else:
+            return (int(status), headers, body)
+
+    @staticmethod
+    def _build_json_response(
+        status: HTTPStatus,
+        body: bytes,
+    ) -> Response | tuple[int, Headers, bytes]:
+        headers = Headers()
+        headers["Content-Type"] = "application/json; charset=utf-8"
+        headers["Content-Length"] = str(len(body))
         version_tuple = tuple(map(int, websockets.__version__.split(".")[:2]))
         if version_tuple >= (14, 0):
             return Response(int(status), status.phrase, headers, body)

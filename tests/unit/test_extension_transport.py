@@ -117,6 +117,89 @@ def test_extension_hub_answers_http_probe_without_websocket_upgrade(
     asyncio.run(_scenario())
 
 
+def test_extension_hub_serves_runtime_status_snapshot(monkeypatch, tmp_path: Path) -> None:
+    async def _scenario() -> None:
+        monkeypatch.setenv(APP_HOME_ENV, str(tmp_path / ".browser-cli-runtime"))
+        monkeypatch.setenv(EXTENSION_PORT_ENV, str(_unused_port()))
+
+        hub = ExtensionHub()
+        hub.set_status_provider(
+            lambda: {"presentation": {"overall_state": "healthy", "summary_reason": "ok"}}
+        )
+        await hub.ensure_started()
+        app_paths = get_app_paths()
+
+        reader, writer = await asyncio.open_connection(
+            app_paths.extension_host, app_paths.extension_port
+        )
+        writer.write(
+            (
+                f"GET /ext/runtime-status HTTP/1.1\r\n"
+                f"Host: {app_paths.extension_host}:{app_paths.extension_port}\r\n"
+                "Connection: close\r\n"
+                "Accept: application/json\r\n"
+                "\r\n"
+            ).encode("ascii")
+        )
+        await writer.drain()
+        response = await reader.read(-1)
+        writer.close()
+        await writer.wait_closed()
+
+        lowered = response.lower()
+        assert b"200 ok" in lowered
+        assert b"application/json" in lowered
+        assert b'"overall_state": "healthy"' in response
+
+        await hub.stop()
+
+    asyncio.run(_scenario())
+
+
+def test_extension_hub_fetches_workspace_rebuild(monkeypatch, tmp_path: Path) -> None:
+    async def _scenario() -> None:
+        monkeypatch.setenv(APP_HOME_ENV, str(tmp_path / ".browser-cli-runtime"))
+        monkeypatch.setenv(EXTENSION_PORT_ENV, str(_unused_port()))
+
+        hub = ExtensionHub()
+        hub.set_status_provider(lambda: {"presentation": {"overall_state": "degraded"}})
+        hub.set_workspace_rebuild_handler(
+            lambda: {
+                "rebuilt": True,
+                "presentation": {"overall_state": "healthy"},
+            }
+        )
+        await hub.ensure_started()
+        app_paths = get_app_paths()
+
+        reader, writer = await asyncio.open_connection(
+            app_paths.extension_host, app_paths.extension_port
+        )
+        writer.write(
+            (
+                f"GET /ext/workspace-rebuild HTTP/1.1\r\n"
+                f"Host: {app_paths.extension_host}:{app_paths.extension_port}\r\n"
+                "Connection: close\r\n"
+                "Accept: application/json\r\n"
+                "\r\n"
+            ).encode("ascii")
+        )
+        await writer.drain()
+        response = await reader.read(-1)
+        writer.close()
+        await writer.wait_closed()
+
+        lowered = response.lower()
+        assert b"200 ok" in lowered
+        assert b"application/json" in lowered
+        assert b'"rebuilt": true' in lowered
+        assert b'"overall_state": "healthy"' in response
+
+        await hub.stop()
+
+    asyncio.run(_scenario())
+
+
 def test_extension_session_collects_chunked_artifacts(monkeypatch, tmp_path: Path) -> None:
     async def _scenario() -> None:
         monkeypatch.setenv(APP_HOME_ENV, str(tmp_path / ".browser-cli-runtime"))

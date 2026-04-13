@@ -18,6 +18,7 @@ from browser_cli.errors import (
     RefNotFoundError,
 )
 from browser_cli.extension import ExtensionHub
+from browser_cli.daemon.runtime_presentation import build_runtime_presentation
 from browser_cli.profiles.discovery import ChromeEnvironment
 from browser_cli.refs import SemanticRefResolver, SemanticSnapshotGenerator, SnapshotRegistry
 from browser_cli.tabs import TabRegistry
@@ -46,6 +47,10 @@ class BrowserService:
             chrome_environment=chrome_environment, headless=headless
         )
         self._extension_hub = ExtensionHub()
+        if hasattr(self._extension_hub, "set_status_provider"):
+            self._extension_hub.set_status_provider(self.runtime_status_for_popup)
+        if hasattr(self._extension_hub, "set_workspace_rebuild_handler"):
+            self._extension_hub.set_workspace_rebuild_handler(self.rebuild_workspace_binding)
         self._extension = ExtensionDriver(self._extension_hub)
         self._snapshot_registry = SnapshotRegistry()
         self._ref_resolver = SemanticRefResolver()
@@ -222,6 +227,13 @@ class BrowserService:
                     else None
                 )
             ),
+        }
+
+    async def runtime_status_for_popup(self) -> dict[str, Any]:
+        raw_status = await self.runtime_status(warmup=False)
+        return {
+            **raw_status,
+            "presentation": build_runtime_presentation(raw_status),
         }
 
     async def rebuild_workspace_binding(self) -> dict[str, Any]:
