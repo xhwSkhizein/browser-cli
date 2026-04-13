@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+from dataclasses import dataclass
 from typing import Any
 
 from browser_cli.daemon.runtime_presentation import build_runtime_presentation
@@ -25,6 +26,29 @@ from browser_cli.tabs import TabRegistry
 from browser_cli.tabs.registry import TabRecord
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(slots=True)
+class _StabilityMetrics:
+    commands_started: int = 0
+    driver_switches: int = 0
+    workspace_rebuilds: int = 0
+    extension_disconnects: int = 0
+    cleanup_failures: int = 0
+    last_cleanup_error: str | None = None
+    active_command: str | None = None
+
+    def snapshot(self, *, command_depth: int) -> dict[str, Any]:
+        return {
+            "active_command": self.active_command,
+            "command_depth": command_depth,
+            "commands_started": self.commands_started,
+            "driver_switches": self.driver_switches,
+            "workspace_rebuilds": self.workspace_rebuilds,
+            "extension_disconnects": self.extension_disconnects,
+            "cleanup_failures": self.cleanup_failures,
+            "last_cleanup_error": self.last_cleanup_error,
+        }
 
 
 class BrowserService:
@@ -63,6 +87,7 @@ class BrowserService:
         self._pending_reason: str | None = None
         self._last_runtime_meta: dict[str, Any] = {}
         self._last_transition: dict[str, Any] | None = None
+        self._stability = _StabilityMetrics()
         self._page_counter = 0
         self._rebind_lock = asyncio.Lock()
 
@@ -80,9 +105,12 @@ class BrowserService:
 
     async def begin_command(self, action: str) -> None:
         await self.ensure_started()
+        self._stability.commands_started += 1
+        self._stability.active_command = action
         if self._driver_name == "extension":
             session = self._extension_hub.session
             if session is None or not session.hello.has_required_capabilities():
+                self._stability.extension_disconnects += 1
                 logger.warning(
                     "Extension unavailable at command start; rebinding to playwright for action=%s",
                     action,
@@ -95,6 +123,7 @@ class BrowserService:
     async def end_command(self) -> dict[str, Any]:
         self._command_depth = max(0, self._command_depth - 1)
         if self._command_depth == 0:
+            self._stability.active_command = None
             await self._maybe_apply_pending_rebind()
         meta = dict(self._last_runtime_meta)
         self._last_runtime_meta = {}
@@ -163,6 +192,7 @@ class BrowserService:
             await self._playwright.stop()
         self._driver = None
         self._driver_name = None
+        self._stability.active_command = None
         self._snapshot_registry.clear()
         if cleanup_error:
             shutdown["cleanup_error"] = cleanup_error
@@ -228,6 +258,7 @@ class BrowserService:
                 )
             ),
             "tabs": await self._tab_runtime_status(),
+            "stability": self._stability.snapshot(command_depth=self._command_depth),
         }
 
     async def runtime_status_for_popup(self) -> dict[str, Any]:
@@ -246,6 +277,7 @@ class BrowserService:
         rebuilt = await self._extension.rebuild_workspace_binding()
         self._snapshot_registry.clear()
         await self._tabs.clear()
+        self._stability.workspace_rebuilds += 1
         self._last_transition = {
             "driver_changed_from": "extension",
             "driver_changed_to": "extension",
@@ -837,11 +869,9 @@ class BrowserService:
             )
             records, active_by_agent = await self._tabs.snapshot_state()
             if old_driver_name == "extension":
-                with contextlib.suppress(Exception):
-                    await self._extension.stop()
+                await self._stop_driver_for_transition("extension")
             elif old_driver_name == "playwright":
-                with contextlib.suppress(Exception):
-                    await self._playwright.stop()
+                await self._stop_driver_for_transition("playwright")
             self._driver = None
             self._driver_name = None
             if driver_name == "extension":
@@ -882,6 +912,7 @@ class BrowserService:
                 "driver_reason": reason,
             }
             if old_driver_name and old_driver_name != driver_name:
+                self._stability.driver_switches += 1
                 self._last_transition = {
                     "driver_changed_from": old_driver_name,
                     "driver_changed_to": driver_name,
@@ -895,6 +926,17 @@ class BrowserService:
                 len(records),
                 state_reset,
             )
+
+    async def _stop_driver_for_transition(self, driver_name: str | None) -> None:
+        try:
+            if driver_name == "extension":
+                await self._extension.stop()
+            elif driver_name == "playwright":
+                await self._playwright.stop()
+        except Exception as exc:
+            self._stability.cleanup_failures += 1
+            self._stability.last_cleanup_error = str(exc)
+            logger.warning("Driver stop failed for %s during transition: %s", driver_name, exc)
 
     async def _watch_extension_changes(self) -> None:
         try:

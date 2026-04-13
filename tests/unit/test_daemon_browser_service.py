@@ -324,6 +324,47 @@ def test_browser_service_runtime_status_includes_last_transition_and_live_worksp
     asyncio.run(_scenario())
 
 
+def test_browser_service_runtime_status_tracks_stability_metrics(
+    _patched_browser_service: _FakeExtensionHub,
+) -> None:
+    async def _scenario() -> None:
+        _patched_browser_service.connect()
+        tabs = TabRegistry()
+        service = browser_service_module.BrowserService(tabs)
+
+        await service.begin_command("info")
+        await service.end_command()
+
+        _patched_browser_service.disconnect()
+        await asyncio.sleep(0)
+        await service.begin_command("tabs")
+        await service.end_command()
+
+        _patched_browser_service.connect()
+        await asyncio.sleep(0)
+        await service.begin_command("info")
+        await service.end_command()
+
+        rebuilt = await service.rebuild_workspace_binding()
+        assert rebuilt["tab_state_reset"] is True
+
+        status = await service.runtime_status()
+        assert status["stability"] == {
+            "active_command": None,
+            "command_depth": 0,
+            "commands_started": 3,
+            "driver_switches": 2,
+            "workspace_rebuilds": 1,
+            "extension_disconnects": 1,
+            "cleanup_failures": 0,
+            "last_cleanup_error": None,
+        }
+
+        await service.stop()
+
+    asyncio.run(_scenario())
+
+
 def test_browser_service_runtime_status_for_popup_includes_busy_tab_snapshot(
     _patched_browser_service: _FakeExtensionHub,
 ) -> None:
@@ -398,6 +439,45 @@ def test_browser_service_rebuild_workspace_binding_clears_tab_snapshot_state(
         records, active_by_agent = await tabs.snapshot_state()
         assert records == []
         assert active_by_agent == {}
+        await service.stop()
+
+    asyncio.run(_scenario())
+
+
+def test_browser_service_rebind_loop_keeps_tab_state_bounded(
+    _patched_browser_service: _FakeExtensionHub,
+) -> None:
+    async def _scenario() -> None:
+        _patched_browser_service.connect()
+        tabs = TabRegistry()
+        service = browser_service_module.BrowserService(tabs)
+        await service.ensure_started()
+
+        page = await service.new_tab(url="https://example.com/start")
+        await tabs.add_tab(
+            page_id=page["page_id"],
+            owner_agent_id="agent-a",
+            url=page["url"],
+            title=page["title"],
+        )
+
+        for _ in range(3):
+            _patched_browser_service.disconnect()
+            await asyncio.sleep(0)
+            await service.begin_command("tabs")
+            await service.end_command()
+
+            _patched_browser_service.connect()
+            await asyncio.sleep(0)
+            await service.begin_command("tabs")
+            await service.end_command()
+
+        status = await service.runtime_status()
+        assert status["tabs"]["count"] == 1
+        assert status["tabs"]["records"][0]["page_id"] == page["page_id"]
+        assert status["stability"]["driver_switches"] >= 2
+        assert status["stability"]["extension_disconnects"] >= 1
+
         await service.stop()
 
     asyncio.run(_scenario())

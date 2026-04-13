@@ -13,3 +13,6 @@ build/
 playwright-report/
 test-results/
 tasks/**/artifacts/
+
+
+.codex

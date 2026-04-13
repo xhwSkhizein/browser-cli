@@ -190,6 +190,91 @@ def test_collect_status_report_uses_daemon_presentation_snapshot(tmp_path: Path)
     assert "Available actions: refresh-status, reconnect-extension" in text
 
 
+def test_collect_status_report_renders_stability_section(tmp_path: Path) -> None:
+    run_info = {
+        "pid": 123,
+        "package_version": "0.1.0",
+        "runtime_version": "2026-04-10-dual-driver-extension-v1",
+    }
+    runtime_status = {
+        "browser_started": True,
+        "active_driver": "extension",
+        "profile_source": "extension",
+        "profile_dir": None,
+        "profile_directory": None,
+        "extension": {
+            "connected": True,
+            "capability_complete": True,
+            "missing_capabilities": [],
+        },
+        "pending_rebind": None,
+        "workspace_window_state": {
+            "window_id": 91,
+            "tab_count": 1,
+            "managed_tab_count": 1,
+            "binding_state": "tracked",
+        },
+        "tabs": {"count": 1, "busy_count": 0, "records": [], "active_by_agent": {}},
+        "last_transition": None,
+        "stability": {
+            "active_command": None,
+            "command_depth": 0,
+            "commands_started": 7,
+            "driver_switches": 2,
+            "workspace_rebuilds": 1,
+            "extension_disconnects": 1,
+            "cleanup_failures": 2,
+            "last_cleanup_error": "No tab with id: 685338567.",
+        },
+        "presentation": {
+            "overall_state": "degraded",
+            "summary_reason": "Browser CLI recorded recent cleanup failures during runtime transitions.",
+            "execution_path": {
+                "active_driver": "extension",
+                "pending_rebind": None,
+                "safe_point_wait": False,
+                "last_transition": None,
+            },
+            "workspace_state": {
+                "window_id": 91,
+                "tab_count": 1,
+                "managed_tab_count": 1,
+                "binding_state": "tracked",
+                "busy_tab_count": 0,
+            },
+            "stability": {
+                "active_command": None,
+                "command_depth": 0,
+                "commands_started": 7,
+                "driver_switches": 2,
+                "workspace_rebuilds": 1,
+                "extension_disconnects": 1,
+                "cleanup_failures": 2,
+                "last_cleanup_error": "No tab with id: 685338567.",
+            },
+            "recovery_guidance": [
+                "Run `browser-cli reload` if cleanup failures continue to appear.",
+            ],
+            "available_actions": ["refresh-status"],
+        },
+    }
+    with (
+        patch("browser_cli.commands.status.get_app_paths", return_value=_fake_paths(tmp_path)),
+        patch("browser_cli.commands.status.read_run_info", return_value=run_info),
+        patch("browser_cli.commands.status.probe_socket", return_value=True),
+        patch(
+            "browser_cli.commands.status.send_command",
+            return_value={"ok": True, "data": runtime_status},
+        ),
+    ):
+        text = run_status_command(Namespace())
+
+    assert "Stability" in text
+    assert "commands started: 7" in text
+    assert "cleanup failures: 2" in text
+    assert "last cleanup error: No tab with id: 685338567." in text
+
+
 def test_reload_command_reports_forced_cleanup() -> None:
     status_report = StatusReport(
         overall_status="degraded",

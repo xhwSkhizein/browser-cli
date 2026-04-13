@@ -16,6 +16,9 @@ def build_runtime_presentation(raw_status: dict[str, Any]) -> dict[str, Any]:
     binding_state = str(workspace_window_state.get("binding_state") or "absent")
     extension_connected = bool(extension.get("connected"))
     capability_complete = bool(extension.get("capability_complete"))
+    stability = dict(raw_status.get("stability") or {})
+    cleanup_failures = int(stability.get("cleanup_failures") or 0)
+    last_cleanup_error = str(stability.get("last_cleanup_error") or "").strip() or None
 
     execution_path = {
         "active_driver": active_driver,
@@ -76,12 +79,23 @@ def build_runtime_presentation(raw_status: dict[str, Any]) -> dict[str, Any]:
             "Rebuild workspace binding to restore Browser CLI-owned tab tracking.",
             "Reconnect the extension if workspace state does not recover.",
         ]
+    elif cleanup_failures:
+        overall_state = "degraded"
+        summary_reason = "Browser CLI recorded recent cleanup failures during runtime transitions."
+        recovery_guidance = [
+            "Run `browser-cli reload` if cleanup failures continue to appear.",
+            "Refresh runtime status after the reload finishes.",
+        ]
 
     return {
         "overall_state": overall_state,
         "summary_reason": summary_reason,
         "execution_path": execution_path,
         "workspace_state": workspace_state,
+        "stability": {
+            **stability,
+            "last_cleanup_error": last_cleanup_error,
+        },
         "recovery_guidance": recovery_guidance,
         "available_actions": _available_actions(
             active_driver=active_driver,

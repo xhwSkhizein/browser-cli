@@ -162,6 +162,44 @@ def test_build_runtime_presentation_marks_absent_workspace_binding_as_degraded()
     )
 
 
+def test_build_runtime_presentation_marks_cleanup_failures_as_degraded() -> None:
+    raw_status = {
+        "browser_started": True,
+        "active_driver": "extension",
+        "pending_rebind": None,
+        "extension": {
+            "connected": True,
+            "capability_complete": True,
+            "missing_capabilities": [],
+        },
+        "workspace_window_state": {
+            "window_id": 91,
+            "tab_count": 1,
+            "managed_tab_count": 1,
+            "binding_state": "tracked",
+        },
+        "tabs": {"count": 1, "busy_count": 0, "records": [], "active_by_agent": {}},
+        "last_transition": {},
+        "stability": {
+            "active_command": None,
+            "command_depth": 0,
+            "commands_started": 7,
+            "driver_switches": 2,
+            "workspace_rebuilds": 0,
+            "extension_disconnects": 1,
+            "cleanup_failures": 2,
+            "last_cleanup_error": "No tab with id: 685338567.",
+        },
+    }
+
+    presentation = build_runtime_presentation(raw_status)
+
+    assert presentation["overall_state"] == "degraded"
+    assert "cleanup failures" in presentation["summary_reason"]
+    assert "browser-cli reload" in presentation["recovery_guidance"][0]
+    assert presentation["stability"]["cleanup_failures"] == 2
+
+
 @dataclass
 class _FakeTabRecord:
     page_id: str

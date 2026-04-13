@@ -360,3 +360,134 @@ def test_extension_session_disconnect_fails_pending_artifacts(monkeypatch, tmp_p
         await hub.stop()
 
     asyncio.run(_scenario())
+
+
+def test_extension_session_disconnect_does_not_poison_next_artifact_request(
+    monkeypatch, tmp_path: Path
+) -> None:
+    async def _scenario() -> None:
+        monkeypatch.setenv(APP_HOME_ENV, str(tmp_path / ".browser-cli-runtime"))
+        monkeypatch.setenv(EXTENSION_PORT_ENV, str(_unused_port()))
+
+        hub = ExtensionHub()
+        await hub.ensure_started()
+        app_paths = get_app_paths()
+
+        async with websockets.connect(app_paths.extension_ws_url) as websocket:
+            await websocket.send(
+                json.dumps(
+                    {
+                        "type": "hello",
+                        "protocol_version": PROTOCOL_VERSION,
+                        "extension_version": "0.1.0-test",
+                        "browser_name": "Chrome",
+                        "browser_version": "146",
+                        "capabilities": sorted(REQUIRED_EXTENSION_CAPABILITIES),
+                        "workspace_window_state": {"connected": True},
+                        "extension_instance_id": "ext-test",
+                    }
+                )
+            )
+            session = await hub.wait_for_session(timeout_seconds=1.0)
+            assert session is not None
+
+            failing = asyncio.create_task(session.send_request("trace-stop", {}))
+            raw_request = json.loads(await websocket.recv())
+            await websocket.send(
+                json.dumps(
+                    {
+                        "type": "artifact-begin",
+                        "request_id": raw_request["id"],
+                        "artifact_id": "artifact-2",
+                        "artifact_kind": "trace",
+                        "mime_type": "application/zip",
+                        "encoding": "base64",
+                        "filename": "trace.zip",
+                    }
+                )
+            )
+            await websocket.close()
+            with pytest.raises(OperationFailedError):
+                await failing
+
+        async with websockets.connect(app_paths.extension_ws_url) as websocket:
+            await websocket.send(
+                json.dumps(
+                    {
+                        "type": "hello",
+                        "protocol_version": PROTOCOL_VERSION,
+                        "extension_version": "0.1.0-test",
+                        "browser_name": "Chrome",
+                        "browser_version": "146",
+                        "capabilities": sorted(REQUIRED_EXTENSION_CAPABILITIES),
+                        "workspace_window_state": {"connected": True},
+                        "extension_instance_id": "ext-test",
+                    }
+                )
+            )
+            session = await hub.wait_for_session(timeout_seconds=1.0)
+            assert session is not None
+
+            passing = asyncio.create_task(session.send_request("screenshot", {"full_page": False}))
+            raw_request = json.loads(await websocket.recv())
+            request_id = raw_request["id"]
+            await websocket.send(
+                json.dumps(
+                    {
+                        "type": "response",
+                        "id": request_id,
+                        "ok": True,
+                        "data": {"ack": True},
+                    }
+                )
+            )
+            content = base64.b64encode(b"image").decode("ascii")
+            await websocket.send(
+                json.dumps(
+                    {
+                        "type": "artifact-begin",
+                        "request_id": request_id,
+                        "artifact_id": "artifact-3",
+                        "artifact_kind": "screenshot",
+                        "mime_type": "image/png",
+                        "encoding": "base64",
+                        "filename": "page.png",
+                        "page_id": "page_0001",
+                        "metadata": {"full_page": False},
+                    }
+                )
+            )
+            await websocket.send(
+                json.dumps(
+                    {
+                        "type": "artifact-chunk",
+                        "request_id": request_id,
+                        "artifact_id": "artifact-3",
+                        "artifact_kind": "screenshot",
+                        "mime_type": "image/png",
+                        "encoding": "base64",
+                        "index": 0,
+                        "chunk": content,
+                        "final": True,
+                    }
+                )
+            )
+            await websocket.send(
+                json.dumps(
+                    {
+                        "type": "artifact-end",
+                        "request_id": request_id,
+                        "artifact_id": "artifact-3",
+                        "size_bytes": 5,
+                    }
+                )
+            )
+            response = await passing
+            assert response["ack"] is True
+            assert response["_artifacts"][0]["artifact_kind"] == "screenshot"
+            assert session._artifact_buffers == {}
+            assert session._completed_artifacts == {}
+
+        await hub.stop()
+
+    asyncio.run(_scenario())

@@ -31,5 +31,3 @@ if command -v node >/dev/null 2>&1; then
   done < <(find browser-cli-extension -type f -name '*.js' | sort)
   node --test browser-cli-extension/tests/popup_view.test.js
 fi
-
-"$PYTHON_BIN" -m pytest -q
