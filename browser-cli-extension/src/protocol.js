@@ -62,6 +62,8 @@ export const REQUIRED_CAPABILITIES = [
   'cookies-clear',
   'storage-save',
   'storage-load',
+  'workspace-status',
+  'workspace-rebuild-binding',
   'verify-visible',
   'verify-text',
   'verify-url',

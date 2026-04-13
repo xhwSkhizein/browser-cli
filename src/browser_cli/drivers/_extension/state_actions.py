@@ -60,6 +60,7 @@ class ExtensionDriverStateMixin:
     async def rebuild_workspace_binding(self) -> dict[str, Any]:
         session = await self._require_session()
         payload = await session.send_request("workspace-rebuild-binding", {})
+        video_paths = await self._materialize_video_artifacts(payload.get("_artifacts") or [])
         self._page_to_tab.clear()
         self._tab_to_page.clear()
         self._active_page_id = None
@@ -71,6 +72,7 @@ class ExtensionDriverStateMixin:
                 "managed_tab_count": int(payload.get("managed_tab_count") or 0),
                 "binding_state": str(payload.get("binding_state") or "absent"),
             },
+            "video_paths": video_paths,
         }
 
     async def health(self):

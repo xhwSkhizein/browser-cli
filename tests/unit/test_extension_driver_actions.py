@@ -150,6 +150,23 @@ class _FakeSession:
                     }
                 ]
             }
+        if action == "workspace-rebuild-binding":
+            return {
+                "rebuilt": True,
+                "window_id": 77,
+                "tab_count": 1,
+                "managed_tab_count": 1,
+                "binding_state": "tracked",
+                "_artifacts": [
+                    {
+                        "artifact_kind": "video",
+                        "filename": "page_0003.webm",
+                        "page_id": "page_0003",
+                        "metadata": {"requested_path": "rebuild-video.webm"},
+                        "content": b"video-rebuild-bytes",
+                    }
+                ],
+            }
         if action == "page-summary":
             return {"url": "https://example.com", "title": "Example"}
         return {"ok": True, "result": {"echo": action}}
@@ -311,3 +328,31 @@ def test_extension_driver_stop_keeps_cleanup_errors_non_fatal() -> None:
         assert payload["video_paths"] == []
 
     asyncio.run(_scenario())
+
+
+def test_extension_driver_rebuild_workspace_binding_flushes_pending_video_artifacts(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("BROWSER_CLI_HOME", str(tmp_path / ".browser-cli-runtime"))
+    session = _FakeSession(_hello())
+    driver = ExtensionDriver(_FakeHub(session))
+
+    async def _scenario() -> None:
+        payload = await driver.rebuild_workspace_binding()
+        assert payload["rebuilt"] is True
+        assert payload["workspace_window_state"]["binding_state"] == "tracked"
+        assert Path(payload["video_paths"][0]).read_bytes() == b"video-rebuild-bytes"
+
+    asyncio.run(_scenario())
+
+    actions = [action for action, _payload in session.requests]
+    assert actions == ["workspace-rebuild-binding"]
+
+
+def test_extension_protocol_js_lists_workspace_runtime_capabilities() -> None:
+    protocol_js = (
+        Path(__file__).resolve().parents[2] / "browser-cli-extension" / "src" / "protocol.js"
+    ).read_text(encoding="utf-8")
+    assert "'workspace-status'" in protocol_js
+    assert "'workspace-rebuild-binding'" in protocol_js

@@ -52,7 +52,8 @@ export function createWorkspaceHandlers(context) {
     async 'workspace-status'() {
       return await buildWorkspaceStatus(context);
     },
-    async 'workspace-rebuild-binding'() {
+    async 'workspace-rebuild-binding'(_payload, meta) {
+      const artifacts = await flushAllPendingVideoArtifacts(context, meta.requestId);
       if (context.state.workspaceWindowId !== null) {
         try {
           await chrome.windows.remove(context.state.workspaceWindowId);
@@ -66,6 +67,8 @@ export function createWorkspaceHandlers(context) {
       await context.ensureWorkspaceWindow('about:blank');
       return {
         rebuilt: true,
+        video_paths: artifacts.map(artifactRequestedPath).filter(Boolean),
+        artifacts,
         ...(await buildWorkspaceStatus(context)),
       };
     },

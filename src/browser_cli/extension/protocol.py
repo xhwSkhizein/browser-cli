@@ -65,6 +65,8 @@ REQUIRED_EXTENSION_CAPABILITIES = frozenset(
         "cookies-clear",
         "storage-save",
         "storage-load",
+        "workspace-status",
+        "workspace-rebuild-binding",
         "verify-text",
         "verify-visible",
         "verify-url",
