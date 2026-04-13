@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import asyncio
 import sys
 from argparse import Namespace
 
 from browser_cli.outputs.render import render_output
-from browser_cli.runtime.read_runner import ReadRequest, ReadRunner
+from browser_cli.task_runtime import BrowserCliTaskClient
 
 
 def normalize_url(url: str) -> str:
@@ -17,13 +16,12 @@ def normalize_url(url: str) -> str:
 
 
 def run_read_command(args: Namespace) -> str:
-    request = ReadRequest(
-        url=normalize_url(args.url),
+    client = BrowserCliTaskClient()
+    result = client.read(
+        normalize_url(args.url),
         output_mode="snapshot" if args.snapshot else "html",
         scroll_bottom=bool(args.scroll_bottom),
     )
-    runner = ReadRunner()
-    result = asyncio.run(runner.run(request))
     if result.used_fallback_profile and result.fallback_profile_dir:
         message = (
             "Info: primary Chrome profile unavailable; using fallback profile at "
