@@ -123,11 +123,33 @@ class _FakeExtensionDriver(_FakeDriverBase):
     def __init__(self, hub: _FakeExtensionHub) -> None:
         super().__init__("extension")
         self.hub = hub
+        self.workspace_window_id = 91
 
     async def ensure_started(self) -> None:
         await super().ensure_started()
         if self.hub.session is None:
             raise RuntimeError("extension unavailable")
+
+    async def workspace_status(self) -> dict[str, int | str | None]:
+        managed_tab_count = len(self.pages)
+        return {
+            "window_id": self.workspace_window_id,
+            "tab_count": managed_tab_count,
+            "managed_tab_count": managed_tab_count,
+            "binding_state": "tracked" if managed_tab_count else "stale",
+        }
+
+    async def rebuild_workspace_binding(self) -> dict[str, object]:
+        self.pages = {"workspace": {"url": "about:blank", "title": "workspace:blank"}}
+        return {
+            "rebuilt": True,
+            "workspace_window_state": {
+                "window_id": self.workspace_window_id,
+                "tab_count": 1,
+                "managed_tab_count": 1,
+                "binding_state": "tracked",
+            },
+        }
 
 
 class _FailingStopExtensionDriver(_FakeExtensionDriver):
@@ -261,6 +283,74 @@ def test_browser_service_upgrades_at_safe_point_and_reports_state_reset(
         tab = await tabs.get_tab("agent-a", page["page_id"])
         assert tab.last_snapshot_id is None
         assert service._extension.switched_to == page["page_id"]  # noqa: SLF001
+        await service.stop()
+
+    asyncio.run(_scenario())
+
+
+def test_browser_service_runtime_status_includes_last_transition_and_live_workspace(
+    _patched_browser_service: _FakeExtensionHub,
+) -> None:
+    async def _scenario() -> None:
+        tabs = TabRegistry()
+        service = browser_service_module.BrowserService(tabs)
+        await service.ensure_started()
+
+        page = await service.new_tab(url="https://example.com/start")
+        await tabs.add_tab(
+            page_id=page["page_id"],
+            owner_agent_id="agent-a",
+            url=page["url"],
+            title=page["title"],
+        )
+
+        await service.begin_command("html")
+        _patched_browser_service.connect()
+        await asyncio.sleep(0)
+        await service.end_command()
+
+        status = await service.runtime_status()
+        assert status["last_transition"] == {
+            "driver_changed_from": "playwright",
+            "driver_changed_to": "extension",
+            "driver_reason": "extension-connected",
+            "state_reset": True,
+        }
+        assert status["workspace_window_state"]["binding_state"] == "tracked"
+        assert status["workspace_window_state"]["managed_tab_count"] == 1
+
+        await service.stop()
+
+    asyncio.run(_scenario())
+
+
+def test_browser_service_rebuild_workspace_binding_clears_tab_snapshot_state(
+    _patched_browser_service: _FakeExtensionHub,
+) -> None:
+    async def _scenario() -> None:
+        _patched_browser_service.connect()
+        tabs = TabRegistry()
+        service = browser_service_module.BrowserService(tabs)
+        await service.begin_command("open")
+        meta = await service.end_command()
+        assert meta["driver"] == "extension"
+
+        page = await service.new_tab(url="https://example.com/rebind")
+        await tabs.add_tab(
+            page_id=page["page_id"],
+            owner_agent_id="agent-a",
+            url=page["url"],
+            title=page["title"],
+        )
+
+        rebuilt = await service.rebuild_workspace_binding()
+        assert rebuilt["rebuilt"] is True
+        assert rebuilt["workspace_window_state"]["binding_state"] == "tracked"
+        assert rebuilt["tab_state_reset"] is True
+
+        records, active_by_agent = await tabs.snapshot_state()
+        assert records == []
+        assert active_by_agent == {}
         await service.stop()
 
     asyncio.run(_scenario())

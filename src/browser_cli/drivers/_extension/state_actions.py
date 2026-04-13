@@ -47,6 +47,32 @@ class ExtensionDriverStateMixin:
             result["cleanup_error"] = cleanup_error
         return result
 
+    async def workspace_status(self) -> dict[str, Any]:
+        session = await self._require_session()
+        payload = await session.send_request("workspace-status", {})
+        return {
+            "window_id": payload.get("window_id"),
+            "tab_count": int(payload.get("tab_count") or 0),
+            "managed_tab_count": int(payload.get("managed_tab_count") or 0),
+            "binding_state": str(payload.get("binding_state") or "absent"),
+        }
+
+    async def rebuild_workspace_binding(self) -> dict[str, Any]:
+        session = await self._require_session()
+        payload = await session.send_request("workspace-rebuild-binding", {})
+        self._page_to_tab.clear()
+        self._tab_to_page.clear()
+        self._active_page_id = None
+        return {
+            "rebuilt": bool(payload.get("rebuilt")),
+            "workspace_window_state": {
+                "window_id": payload.get("window_id"),
+                "tab_count": int(payload.get("tab_count") or 0),
+                "managed_tab_count": int(payload.get("managed_tab_count") or 0),
+                "binding_state": str(payload.get("binding_state") or "absent"),
+            },
+        }
+
     async def health(self):
         session = self._hub.session
         if session is None:

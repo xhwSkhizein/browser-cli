@@ -186,6 +186,11 @@ class TabRegistry:
                 record.last_snapshot_url = ""
                 record.last_snapshot_at = None
 
+    async def clear(self) -> None:
+        async with self._lock:
+            self._tabs.clear()
+            self._active_tab_by_agent.clear()
+
     async def is_visible(self, agent_id: str, page_id: str) -> bool:
         async with self._lock:
             record = self._tabs.get(page_id)

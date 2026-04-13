@@ -4,6 +4,31 @@ function artifactRequestedPath(artifact) {
   return String(artifact?.metadata?.requested_path || '');
 }
 
+async function buildWorkspaceStatus(context) {
+  const windowId = context.state.workspaceWindowId;
+  if (windowId === null) {
+    return { window_id: null, tab_count: 0, managed_tab_count: 0, binding_state: 'absent' };
+  }
+
+  try {
+    const tabs = await chrome.tabs.query({ windowId });
+    const managedTabs = tabs.filter(
+      (tab) => tab.id !== undefined && context.state.managedTabIds.has(tab.id),
+    );
+    return {
+      window_id: windowId,
+      tab_count: tabs.length,
+      managed_tab_count: managedTabs.length,
+      binding_state: managedTabs.length > 0 ? 'tracked' : 'stale',
+    };
+  } catch (_error) {
+    context.state.workspaceWindowId = null;
+    context.state.managedTabIds.clear();
+    context.state.pageIdByTabId.clear();
+    return { window_id: null, tab_count: 0, managed_tab_count: 0, binding_state: 'absent' };
+  }
+}
+
 export function createWorkspaceHandlers(context) {
   return {
     async 'workspace-close'(_payload, meta) {
@@ -22,6 +47,26 @@ export function createWorkspaceHandlers(context) {
         closed: true,
         video_paths: artifacts.map(artifactRequestedPath).filter(Boolean),
         artifacts,
+      };
+    },
+    async 'workspace-status'() {
+      return await buildWorkspaceStatus(context);
+    },
+    async 'workspace-rebuild-binding'() {
+      if (context.state.workspaceWindowId !== null) {
+        try {
+          await chrome.windows.remove(context.state.workspaceWindowId);
+        } catch (_error) {
+          // Ignore already-closed workspace windows.
+        }
+      }
+      context.state.workspaceWindowId = null;
+      context.state.managedTabIds.clear();
+      context.state.pageIdByTabId.clear();
+      await context.ensureWorkspaceWindow('about:blank');
+      return {
+        rebuilt: true,
+        ...(await buildWorkspaceStatus(context)),
       };
     },
     async 'open-tab'(payload) {

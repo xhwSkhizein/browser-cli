@@ -57,6 +57,7 @@ class BrowserService:
         self._pending_driver: str | None = None
         self._pending_reason: str | None = None
         self._last_runtime_meta: dict[str, Any] = {}
+        self._last_transition: dict[str, Any] | None = None
         self._page_counter = 0
         self._rebind_lock = asyncio.Lock()
 
@@ -170,6 +171,9 @@ class BrowserService:
         extension_details = dict(extension_health.details)
         playwright_details = dict(playwright_health.details)
         workspace_window_state = dict(extension_details.get("workspace_window_state") or {})
+        if self._driver_name == "extension" or bool(extension_details.get("connected")):
+            with contextlib.suppress(Exception):
+                workspace_window_state = await self._extension.workspace_status()
         profile_source: str | None = None
         profile_dir: str | None = None
         profile_directory: str | None = None
@@ -199,6 +203,9 @@ class BrowserService:
                 "details": extension_details,
             },
             "workspace_window_state": workspace_window_state,
+            "last_transition": (
+                dict(self._last_transition) if self._last_transition is not None else None
+            ),
             "pending_rebind": (
                 {
                     "target": self._pending_driver,
@@ -215,6 +222,26 @@ class BrowserService:
                     else None
                 )
             ),
+        }
+
+    async def rebuild_workspace_binding(self) -> dict[str, Any]:
+        await self.ensure_started()
+        if self._driver_name != "extension":
+            raise OperationFailedError(
+                "Workspace binding rebuild is only available in extension mode."
+            )
+        rebuilt = await self._extension.rebuild_workspace_binding()
+        self._snapshot_registry.clear()
+        await self._tabs.clear()
+        self._last_transition = {
+            "driver_changed_from": "extension",
+            "driver_changed_to": "extension",
+            "driver_reason": "workspace-binding-rebuilt",
+            "state_reset": True,
+        }
+        return {
+            **rebuilt,
+            "tab_state_reset": True,
         }
 
     async def new_tab(
@@ -822,13 +849,13 @@ class BrowserService:
                 "driver_reason": reason,
             }
             if old_driver_name and old_driver_name != driver_name:
-                self._last_runtime_meta.update(
-                    {
-                        "state_reset": state_reset,
-                        "driver_changed_from": old_driver_name,
-                        "driver_changed_to": driver_name,
-                    }
-                )
+                self._last_transition = {
+                    "driver_changed_from": old_driver_name,
+                    "driver_changed_to": driver_name,
+                    "driver_reason": reason,
+                    "state_reset": state_reset,
+                }
+                self._last_runtime_meta.update(self._last_transition)
             logger.info(
                 "Driver rebound active=%s restored_tabs=%d state_reset=%s",
                 self._driver_name,
