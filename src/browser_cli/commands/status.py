@@ -27,6 +27,7 @@ class StatusReport:
     backend: dict[str, Any]
     browser: dict[str, Any]
     guidance: list[str]
+    presentation: dict[str, Any] = field(default_factory=dict)
     workflow_service: dict[str, Any] = field(default_factory=dict)
     live_error: str | None = None
 
@@ -59,12 +60,6 @@ def collect_status_report(*, warmup: bool = False) -> StatusReport:
         except BrowserCliError as exc:
             live_error = str(exc)
 
-    overall_status = _classify_overall_status(
-        daemon_state=daemon_state,
-        compatibility=compatibility,
-        live_payload=live_payload,
-        live_error=live_error,
-    )
     runtime_section = {
         "home": str(app_paths.home),
         "socket": str(app_paths.socket_path),
@@ -116,7 +111,14 @@ def collect_status_report(*, warmup: bool = False) -> StatusReport:
             workflow_service_section["running"] = False
     backend_section = _build_backend_section(live_payload, live_error=live_error)
     browser_section = _build_browser_section(live_payload)
-    guidance = _build_guidance(
+    presentation = dict((live_payload or {}).get("presentation") or {})
+    overall_status = str(presentation.get("overall_state") or "") or _classify_overall_status(
+        daemon_state=daemon_state,
+        compatibility=compatibility,
+        live_payload=live_payload,
+        live_error=live_error,
+    )
+    guidance = list(presentation.get("recovery_guidance") or []) or _build_guidance(
         overall_status=overall_status,
         daemon_state=daemon_state,
         live_payload=live_payload,
@@ -131,12 +133,15 @@ def collect_status_report(*, warmup: bool = False) -> StatusReport:
         backend=backend_section,
         browser=browser_section,
         guidance=guidance,
+        presentation=presentation,
         live_error=live_error,
     )
 
 
 def render_status_report(report: StatusReport) -> str:
-    lines = [f"Status: {report.overall_status}", ""]
+    summary_reason = report.presentation.get("summary_reason") or "-"
+    available_actions = ", ".join(report.presentation.get("available_actions") or []) or "none"
+    lines = [f"Status: {report.overall_status}", "", f"Summary: {summary_reason}", ""]
     lines.extend(
         [
             "Runtime",
@@ -202,6 +207,7 @@ def render_status_report(report: StatusReport) -> str:
     )
     for item in report.guidance:
         lines.append(f"- {item}")
+    lines.extend(["", f"Available actions: {available_actions}"])
     return "\n".join(lines) + "\n"
 
 

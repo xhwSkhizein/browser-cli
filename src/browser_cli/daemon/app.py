@@ -133,6 +133,10 @@ class BrowserDaemonApp:
             if command_started:
                 runtime_meta = await self._state.browser_service.end_command()
                 meta.update(runtime_meta)
+                if runtime_meta.get("driver_reason") == "extension-connected":
+                    meta["runtime_note"] = "Browser CLI restored extension mode at a safe point."
+                elif runtime_meta.get("driver_reason") == "workspace-binding-rebuilt":
+                    meta["runtime_note"] = "Browser CLI rebuilt its owned workspace binding."
             else:
                 meta["driver"] = self._state.browser_service.active_driver_name
             chrome_environment = self._state.browser_service.chrome_environment
