@@ -5,6 +5,7 @@ from __future__ import annotations
 from argparse import Namespace
 from pathlib import Path
 
+from browser_cli.errors import InvalidInputError
 from browser_cli.outputs.json import render_json_payload
 from browser_cli.task_runtime import parse_input_overrides, run_task_entrypoint, validate_task_dir
 
@@ -28,13 +29,16 @@ def run_task_command(args: Namespace) -> str:
             }
         )
 
-    result = run_task_entrypoint(
-        task_path=task_dir / "task.py",
-        entrypoint="run",
-        inputs=parse_input_overrides(
-            getattr(args, "set_values", None),
-            getattr(args, "inputs_json", None),
-        ),
-        artifacts_dir=task_dir / "artifacts",
-    )
-    return render_json_payload({"ok": True, "data": result, "meta": {"action": "task-run"}})
+    if args.task_subcommand == "run":
+        result = run_task_entrypoint(
+            task_path=task_dir / "task.py",
+            entrypoint="run",
+            inputs=parse_input_overrides(
+                getattr(args, "set_values", None),
+                getattr(args, "inputs_json", None),
+            ),
+            artifacts_dir=task_dir / "artifacts",
+        )
+        return render_json_payload({"ok": True, "data": result, "meta": {"action": "task-run"}})
+
+    raise InvalidInputError(f"Unsupported task subcommand: {args.task_subcommand}")

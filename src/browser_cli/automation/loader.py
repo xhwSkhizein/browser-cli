@@ -28,7 +28,12 @@ def load_automation_manifest(path: str | Path) -> AutomationManifest:
     manifest_path = Path(path).expanduser().resolve()
     if not manifest_path.exists():
         raise InvalidInputError(f"Automation manifest does not exist: {manifest_path}")
-    data = tomllib.loads(manifest_path.read_text(encoding="utf-8"))
+    try:
+        data = tomllib.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError, ValueError) as exc:
+        raise InvalidInputError(
+            f"Automation manifest is invalid TOML: {manifest_path}: {exc}"
+        ) from exc
     if not isinstance(data, dict):
         raise InvalidInputError(f"Automation manifest must be a TOML object: {manifest_path}")
 
@@ -43,7 +48,7 @@ def load_automation_manifest(path: str | Path) -> AutomationManifest:
         raise InvalidInputError(f"Task file does not exist: {task_path}")
     if not meta_path.exists():
         raise InvalidInputError(f"Task metadata file does not exist: {meta_path}")
-    validate_task_metadata(json.loads(meta_path.read_text(encoding="utf-8")), source=str(meta_path))
+    _load_task_metadata(meta_path)
     return AutomationManifest(
         manifest_path=manifest_path,
         automation=AutomationIdentity(
@@ -115,3 +120,12 @@ def _as_string_list(value: Any) -> list[str]:
     if isinstance(value, list):
         return [str(item) for item in value if str(item).strip()]
     return [str(value)]
+
+
+def _load_task_metadata(meta_path: Path) -> dict[str, Any]:
+    try:
+        payload = json.loads(meta_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        raise InvalidInputError(f"Task metadata is invalid JSON: {meta_path}: {exc}") from exc
+    validate_task_metadata(payload, source=str(meta_path))
+    return payload

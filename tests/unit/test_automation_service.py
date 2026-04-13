@@ -92,6 +92,45 @@ def test_retry_run_respects_effective_inputs(tmp_path: Path) -> None:
     assert retried.attempt_number == 1
 
 
+def test_create_run_preserves_explicit_empty_inputs(tmp_path: Path) -> None:
+    store = AutomationStore(tmp_path / "automations.db")
+    automation = store.upsert_automation(
+        PersistedAutomationDefinition(
+            id="empty_inputs",
+            name="Empty Inputs",
+            task_path=REPO_ROOT / "tasks" / "interactive_reveal_capture" / "task.py",
+            task_meta_path=REPO_ROOT / "tasks" / "interactive_reveal_capture" / "task.meta.json",
+            enabled=False,
+            schedule_kind="manual",
+            schedule_payload={},
+            timezone="UTC",
+            output_dir=tmp_path / "runs",
+            input_overrides={"url": "https://example.com"},
+        )
+    )
+    run = store.create_run(automation.id, trigger_type="manual", effective_inputs={})
+    assert run.effective_inputs == {}
+
+
+def test_blank_output_dir_uses_default_automation_runs_root(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("BROWSER_CLI_HOME", str(tmp_path / "home"))
+    store = AutomationStore(tmp_path / "automations.db")
+    automation = store.upsert_automation(
+        PersistedAutomationDefinition(
+            id="default_output",
+            name="Default Output",
+            task_path=REPO_ROOT / "tasks" / "interactive_reveal_capture" / "task.py",
+            task_meta_path=REPO_ROOT / "tasks" / "interactive_reveal_capture" / "task.meta.json",
+            enabled=False,
+            schedule_kind="manual",
+            schedule_payload={},
+            timezone="UTC",
+            output_dir=Path(),
+        )
+    )
+    assert automation.output_dir == (tmp_path / "home" / "automations" / "runs" / automation.id)
+
+
 def test_lazy_scroll_automation_manifest_exists() -> None:
     manifest_path = REPO_ROOT / "tasks" / "lazy_scroll_capture" / "automation.toml"
     payload = manifest_path.read_text(encoding="utf-8")

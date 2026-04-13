@@ -52,6 +52,7 @@ def test_automation_api_crud_and_export(tmp_path: Path) -> None:
                 "timezone": "UTC",
                 "output_dir": str(tmp_path / "runs"),
                 "input_overrides": {"url": "https://example.com"},
+                "retry_backoff_seconds": 7,
             },
         )
         assert create_payload["data"]["id"] == "interactive_reveal_capture"
@@ -76,6 +77,30 @@ def test_automation_api_crud_and_export(tmp_path: Path) -> None:
         assert "[automation]" in export_payload["data"]["toml"]
         assert 'id = "interactive_reveal_capture"' in export_payload["data"]["toml"]
         assert 'result_json_path = ""' in export_payload["data"]["toml"]
+        assert "retry_backoff_seconds = 7" in export_payload["data"]["toml"]
+        assert "timeout_seconds = 0" not in export_payload["data"]["toml"]
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2.0)
+
+
+def test_automation_api_returns_not_found_for_missing_run(tmp_path: Path) -> None:
+    runtime = AutomationServiceRuntime(store=AutomationStore(tmp_path / "automations.db"))
+    server = AutomationHttpServer(("127.0.0.1", 0), AutomationRequestHandler, runtime)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    host, port = server.server_address[:2]
+    try:
+        connection = http.client.HTTPConnection(host, int(port), timeout=5.0)
+        try:
+            connection.request("GET", "/api/runs/missing")
+            response = connection.getresponse()
+            payload = json.loads(response.read().decode("utf-8"))
+        finally:
+            connection.close()
+        assert response.status == 404
+        assert payload["error_code"] == "NOT_FOUND"
     finally:
         server.shutdown()
         server.server_close()

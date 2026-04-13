@@ -329,6 +329,10 @@ def validate_task_dir(task_dir: Path) -> dict[str, Any]:
 - [ ] **Step 4: Add module loading and entrypoint contract checks**
 
 ```python
+from browser_cli.task_runtime.client import BrowserCliTaskClient
+from browser_cli.task_runtime.flow import Flow
+from browser_cli.task_runtime.models import FlowContext
+
 def parse_input_overrides(pairs: list[str] | None, inputs_json: str | None) -> dict[str, Any]:
     merged: dict[str, Any] = {}
     if inputs_json:
@@ -797,7 +801,7 @@ Expected: FAIL because `AutomationStore` and automation service modules do not e
 @dataclass(slots=True, frozen=True)
 class PersistedAutomationDefinition:
     id: str
-    version: int
+    version: str
     name: str
     description: str = ""
     snapshot_dir: Path = Path()
@@ -823,7 +827,7 @@ class PersistedAutomationDefinition:
 ```sql
 CREATE TABLE IF NOT EXISTS automations (
     id TEXT PRIMARY KEY,
-    current_version INTEGER NOT NULL,
+    current_version TEXT NOT NULL,
     name TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     enabled INTEGER NOT NULL DEFAULT 0,
@@ -844,7 +848,7 @@ CREATE TABLE IF NOT EXISTS automations (
 );
 CREATE TABLE IF NOT EXISTS automation_versions (
     automation_id TEXT NOT NULL,
-    version INTEGER NOT NULL,
+    version TEXT NOT NULL,
     snapshot_dir TEXT NOT NULL,
     manifest_path TEXT NOT NULL,
     task_path TEXT NOT NULL,

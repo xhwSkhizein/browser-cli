@@ -66,6 +66,12 @@ def load_task_entrypoint(task_path: Path, entrypoint: str) -> Callable[..., dict
         raise TaskEntrypointError(
             f"Task entrypoint must accept flow and inputs parameters: {task_path}"
         )
+    extra_required = [param for param in positional[2:] if param.default is inspect.Parameter.empty]
+    if extra_required:
+        names = ", ".join(param.name for param in extra_required)
+        raise TaskEntrypointError(
+            f"Task entrypoint has unsupported required positional parameters ({names}): {task_path}"
+        )
     return fn
 
 

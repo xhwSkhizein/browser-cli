@@ -14,7 +14,9 @@ from browser_cli.automation.models import (
     PersistedAutomationDefinition,
     manifest_to_persisted_definition,
 )
+from browser_cli.automation.toml import dumps_toml_sections
 from browser_cli.automation.web import render_index_html
+from browser_cli.errors import BrowserCliError, InvalidInputError
 
 
 class AutomationHttpServer(ThreadingHTTPServer):
@@ -72,7 +74,10 @@ class AutomationRequestHandler(BaseHTTPRequestHandler):
                 return
             if path == "/api/automations/import" and method == "POST":
                 body = self._read_json_body()
-                manifest = load_automation_manifest(str(body["path"]))
+                manifest_path = str(body.get("path") or "").strip()
+                if not manifest_path:
+                    raise InvalidInputError("Automation import requires non-empty path.")
+                manifest = load_automation_manifest(manifest_path)
                 enabled = bool(body.get("enabled"))
                 automation = manifest_to_persisted_definition(manifest, enabled=enabled)
                 created = self.server.runtime.store.upsert_automation(automation)
@@ -169,14 +174,32 @@ class AutomationRequestHandler(BaseHTTPRequestHandler):
                 {"ok": False, "error_message": f"Not found: {path}", "error_code": "NOT_FOUND"},
                 status=HTTPStatus.NOT_FOUND,
             )
+        except KeyError as exc:
+            self._send_json(
+                {
+                    "ok": False,
+                    "error_message": f"Not found: {exc}",
+                    "error_code": "NOT_FOUND",
+                },
+                status=HTTPStatus.NOT_FOUND,
+            )
         except Exception as exc:
+            status = (
+                HTTPStatus.BAD_REQUEST
+                if isinstance(exc, BrowserCliError | ValueError | json.JSONDecodeError)
+                else HTTPStatus.INTERNAL_SERVER_ERROR
+            )
             self._send_json(
                 {
                     "ok": False,
                     "error_message": str(exc),
-                    "error_code": getattr(exc, "error_code", "INTERNAL_ERROR"),
+                    "error_code": getattr(
+                        exc,
+                        "error_code",
+                        "INVALID_INPUT" if status == HTTPStatus.BAD_REQUEST else "INTERNAL_ERROR",
+                    ),
                 },
-                status=HTTPStatus.BAD_REQUEST,
+                status=status,
             )
 
     def _send_html(self, html: str, *, status: HTTPStatus = HTTPStatus.OK) -> None:
@@ -302,65 +325,58 @@ def _payload_to_automation(payload: dict) -> PersistedAutomationDefinition:
 
 
 def _automation_to_toml(automation: PersistedAutomationDefinition) -> str:
-    def fmt(value):
-        if isinstance(value, bool):
-            return "true" if value else "false"
-        if isinstance(value, int | float):
-            return str(value)
-        return json.dumps(value, ensure_ascii=False)
-
-    result_json_value = (
-        fmt(str(automation.result_json_path)) if automation.result_json_path else '""'
-    )
-    lines = [
-        "[automation]",
-        f"id = {fmt(automation.id)}",
-        f"name = {fmt(automation.name)}",
-        f"description = {fmt(automation.description)}",
-        f"version = {fmt(automation.version)}",
-        "",
-        "[task]",
-        f"path = {fmt(str(automation.task_path))}",
-        f"meta_path = {fmt(str(automation.task_meta_path))}",
-        f"entrypoint = {fmt(automation.entrypoint)}",
-        "",
-        "[inputs]",
-    ]
-    if automation.input_overrides:
-        for key, value in automation.input_overrides.items():
-            lines.append(f"{key} = {fmt(value)}")
-    lines.extend(
-        [
-            "",
-            "[schedule]",
-            f"mode = {fmt(automation.schedule_kind)}",
-            f"timezone = {fmt(automation.timezone)}",
-        ]
-    )
+    schedule_values = {"mode": automation.schedule_kind, "timezone": automation.timezone}
     for key, value in automation.schedule_payload.items():
-        if key in {"mode", "timezone"}:
-            continue
-        lines.append(f"{key} = {fmt(value)}")
-    lines.extend(
+        if key not in {"mode", "timezone"}:
+            schedule_values[key] = value
+    runtime_values: dict[str, object | None] = {
+        "retry_attempts": automation.retry_attempts,
+        "retry_backoff_seconds": automation.retry_backoff_seconds,
+        "timeout_seconds": automation.timeout_seconds,
+        "log_level": "info",
+    }
+    return dumps_toml_sections(
         [
-            "",
-            "[outputs]",
-            f"artifact_dir = {fmt(str(automation.output_dir))}",
-            f"result_json_path = {result_json_value}",
-            f"stdout = {fmt(automation.stdout_mode)}",
-            "",
-            "[hooks]",
-            f"before_run = {json.dumps(list(automation.before_run_hooks), ensure_ascii=False)}",
-            f"after_success = {json.dumps(list(automation.after_success_hooks), ensure_ascii=False)}",
-            f"after_failure = {json.dumps(list(automation.after_failure_hooks), ensure_ascii=False)}",
-            "",
-            "[runtime]",
-            f"retry_attempts = {fmt(automation.retry_attempts)}",
-            f"timeout_seconds = {fmt(automation.timeout_seconds) if automation.timeout_seconds is not None else '0'}",
-            f"log_level = {fmt('info')}",
+            (
+                "automation",
+                {
+                    "id": automation.id,
+                    "name": automation.name,
+                    "description": automation.description,
+                    "version": automation.version,
+                },
+            ),
+            (
+                "task",
+                {
+                    "path": str(automation.task_path),
+                    "meta_path": str(automation.task_meta_path),
+                    "entrypoint": automation.entrypoint,
+                },
+            ),
+            ("inputs", dict(automation.input_overrides)),
+            ("schedule", schedule_values),
+            (
+                "outputs",
+                {
+                    "artifact_dir": str(automation.output_dir),
+                    "result_json_path": (
+                        str(automation.result_json_path) if automation.result_json_path else ""
+                    ),
+                    "stdout": automation.stdout_mode,
+                },
+            ),
+            (
+                "hooks",
+                {
+                    "before_run": list(automation.before_run_hooks),
+                    "after_success": list(automation.after_success_hooks),
+                    "after_failure": list(automation.after_failure_hooks),
+                },
+            ),
+            ("runtime", runtime_values),
         ]
     )
-    return "\n".join(lines) + "\n"
 
 
 def _read_text(path: Path | None) -> str:

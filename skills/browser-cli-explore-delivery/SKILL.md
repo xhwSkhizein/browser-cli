@@ -34,8 +34,9 @@ Always follow this order:
 3. Explore with `browser-cli`
 4. Converge to `task.py`
 5. Distill `task.meta.json`
-6. Optional publish gate
-7. Publish `automation.toml` or `browser-cli automation publish`
+6. Templates
+7. Optional publish gate
+8. Publish `automation.toml` or `browser-cli automation publish`
 
 Never skip from exploration straight to publication.
 

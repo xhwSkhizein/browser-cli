@@ -85,7 +85,7 @@ def get_app_paths() -> AppPaths:
         artifacts_dir=home / "artifacts",
         tasks_dir=home / "tasks",
         automations_dir=home / "automations",
-        automation_runs_dir=home / "automations",
+        automation_runs_dir=home / "automations" / "runs",
         automation_db_path=home / "automations.db",
         automation_service_run_info_path=run_dir / "automation-service.json",
         automation_service_log_path=run_dir / "automation-service.log",

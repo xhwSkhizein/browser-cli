@@ -6,7 +6,9 @@ import json
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
+from browser_cli.automation.toml import dumps_toml_sections
 from browser_cli.constants import AppPaths
 from browser_cli.task_runtime import validate_task_dir
 
@@ -28,9 +30,14 @@ def publish_task_dir(task_dir: Path, *, app_paths: AppPaths) -> PublishedAutomat
     automation_root = app_paths.automations_dir / automation_id
     versions_dir = automation_root / "versions"
     versions_dir.mkdir(parents=True, exist_ok=True)
-    version = _next_version(versions_dir)
-    snapshot_dir = versions_dir / str(version)
-    snapshot_dir.mkdir(parents=True, exist_ok=False)
+    while True:
+        version = _next_version(versions_dir)
+        snapshot_dir = versions_dir / str(version)
+        try:
+            snapshot_dir.mkdir(parents=True, exist_ok=False)
+        except FileExistsError:
+            continue
+        break
 
     task_path = snapshot_dir / "task.py"
     task_meta_path = snapshot_dir / "task.meta.json"
@@ -82,40 +89,44 @@ def render_automation_manifest(
     task_meta_path: Path,
     output_dir: Path,
 ) -> str:
-    return (
-        "[automation]\n"
-        f'id = "{automation_id}"\n'
-        f'name = "{_escape(name)}"\n'
-        f'version = "{version}"\n'
-        "\n"
-        "[task]\n"
-        f'path = "{_escape(str(task_path))}"\n'
-        f'meta_path = "{_escape(str(task_meta_path))}"\n'
-        'entrypoint = "run"\n'
-        "\n"
-        "[inputs]\n"
-        "\n"
-        "[schedule]\n"
-        'mode = "manual"\n'
-        'timezone = "UTC"\n'
-        "\n"
-        "[outputs]\n"
-        f'artifact_dir = "{_escape(str(output_dir))}"\n'
-        'stdout = "json"\n'
-        "\n"
-        "[hooks]\n"
-        "before_run = []\n"
-        "after_success = []\n"
-        "after_failure = []\n"
-        "\n"
-        "[runtime]\n"
-        "retry_attempts = 0\n"
-        'log_level = "info"\n'
-    )
-
-
-def _escape(value: str) -> str:
-    return value.replace("\\", "\\\\").replace('"', '\\"')
+    sections: list[tuple[str, dict[str, Any]]] = [
+        (
+            "automation",
+            {
+                "id": str(automation_id),
+                "name": str(name),
+                "version": str(version),
+            },
+        ),
+        (
+            "task",
+            {
+                "path": str(task_path),
+                "meta_path": str(task_meta_path),
+                "entrypoint": "run",
+            },
+        ),
+        ("inputs", {}),
+        ("schedule", {"mode": "manual", "timezone": "UTC"}),
+        ("outputs", {"artifact_dir": str(output_dir), "stdout": "json"}),
+        (
+            "hooks",
+            {
+                "before_run": [],
+                "after_success": [],
+                "after_failure": [],
+            },
+        ),
+        (
+            "runtime",
+            {
+                "retry_attempts": 0,
+                "retry_backoff_seconds": 0,
+                "log_level": "info",
+            },
+        ),
+    ]
+    return dumps_toml_sections(sections)
 
 
 def _next_version(versions_dir: Path) -> int:

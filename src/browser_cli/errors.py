@@ -120,6 +120,22 @@ class AutomationServiceNotAvailableError(BrowserCliError):
         )
 
 
+class AutomationServiceError(BrowserCliError):
+    def __init__(self, payload: dict[str, object]) -> None:
+        error_code = str(payload.get("error_code") or error_codes.INTERNAL_ERROR)
+        exit_code = (
+            exit_codes.USAGE_ERROR
+            if error_code in {error_codes.INVALID_INPUT, error_codes.AUTOMATION_INVALID}
+            else exit_codes.TEMPORARY_FAILURE
+        )
+        super().__init__(
+            str(payload.get("error_message") or "Automation service request failed."),
+            exit_code,
+            error_code,
+        )
+        self.payload = payload
+
+
 class AutomationInvalidError(BrowserCliError):
     def __init__(self, message: str) -> None:
         super().__init__(message, exit_codes.USAGE_ERROR, error_codes.AUTOMATION_INVALID)

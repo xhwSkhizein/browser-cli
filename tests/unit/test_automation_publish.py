@@ -28,6 +28,7 @@ def test_load_automation_manifest_resolves_snapshot_files(tmp_path: Path) -> Non
     manifest = load_automation_manifest(manifest_path)
     assert manifest.automation.id == "demo"
     assert manifest.task.path == tmp_path / "task.py"
+    assert manifest.task.meta_path == tmp_path / "task.meta.json"
 
 
 def test_publish_task_dir_creates_versioned_snapshot(tmp_path: Path, monkeypatch) -> None:

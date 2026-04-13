@@ -212,7 +212,9 @@ class AutomationStore:
             automation_id=automation.id,
             trigger_type=trigger_type,
             status="queued",
-            effective_inputs=dict(effective_inputs or automation.input_overrides),
+            effective_inputs=dict(
+                effective_inputs if effective_inputs is not None else automation.input_overrides
+            ),
             attempt_number=attempt_number,
             queued_at=queued_at or now,
         )
@@ -472,10 +474,11 @@ class AutomationStore:
     ) -> PersistedAutomationDefinition:
         task_path = automation.task_path.expanduser().resolve()
         task_meta_path = automation.task_meta_path.expanduser().resolve()
+        raw_output_dir = str(automation.output_dir).strip()
         output_dir = (
-            automation.output_dir.expanduser().resolve()
-            if str(automation.output_dir)
-            else (get_app_paths().automation_runs_dir / automation.id).resolve()
+            (get_app_paths().automation_runs_dir / automation.id).resolve()
+            if raw_output_dir in {"", "."}
+            else automation.output_dir.expanduser().resolve()
         )
         result_json_path = None
         if automation.result_json_path is not None:
@@ -493,7 +496,7 @@ class AutomationStore:
         try:
             if not task_path.exists():
                 raise FileNotFoundError(f"Task file does not exist: {task_path}")
-            payload = json.loads(task_meta_path.read_text(encoding="utf-8"))
+            payload = _load_task_metadata(task_meta_path)
             validate_task_metadata(payload, source=str(task_meta_path))
             if automation.enabled:
                 next_run_at = compute_next_run_at(
@@ -565,10 +568,11 @@ def _row_to_automation(row: sqlite3.Row) -> PersistedAutomationDefinition:
     return PersistedAutomationDefinition(
         id=str(row["id"]),
         name=str(row["name"]),
-        description=str(row["description"] or ""),
-        version=str(row["version"] or "0.1.0"),
         task_path=Path(str(row["task_path"])),
         task_meta_path=Path(str(row["task_meta_path"])),
+        output_dir=Path(str(row["output_dir"])),
+        description=str(row["description"] or ""),
+        version=str(row["version"] or "0.1.0"),
         entrypoint=str(row["entrypoint"] or "run"),
         enabled=bool(row["enabled"]),
         definition_status=str(row["definition_status"] or "valid"),
@@ -576,7 +580,6 @@ def _row_to_automation(row: sqlite3.Row) -> PersistedAutomationDefinition:
         schedule_kind=str(row["schedule_kind"] or "manual"),
         schedule_payload=json.loads(row["schedule_payload_json"] or "{}"),
         timezone=str(row["timezone"] or "UTC"),
-        output_dir=Path(str(row["output_dir"])),
         result_json_path=Path(str(row["result_json_path"])) if row["result_json_path"] else None,
         stdout_mode=str(row["stdout_mode"] or "json"),
         input_overrides=json.loads(row["input_overrides_json"] or "{}"),
@@ -647,3 +650,10 @@ def _row_to_event(row: sqlite3.Row) -> AutomationRunEvent:
 
 def _utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _load_task_metadata(task_meta_path: Path) -> dict[str, Any]:
+    try:
+        return json.loads(task_meta_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        raise ValueError(f"Task metadata is invalid JSON: {task_meta_path}: {exc}") from exc

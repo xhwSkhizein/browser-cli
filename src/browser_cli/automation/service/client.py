@@ -15,7 +15,7 @@ from typing import Any
 
 from browser_cli import __version__
 from browser_cli.constants import get_app_paths
-from browser_cli.errors import AutomationServiceNotAvailableError
+from browser_cli.errors import AutomationServiceError, AutomationServiceNotAvailableError
 
 AUTOMATION_STARTUP_TIMEOUT_SECONDS = 15.0
 AUTOMATION_STARTUP_PROBE_INTERVAL_SECONDS = 0.1
@@ -48,9 +48,7 @@ def request_automation_service(
         connection.close()
     if payload.get("ok"):
         return payload
-    raise AutomationServiceNotAvailableError(
-        str(payload.get("error_message") or "Automation service request failed.")
-    )
+    raise AutomationServiceError(payload)
 
 
 def ensure_automation_service_running() -> None:

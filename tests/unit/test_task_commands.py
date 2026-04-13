@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from argparse import Namespace
 from pathlib import Path
 
@@ -35,8 +36,12 @@ def test_task_validate_returns_json_payload(tmp_path: Path) -> None:
         '{"task":{"id":"demo","name":"Demo","goal":"Run"},"environment":{},"success_path":{},"recovery_hints":{},"failures":[],"knowledge":{}}',
         encoding="utf-8",
     )
-    payload = run_task_command(Namespace(task_subcommand="validate", path=str(task_dir)))
-    assert '"valid": true' in payload.lower()
+    payload = json.loads(
+        run_task_command(Namespace(task_subcommand="validate", path=str(task_dir)))
+    )
+    assert payload["ok"] is True
+    assert payload["data"]["valid"] is True
+    assert payload["data"]["task"]["id"] == "demo"
 
 
 def test_task_run_executes_task_dir(tmp_path: Path) -> None:
@@ -50,12 +55,16 @@ def test_task_run_executes_task_dir(tmp_path: Path) -> None:
         '{"task":{"id":"demo","name":"Demo","goal":"Run"},"environment":{},"success_path":{},"recovery_hints":{},"failures":[],"knowledge":{}}',
         encoding="utf-8",
     )
-    payload = run_task_command(
-        Namespace(
-            task_subcommand="run",
-            path=str(task_dir),
-            set_values=["url=https://example.com"],
-            inputs_json=None,
+    payload = json.loads(
+        run_task_command(
+            Namespace(
+                task_subcommand="run",
+                path=str(task_dir),
+                set_values=["url=https://example.com"],
+                inputs_json=None,
+            )
         )
     )
-    assert '"ok": true' in payload.lower()
+    assert payload["ok"] is True
+    assert payload["data"]["ok"] is True
+    assert payload["data"]["url"] == "https://example.com"

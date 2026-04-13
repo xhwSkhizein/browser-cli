@@ -61,10 +61,11 @@ class AutomationManifest:
 class PersistedAutomationDefinition:
     id: str
     name: str
+    task_path: Path
+    task_meta_path: Path
+    output_dir: Path
     description: str = ""
     version: str = "0.1.0"
-    task_path: Path = Path()
-    task_meta_path: Path = Path()
     entrypoint: str = "run"
     enabled: bool = False
     definition_status: str = "valid"
@@ -72,7 +73,6 @@ class PersistedAutomationDefinition:
     schedule_kind: str = "manual"
     schedule_payload: dict[str, Any] = field(default_factory=dict)
     timezone: str = "UTC"
-    output_dir: Path = Path()
     result_json_path: Path | None = None
     stdout_mode: str = "json"
     input_overrides: dict[str, Any] = field(default_factory=dict)
@@ -123,16 +123,16 @@ def manifest_to_persisted_definition(
     return PersistedAutomationDefinition(
         id=manifest.automation.id,
         name=manifest.automation.name,
-        description=manifest.automation.description,
-        version=manifest.automation.version,
         task_path=manifest.task.path,
         task_meta_path=manifest.task.meta_path,
+        output_dir=manifest.outputs.artifact_dir,
+        description=manifest.automation.description,
+        version=str(manifest.automation.version),
         entrypoint=manifest.task.entrypoint,
         enabled=enabled,
         schedule_kind=str(manifest.schedule.get("mode") or "manual"),
         schedule_payload=dict(manifest.schedule),
         timezone=str(manifest.schedule.get("timezone") or "UTC"),
-        output_dir=manifest.outputs.artifact_dir,
         result_json_path=manifest.outputs.result_json_path,
         stdout_mode=manifest.outputs.stdout,
         input_overrides=dict(manifest.inputs),

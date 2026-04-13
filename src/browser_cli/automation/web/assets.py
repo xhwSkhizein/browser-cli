@@ -242,19 +242,39 @@ def render_index_html() -> str:
         : "Create a new automation or select an existing one.";
     }
 
+    function pill(text) {
+      const span = document.createElement("span");
+      span.className = "pill";
+      span.textContent = text;
+      return span;
+    }
+
+    function statusLine(text, extraClass = "") {
+      const div = document.createElement("div");
+      div.className = extraClass ? `status-line ${extraClass}` : "status-line";
+      div.textContent = text;
+      return div;
+    }
+
     function renderautomationList() {
       const root = document.getElementById("automation-list");
       root.innerHTML = "";
       automations.forEach((automation) => {
         const item = document.createElement("div");
         item.className = "automation-item" + (automation.id === selectedautomationId ? " active" : "");
-        item.innerHTML = `
-          <div><strong>${automation.name || automation.id}</strong></div>
-          <div class="status-line">${automation.id}</div>
-          <div><span class="pill">${automation.enabled ? "enabled" : "disabled"}</span> <span class="pill">${automation.definition_status}</span></div>
-          <div class="status-line">next: ${automation.next_run_at || "manual"}</div>
-          <div class="status-line">latest: ${automation.latest_run?.status || "none"}</div>
-        `;
+        const title = document.createElement("div");
+        const strong = document.createElement("strong");
+        strong.textContent = automation.name || automation.id;
+        title.appendChild(strong);
+        item.appendChild(title);
+        item.appendChild(statusLine(automation.id));
+        const pills = document.createElement("div");
+        pills.appendChild(pill(automation.enabled ? "enabled" : "disabled"));
+        pills.appendChild(document.createTextNode(" "));
+        pills.appendChild(pill(automation.definition_status));
+        item.appendChild(pills);
+        item.appendChild(statusLine(`next: ${automation.next_run_at || "manual"}`));
+        item.appendChild(statusLine(`latest: ${automation.latest_run?.status || "none"}`));
         item.onclick = async () => {
           await selectautomation(automation.id);
         };
@@ -268,12 +288,16 @@ def render_index_html() -> str:
       runs.forEach((run) => {
         const item = document.createElement("div");
         item.className = "run-item";
-        item.innerHTML = `
-          <div><strong>${run.status}</strong> <span class="pill">${run.trigger_type}</span></div>
-          <div class="status-line">${run.run_id}</div>
-          <div class="status-line">${run.queued_at || ""}</div>
-          <div class="status-line ${run.error_message ? "error" : ""}">${run.error_message || ""}</div>
-        `;
+        const header = document.createElement("div");
+        const strong = document.createElement("strong");
+        strong.textContent = run.status;
+        header.appendChild(strong);
+        header.appendChild(document.createTextNode(" "));
+        header.appendChild(pill(run.trigger_type));
+        item.appendChild(header);
+        item.appendChild(statusLine(run.run_id));
+        item.appendChild(statusLine(run.queued_at || ""));
+        item.appendChild(statusLine(run.error_message || "", run.error_message ? "error" : ""));
         item.onclick = async () => {
           selectedRunId = run.run_id;
           await refreshRunDetail();
@@ -313,7 +337,13 @@ def render_index_html() -> str:
     }
 
     document.getElementById("refresh-list").onclick = refreshautomations;
-    document.getElementById("new-automation").onclick = () => fillautomation(null);
+    document.getElementById("new-automation").onclick = () => {
+      selectedRunId = null;
+      document.getElementById("run-list").innerHTML = "";
+      document.getElementById("run-detail").textContent = "";
+      fillautomation(null);
+      renderautomationList();
+    };
     document.getElementById("save-automation").onclick = async () => {
       const payload = automationPayload();
       const method = selectedautomationId ? "PUT" : "POST";
