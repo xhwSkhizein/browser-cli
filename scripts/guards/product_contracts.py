@@ -38,9 +38,11 @@ def run(_root: Path) -> list[Finding]:
 
     if "read" not in top_level_commands:
         findings.append(Finding("error", "CONTRACT002", "Top-level 'read' command is required."))
-    if "workflow" not in top_level_commands:
+    if "task" not in top_level_commands:
+        findings.append(Finding("error", "CONTRACT003", "Top-level 'task' command is required."))
+    if "automation" not in top_level_commands:
         findings.append(
-            Finding("error", "CONTRACT003", "Top-level 'workflow' command is required.")
+            Finding("error", "CONTRACT016", "Top-level 'automation' command is required.")
         )
     if "status" not in top_level_commands:
         findings.append(Finding("error", "CONTRACT010", "Top-level 'status' command is required."))
@@ -59,8 +61,10 @@ def run(_root: Path) -> list[Finding]:
 
     if "read" in top_level_commands:
         findings.extend(_check_read_contract(top_level_commands["read"]))
-    if "workflow" in top_level_commands:
-        findings.extend(_check_workflow_contract(top_level_commands["workflow"]))
+    if "task" in top_level_commands:
+        findings.extend(_check_task_contract(top_level_commands["task"]))
+    if "automation" in top_level_commands:
+        findings.extend(_check_automation_contract(top_level_commands["automation"]))
     if "reload" in top_level_commands:
         findings.extend(_check_lifecycle_reload_contract(top_level_commands["reload"]))
     if "page-reload" in top_level_commands:
@@ -99,17 +103,33 @@ def _check_read_contract(parser: argparse.ArgumentParser) -> list[Finding]:
     return findings
 
 
-def _check_workflow_contract(parser: argparse.ArgumentParser) -> list[Finding]:
+def _check_task_contract(parser: argparse.ArgumentParser) -> list[Finding]:
     findings: list[Finding] = []
     subcommands = _subcommand_parsers(parser)
-    expected = {"export", "import", "run", "service-status", "service-stop", "ui", "validate"}
+    expected = {"run", "validate"}
     actual = set(subcommands)
     if actual != expected:
         findings.append(
             Finding(
                 "error",
                 "CONTRACT006",
-                f"'workflow' subcommands changed unexpectedly. Expected {sorted(expected)}, found {sorted(actual)}.",
+                f"'task' subcommands changed unexpectedly. Expected {sorted(expected)}, found {sorted(actual)}.",
+            )
+        )
+    return findings
+
+
+def _check_automation_contract(parser: argparse.ArgumentParser) -> list[Finding]:
+    findings: list[Finding] = []
+    subcommands = _subcommand_parsers(parser)
+    expected = {"export", "import", "publish", "status", "stop", "ui"}
+    actual = set(subcommands)
+    if actual != expected:
+        findings.append(
+            Finding(
+                "error",
+                "CONTRACT017",
+                f"'automation' subcommands changed unexpectedly. Expected {sorted(expected)}, found {sorted(actual)}.",
             )
         )
     return findings

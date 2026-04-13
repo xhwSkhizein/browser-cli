@@ -20,9 +20,9 @@ execution environment as much as the browser steps.
 - `browser-cli status`
 - a writable artifacts directory
 
-If the task will later be run by workflow or plain Python, validate that exact
-entry environment now. Do not validate with one interpreter and execute with
-another.
+If the task will later be run by `browser-cli task run`, the automation service,
+or plain Python, validate that exact entry environment now. Do not validate with
+one interpreter and execute with another.
 
 ## Profile And Site Assumptions
 

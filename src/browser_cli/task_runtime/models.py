@@ -73,8 +73,8 @@ class FlowContext:
     task_path: Path
     task_dir: Path
     artifacts_dir: Path
-    workflow_path: Path | None = None
-    workflow_name: str | None = None
+    automation_path: Path | None = None
+    automation_name: str | None = None
 
 
 def validate_task_metadata(payload: dict[str, Any], *, source: str) -> dict[str, Any]:

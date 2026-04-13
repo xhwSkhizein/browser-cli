@@ -21,7 +21,8 @@ Use this checklist before calling Browser CLI done on a real workstation.
 - `browser-cli snapshot`
 - `browser-cli html`
 - `browser-cli page-reload`
-- `browser-cli workflow validate tasks/interactive_reveal_capture/workflow.toml`
+- `browser-cli task validate tasks/interactive_reveal_capture`
+- `browser-cli automation publish tasks/interactive_reveal_capture`
 - `browser-cli stop`
 - Confirm `browser-cli read ...` does not leave an extra visible tab behind after it exits.
 - Confirm the JSON metadata for daemon-backed commands includes `meta.driver`.
@@ -115,13 +116,15 @@ Use this checklist before calling Browser CLI done on a real workstation.
 - Exercise one video flow: `video-start`, perform a page action, `video-stop`, then `close-tab` and confirm the deferred `.webm` is written from the extension screencast pipeline.
 - Exercise one storage flow: `cookie-set`, `cookies`, `cookies-clear`, `storage-save`, `storage-load`.
 
-## Task And Workflow Checks
+## Task And Automation Checks
 
-- Run `browser-cli workflow validate tasks/interactive_reveal_capture/workflow.toml`.
-- Run `browser-cli workflow run tasks/interactive_reveal_capture/workflow.toml --set url=<fixture-url>`.
-- Confirm the workflow writes `artifacts/result.json`.
-- Confirm the workflow-created HTML artifact contains the expected rendered content.
-- Run the lazy-scroll task through Python or a temporary workflow and confirm it writes both HTML and round-history artifacts.
+- Run `browser-cli task validate tasks/interactive_reveal_capture`.
+- Run `browser-cli task run tasks/interactive_reveal_capture --set url=<fixture-url>`.
+- Confirm the task writes `artifacts/result.json` or its documented artifacts.
+- Confirm the created HTML artifact contains the expected rendered content.
+- Run `browser-cli automation publish tasks/lazy_scroll_capture`.
+- Run `browser-cli automation status`.
+- Confirm the automation service reports at least one persisted automation.
 
 ## Failure Checks
 

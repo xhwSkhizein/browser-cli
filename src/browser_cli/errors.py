@@ -111,15 +111,15 @@ class OperationFailedError(BrowserCliError):
         super().__init__(message, exit_codes.TEMPORARY_FAILURE, error_code)
 
 
-class WorkflowServiceNotAvailableError(BrowserCliError):
-    def __init__(self, message: str = "Workflow service is not available.") -> None:
+class AutomationServiceNotAvailableError(BrowserCliError):
+    def __init__(self, message: str = "Automation service is not available.") -> None:
         super().__init__(
             message,
             exit_codes.TEMPORARY_FAILURE,
-            error_codes.WORKFLOW_SERVICE_NOT_AVAILABLE,
+            error_codes.AUTOMATION_SERVICE_NOT_AVAILABLE,
         )
 
 
-class WorkflowInvalidError(BrowserCliError):
+class AutomationInvalidError(BrowserCliError):
     def __init__(self, message: str) -> None:
-        super().__init__(message, exit_codes.USAGE_ERROR, error_codes.WORKFLOW_INVALID)
+        super().__init__(message, exit_codes.USAGE_ERROR, error_codes.AUTOMATION_INVALID)

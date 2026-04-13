@@ -8,7 +8,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_workflow_modules_import_on_current_python() -> None:
+def test_automation_modules_import_on_current_python() -> None:
     env = dict(os.environ)
     src_path = str(REPO_ROOT / "src")
     current_pythonpath = env.get("PYTHONPATH")
@@ -21,9 +21,9 @@ def test_workflow_modules_import_on_current_python() -> None:
             sys.executable,
             "-c",
             (
-                "import browser_cli.workflow.api.server; "
-                "import browser_cli.workflow.persistence.store; "
-                "import browser_cli.workflow.scheduler.schedule"
+                "import browser_cli.automation.api.server; "
+                "import browser_cli.automation.persistence.store; "
+                "import browser_cli.automation.scheduler.schedule"
             ),
         ],
         cwd=REPO_ROOT,

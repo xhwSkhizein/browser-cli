@@ -8,14 +8,14 @@ from datetime import datetime
 from typing import Any
 
 from browser_cli import __version__
+from browser_cli.automation.service.client import (
+    read_automation_service_run_info,
+    request_automation_service,
+)
 from browser_cli.constants import get_app_paths
 from browser_cli.daemon.client import run_info_is_compatible, send_command
 from browser_cli.daemon.transport import DAEMON_RUNTIME_VERSION, probe_socket, read_run_info
 from browser_cli.errors import BrowserCliError
-from browser_cli.workflow.service.client import (
-    read_workflow_service_run_info,
-    request_workflow_service,
-)
 
 
 @dataclass(slots=True)
@@ -29,7 +29,7 @@ class StatusReport:
     guidance: list[str]
     presentation: dict[str, Any] = field(default_factory=dict)
     stability: dict[str, Any] = field(default_factory=dict)
-    workflow_service: dict[str, Any] = field(default_factory=dict)
+    automation_service: dict[str, Any] = field(default_factory=dict)
     live_error: str | None = None
 
 
@@ -80,36 +80,38 @@ def collect_status_report(*, warmup: bool = False) -> StatusReport:
         "recorded_package_version": (run_info or {}).get("package_version"),
         "recorded_runtime_version": (run_info or {}).get("runtime_version"),
     }
-    workflow_run_info = read_workflow_service_run_info()
-    workflow_service_section = {
+    automation_run_info = read_automation_service_run_info()
+    automation_service_section = {
         "running": False,
-        "pid": _int_or_none((workflow_run_info or {}).get("pid")),
+        "pid": _int_or_none((automation_run_info or {}).get("pid")),
         "url": (
-            f"http://{workflow_run_info['host']}:{workflow_run_info['port']}/"
-            if workflow_run_info and workflow_run_info.get("host") and workflow_run_info.get("port")
+            f"http://{automation_run_info['host']}:{automation_run_info['port']}/"
+            if automation_run_info
+            and automation_run_info.get("host")
+            and automation_run_info.get("port")
             else None
         ),
-        "workflow_count": 0,
+        "automation_count": 0,
         "queued_runs": 0,
         "running_runs": 0,
     }
-    if workflow_run_info:
+    if automation_run_info:
         try:
-            workflow_status = request_workflow_service(
+            automation_status = request_automation_service(
                 "GET", "/api/service/status", start_if_needed=False
             )
-            workflow_data = dict(workflow_status.get("data") or {})
-            metrics = dict(workflow_data.get("metrics") or {})
-            workflow_service_section.update(
+            automation_data = dict(automation_status.get("data") or {})
+            metrics = dict(automation_data.get("metrics") or {})
+            automation_service_section.update(
                 {
                     "running": True,
-                    "workflow_count": int(metrics.get("workflow_count") or 0),
+                    "automation_count": int(metrics.get("automation_count") or 0),
                     "queued_runs": int(metrics.get("queued_runs") or 0),
                     "running_runs": int(metrics.get("running_runs") or 0),
                 }
             )
         except BrowserCliError:
-            workflow_service_section["running"] = False
+            automation_service_section["running"] = False
     backend_section = _build_backend_section(live_payload, live_error=live_error)
     browser_section = _build_browser_section(live_payload)
     presentation = dict((live_payload or {}).get("presentation") or {})
@@ -131,7 +133,7 @@ def collect_status_report(*, warmup: bool = False) -> StatusReport:
         daemon_state=daemon_state,
         runtime=runtime_section,
         daemon=daemon_section,
-        workflow_service=workflow_service_section,
+        automation_service=automation_service_section,
         backend=backend_section,
         browser=browser_section,
         guidance=guidance,
@@ -174,13 +176,13 @@ def render_status_report(report: StatusReport) -> str:
     lines.extend(
         [
             "",
-            "Workflow Service",
-            f"  running: {_yes_no(report.workflow_service['running'])}",
-            f"  pid: {_display_value(report.workflow_service['pid'])}",
-            f"  url: {_display_value(report.workflow_service['url'])}",
-            f"  workflow count: {_display_value(report.workflow_service['workflow_count'])}",
-            f"  queued runs: {_display_value(report.workflow_service['queued_runs'])}",
-            f"  running runs: {_display_value(report.workflow_service['running_runs'])}",
+            "Automation Service",
+            f"  running: {_yes_no(report.automation_service['running'])}",
+            f"  pid: {_display_value(report.automation_service['pid'])}",
+            f"  url: {_display_value(report.automation_service['url'])}",
+            f"  automation count: {_display_value(report.automation_service['automation_count'])}",
+            f"  queued runs: {_display_value(report.automation_service['queued_runs'])}",
+            f"  running runs: {_display_value(report.automation_service['running_runs'])}",
             "",
             "Backend",
             f"  browser started: {_yes_no(report.backend['browser_started'])}",
