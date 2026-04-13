@@ -81,41 +81,63 @@
 
 目标：
 
-- 验证 daemon 和浏览器后端在长时间、多轮次使用下是否稳定
+- 不是继续补新能力，而是验证 Browser CLI 在长时间、多轮次、真实使用节奏下是否仍然可信
+- 把 soak 过程中暴露的生命周期问题收敛成可观测、可复现、可恢复的运行时行为
 
 重点：
 
-- 长时间 daemon 常驻
-- 反复 open / close / reload
-- extension 断连 / 重连
-- driver rebinding
-- 大工件传输
-- 多任务切换
+- 建立一组固定的长运行场景，而不是只靠一次性 smoke：
+  - daemon 长驻 + 多轮命令执行
+  - 反复 `open / close / reload / page-reload`
+  - extension 断连 / 重连 / 延迟恢复
+  - safe-point rebinding 与 `state_reset` 暴露
+  - 大工件传输，如 screenshot / pdf / trace / video / network bodies
+  - 多任务或多 Agent 切换下的 tab / workspace 控制稳定性
+- 每个高频失败都要落到明确收敛路径：
+  - `status` / `runtime-status` 能解释当前处于什么生命周期状态
+  - popup 能提供有限但可靠的人工恢复入口
+  - `reload` 能作为统一的重置路径，而不是回到手工杀进程
+  - 真正 recurring 的失败要沉淀为 soak case、integration case 或 guard，而不是只留在对话记忆里
+- 长运行关注的是“运行态诚实性”，不要求伪装成完全连续：
+  - rebind 仍可发生，但必须只在 safe point 发生
+  - cross-driver continuity 不应伪装成无状态切换，必要时明确暴露 `state_reset`
+  - extension 降级、workspace 重建、artifact 失败都要有一致的机器可读信号
 
 完成标准：
 
-- 没有持续累积的残留窗口、孤儿进程、明显资源泄漏
-- 关键命令在多轮运行后仍然可靠
-- 长时间运行的 smoke/soak 有稳定结果
+- 有一组可重复运行的 long-run smoke / soak 场景，覆盖 daemon、driver、workspace、artifact 几类核心断点
+- 多轮运行后没有持续累积的残留窗口、孤儿进程、明显资源泄漏或不断恶化的 degraded state
+- `status`、`runtime-status`、popup、`reload` 对长期运行问题给出一致解释，而不是各自发明状态语义
+- 长运行中暴露的主要问题，要么被修复，要么被显式降级并文档化为当前已知边界
 
 ### 5. Structural Cleanup
 
 目标：
 
-- 在不扩能力面的前提下，继续把当前实现整理成长期可维护结构
+- 在不扩公开能力面、不打断真实任务交付节奏的前提下，把当前实现整理成更适合长期维护和继续演进的结构
+- 让代码边界、测试边界、文档边界、guard 边界逐步重新对齐，而不是继续依赖少数大文件承载越来越多的产品语义
 
 重点：
 
-- extension background domain handlers 进一步细化
-- Python driver helpers 继续按主题拆小
-- tests 按 parity / lifecycle / task delivery 分类更清晰
-- docs / guards / capabilities 与真实行为持续同步
+- 结构收口应围绕当前已经暴露出复杂度的热点，而不是做泛化重构：
+  - extension background handlers 按 domain 继续细化，减少 `background.js` 持续吸收产品行为
+  - Python driver helpers 与 daemon/browser lifecycle 相关辅助逻辑继续按主题拆小，避免 driver parity、lifecycle、artifact、workspace 语义互相缠绕
+  - runtime presentation、capability reporting、workspace control 这类已成为产品契约的逻辑，应保持单一解释路径，避免 CLI、popup、driver 再次各自复制判断
+- 测试结构要服务于产品边界，而不是只跟着文件名增长：
+  - parity 测试明确回答 extension 与 Playwright 是否仍满足同一公开契约
+  - lifecycle 测试明确覆盖 status / reload / reconnect / rebind / state_reset 等运行态语义
+  - task delivery / workflow 测试明确覆盖从 `task.py` 到 `workflow.toml` 的真实交付链
+- docs、guards、capabilities 要继续与真实行为同步：
+  - 新增或调整产品契约时，同步更新 AGENTS、相关 specs、guards
+  - extension capability 声明、daemon runtime 暴露、popup 展示逻辑不能长期漂移
+  - recurring failure 的 durable lesson 应写回导航文档或 guard，而不是停留在一次性修复里
 
 完成标准：
 
-- 后续新增能力不需要继续把逻辑堆回单文件
-- 代码边界、测试边界、文档边界一致
-- 维护成本持续下降
+- 后续新增能力时，不需要继续把产品逻辑堆回 `background.js`、单个 driver 文件或单个 daemon 大文件
+- 测试目录和测试命名能更直接映射 parity、lifecycle、task delivery 这些真实产品维度
+- docs、guards、capabilities 与运行时行为保持同步，减少“代码已变、文档和约束没跟上”的回归源
+- 结构整理以持续小步进行，不应成为打断 Real Task Validation、Workflow Publish、Long-Run soak 收敛的独立大项目
 
 ## Recommended Sequence
 
