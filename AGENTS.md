@@ -47,6 +47,10 @@ the implementation, and where should a change land first.
 
 - CLI shape, command names, help text, and top-level parser wiring:
   `src/browser_cli/cli/main.py`
+- Pip-user diagnostics:
+  `src/browser_cli/commands/doctor.py`
+- Runtime path discovery:
+  `src/browser_cli/commands/paths.py`
 - Daemon-backed command catalog, arguments, aliases, and request builders:
   `src/browser_cli/actions/cli_specs.py`
 - Generic action command execution:
@@ -64,6 +68,8 @@ the implementation, and where should a change land first.
   `src/browser_cli/commands/reload.py`
 - Task CLI entrypoints:
   `src/browser_cli/commands/task.py`
+- Task templates and built-in example metadata:
+  `src/browser_cli/task_runtime/templates.py`
 - Automation publish and service CLI entrypoints:
   `src/browser_cli/commands/automation.py`
 - Automation manifest loading, publishing, persistence, scheduler, API, service runtime, and Web UI:
@@ -156,6 +162,8 @@ the implementation, and where should a change land first.
 - If the user reports daemon startup, stale socket, or reload issues:
   inspect `src/browser_cli/daemon/client.py`, `src/browser_cli/daemon/transport.py`, `src/browser_cli/commands/status.py`, and `src/browser_cli/commands/reload.py`.
   If startup fails while waiting for an extension session, inspect `src/browser_cli/daemon/browser_service.py::ensure_started`; extension handshake wait is a best-effort preference signal and must fall back to Playwright instead of aborting daemon startup.
+- If the user wants a first-run environment check or path discovery for installed users:
+  inspect `src/browser_cli/commands/doctor.py`, `src/browser_cli/commands/paths.py`, `src/browser_cli/constants.py`, and `src/browser_cli/profiles/discovery.py`.
 - If the user reports a driver mismatch or extension/Playwright inconsistency:
   start at `src/browser_cli/drivers/base.py`, then compare `playwright_driver.py`, `extension_driver.py`, and `daemon/browser_service.py`.
 - If the user reports broken refs, stale snapshots, or element targeting failures:
@@ -164,8 +172,12 @@ the implementation, and where should a change land first.
   start at `src/browser_cli/tabs/registry.py` and the tab-related handlers in `src/browser_cli/daemon/app.py`.
 - If the user wants task or automation behavior changed:
   inspect `src/browser_cli/task_runtime/*` and `src/browser_cli/automation/*`, then validate against example tasks under `tasks/`.
+- If the user wants task examples or template output changed:
+  inspect `src/browser_cli/task_runtime/templates.py`, `src/browser_cli/commands/task.py`, and `tests/unit/test_task_commands.py`.
 - If the user reports recurring runs, automation history, local Web UI, or automation-service state issues:
   start at `src/browser_cli/automation/service/*`, `src/browser_cli/automation/persistence/*`, `src/browser_cli/automation/scheduler/*`, and `src/browser_cli/automation/api/*`.
+- If the user reports confusion about what publish created or which version is active:
+  inspect `src/browser_cli/commands/automation.py`, `src/browser_cli/automation/publisher.py`, `src/browser_cli/automation/api/server.py`, and the snapshot directories under `~/.browser-cli/automations/<automation-id>/versions/`.
 - If the user mentions extension capability gaps, artifacts, or real Chrome behavior:
   inspect both `src/browser_cli/extension/*` and `browser-cli-extension/src/*`; many bugs live in protocol drift between Python and extension JS.
 - If the user reports popup/runtime observer drift:
@@ -206,7 +218,7 @@ public interactive commands.
 
 ## Implementation Conventions
 
-- Top-level parser registration lives in `src/browser_cli/cli/main.py`. Only `read`, `task`, `automation`, `status`, and lifecycle `reload` are hand-wired there; the rest come from `get_action_specs()`.
+- Top-level parser registration lives in `src/browser_cli/cli/main.py`. `read`, `doctor`, `paths`, `task`, `automation`, `status`, and lifecycle `reload` are hand-wired there; the rest come from `get_action_specs()`.
 - Public daemon-backed actions should be added through `ActionSpec`, not by manually bolting ad hoc parsers into `main.py`.
 - The lifecycle command `browser-cli reload` and the page action `browser-cli page-reload` are intentionally different surfaces. Do not collapse them.
 - Public daemon commands return JSON payloads. Preserve `ok/data/meta` shape and machine-readable error codes.
