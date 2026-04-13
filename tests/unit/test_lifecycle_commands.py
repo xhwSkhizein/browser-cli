@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
+from browser_cli import __version__
 from browser_cli.commands.reload import run_reload_command
 from browser_cli.commands.status import StatusReport, collect_status_report, run_status_command
 from browser_cli.errors import DaemonNotAvailableError, OperationFailedError
@@ -56,7 +57,7 @@ def test_collect_status_report_when_stale_runtime(tmp_path: Path) -> None:
 def test_collect_status_report_when_managed_backend_is_degraded(tmp_path: Path) -> None:
     run_info = {
         "pid": 123,
-        "package_version": "0.1.0",
+        "package_version": __version__,
         "runtime_version": "2026-04-10-dual-driver-extension-v1",
     }
     runtime_status = {
@@ -122,7 +123,7 @@ def test_collect_status_report_when_managed_backend_is_degraded(tmp_path: Path) 
 def test_collect_status_report_uses_daemon_presentation_snapshot(tmp_path: Path) -> None:
     run_info = {
         "pid": 123,
-        "package_version": "0.1.0",
+        "package_version": __version__,
         "runtime_version": "2026-04-10-dual-driver-extension-v1",
     }
     runtime_status = {
@@ -193,7 +194,7 @@ def test_collect_status_report_uses_daemon_presentation_snapshot(tmp_path: Path)
 def test_collect_status_report_renders_stability_section(tmp_path: Path) -> None:
     run_info = {
         "pid": 123,
-        "package_version": "0.1.0",
+        "package_version": __version__,
         "runtime_version": "2026-04-10-dual-driver-extension-v1",
     }
     runtime_status = {

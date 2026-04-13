@@ -14,5 +14,5 @@ playwright-report/
 test-results/
 tasks/**/artifacts/
 
-
+trash/
 .codex

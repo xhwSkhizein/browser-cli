@@ -1,11 +1,11 @@
 [build-system]
-requires = ["setuptools>=69", "wheel"]
+requires = ["setuptools>=69", "setuptools-scm>=8.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "browser-cli"
-version = "0.1.0"
 description = "CLI-first browser reader for rendered HTML and page snapshots"
+dynamic = ["version"]
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -29,6 +29,9 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools_scm]
+# 版本从 git tag 自动推断
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

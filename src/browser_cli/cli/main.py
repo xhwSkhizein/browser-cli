@@ -9,6 +9,7 @@ from collections.abc import Sequence
 from browser_cli import __version__, exit_codes
 from browser_cli.actions import get_action_specs
 from browser_cli.commands.action import run_action_command
+from browser_cli.commands.install_skills import run_install_skills_command
 from browser_cli.commands.read import run_read_command
 from browser_cli.commands.reload import run_reload_command
 from browser_cli.commands.status import run_status_command
@@ -136,6 +137,18 @@ def build_parser() -> argparse.ArgumentParser:
         description="Clear Browser CLI runtime state, restart the daemon, and print the refreshed status.",
     )
     reload_parser.set_defaults(handler=run_reload_command)
+
+    skills_parser = subparsers.add_parser(
+        "install-skills",
+        help="Install packaged skills to ~/.agents/skills.",
+        description="Copy bundled skills from the package to the user's skills directory.",
+    )
+    skills_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what would be installed without making changes.",
+    )
+    skills_parser.set_defaults(handler=run_install_skills_command)
 
     for spec in get_action_specs():
         parser_name = spec.cli_name or spec.name
