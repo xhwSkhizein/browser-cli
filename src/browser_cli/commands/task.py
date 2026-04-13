@@ -21,11 +21,14 @@ def run_task_command(args: Namespace) -> str:
 
     if args.task_subcommand == "template":
         output = getattr(args, "output", None)
+        print_template = bool(getattr(args, "print_template", False))
         if output:
             output_dir = Path(output).expanduser().resolve()
             output_dir.mkdir(parents=True, exist_ok=True)
             for name, body in TASK_TEMPLATE_FILES.items():
                 (output_dir / name).write_text(body, encoding="utf-8")
+            if print_template:
+                return f"Template written to {output_dir}\n\n{render_template_bundle()}"
             return f"Template written to {output_dir}\n"
         return render_template_bundle()
 

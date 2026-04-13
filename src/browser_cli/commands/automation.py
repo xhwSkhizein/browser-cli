@@ -97,6 +97,12 @@ def run_automation_command(args: Namespace) -> str:
                     "versions": versions,
                     "selected_version": selected,
                     "latest_run": automation_data.get("latest_run"),
+                    "summary": _build_inspect_summary(
+                        args.automation_id,
+                        automation_data,
+                        versions,
+                        selected,
+                    ),
                 },
                 "meta": {"action": "automation-inspect"},
             }
@@ -212,6 +218,28 @@ def _read_json_file(path: Path) -> dict[str, object]:
     if not path.exists():
         return {}
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _build_inspect_summary(
+    automation_id: str,
+    automation_data: dict[str, object],
+    versions: list[dict[str, object]],
+    selected: dict[str, object] | None,
+) -> dict[str, object]:
+    latest_run = automation_data.get("latest_run")
+    latest_run_status = None
+    if isinstance(latest_run, dict):
+        latest_run_status = latest_run.get("status")
+    return {
+        "automation_id": automation_id,
+        "persisted_version": automation_data.get("version"),
+        "available_versions": [item["version"] for item in versions],
+        "selected_version": selected.get("version") if selected else None,
+        "selected_snapshot_dir": selected.get("snapshot_dir") if selected else None,
+        "selected_task_path": selected.get("task_path") if selected else None,
+        "schedule_mode": automation_data.get("schedule_kind"),
+        "latest_run_status": latest_run_status,
+    }
 
 
 def _manifest_to_automation_payload(manifest, *, enabled: bool) -> dict[str, object]:

@@ -77,7 +77,9 @@ def test_task_examples_lists_curated_examples() -> None:
 
 
 def test_task_template_prints_three_contract_files() -> None:
-    payload = run_task_command(Namespace(task_subcommand="template", output=None))
+    payload = run_task_command(
+        Namespace(task_subcommand="template", output=None, print_template=True)
+    )
     assert "task.py" in payload
     assert "task.meta.json" in payload
     assert "automation.toml" in payload
@@ -85,7 +87,18 @@ def test_task_template_prints_three_contract_files() -> None:
 
 def test_task_template_output_writes_files(tmp_path: Path) -> None:
     output_dir = tmp_path / "demo"
-    run_task_command(Namespace(task_subcommand="template", output=str(output_dir)))
+    run_task_command(
+        Namespace(task_subcommand="template", output=str(output_dir), print_template=False)
+    )
     assert (output_dir / "task.py").exists()
     assert (output_dir / "task.meta.json").exists()
     assert (output_dir / "automation.toml").exists()
+
+
+def test_task_template_can_write_and_print(tmp_path: Path) -> None:
+    output_dir = tmp_path / "demo"
+    payload = run_task_command(
+        Namespace(task_subcommand="template", output=str(output_dir), print_template=True)
+    )
+    assert "Template written to" in payload
+    assert "task.py" in payload

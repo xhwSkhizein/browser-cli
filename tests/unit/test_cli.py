@@ -66,6 +66,14 @@ def test_task_help_lists_examples_and_template(capsys) -> None:
     assert exit_code == 0
     assert "examples" in captured.out
     assert "template" in captured.out
+    assert "local editable source" in captured.out
+
+
+def test_task_template_help_mentions_print(capsys) -> None:
+    exit_code = main(["task", "template", "--help"])
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "--print" in captured.out
 
 
 def test_automation_help_lists_observability_commands(capsys) -> None:
@@ -75,6 +83,7 @@ def test_automation_help_lists_observability_commands(capsys) -> None:
     assert "list" in captured.out
     assert "versions" in captured.out
     assert "inspect" in captured.out
+    assert "published immutable snapshot" in captured.out
 
 
 def test_page_reload_help(capsys) -> None:

@@ -12,6 +12,7 @@ from typing import Any
 
 from browser_cli.automation.service.client import read_automation_service_run_info
 from browser_cli.constants import AppPaths, get_app_paths
+from browser_cli.daemon.client import run_info_is_compatible, send_command
 from browser_cli.daemon.transport import probe_socket, read_run_info
 from browser_cli.outputs.json import render_json_payload
 
@@ -36,6 +37,7 @@ def run_doctor_command(args: Namespace) -> str:
 
 def collect_doctor_report() -> dict[str, Any]:
     app_paths = get_app_paths()
+    daemon_payload = _daemon_runtime_payload()
     checks = [
         _package_check(),
         _chrome_check(),
@@ -44,6 +46,7 @@ def collect_doctor_report() -> dict[str, Any]:
         _managed_profile_check(),
         _daemon_check(app_paths),
         _automation_service_check(app_paths),
+        _extension_check(daemon_payload),
     ]
     overall_status = "pass"
     if any(item.status == "fail" for item in checks):
@@ -210,6 +213,39 @@ def _automation_service_check(app_paths: AppPaths) -> DoctorCheck:
     )
 
 
+def _extension_check(daemon_payload: dict[str, Any] | None) -> DoctorCheck:
+    if daemon_payload is None:
+        return DoctorCheck(
+            id="extension",
+            status="warn",
+            summary="Extension reachability is unavailable until the daemon is running.",
+            next="run browser-cli status after the daemon starts if you need extension mode",
+        )
+    extension = dict(daemon_payload.get("extension") or {})
+    if bool(extension.get("connected")) and bool(extension.get("capability_complete")):
+        return DoctorCheck(
+            id="extension",
+            status="pass",
+            summary="Browser CLI extension is connected and capability-complete.",
+        )
+    if bool(extension.get("connected")):
+        missing = ", ".join(str(item) for item in (extension.get("missing_capabilities") or []))
+        details = missing or "required capability set is incomplete"
+        return DoctorCheck(
+            id="extension",
+            status="warn",
+            summary="Browser CLI extension is connected but incomplete.",
+            details=details,
+            next="reload the extension or run browser-cli reload after reconnecting it",
+        )
+    return DoctorCheck(
+        id="extension",
+        status="warn",
+        summary="Browser CLI extension is not connected.",
+        next="start with managed profile mode, or connect the extension if you need real Chrome behavior",
+    )
+
+
 def _discover_chrome_executable() -> Path:
     if sys.platform == "darwin":
         candidates = [Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")]
@@ -233,3 +269,15 @@ def _discover_chrome_executable() -> Path:
         if candidate.exists():
             return candidate
     raise RuntimeError("Stable Google Chrome was not found on this machine.")
+
+
+def _daemon_runtime_payload() -> dict[str, Any] | None:
+    run_info = read_run_info()
+    if not probe_socket() or not run_info_is_compatible(run_info):
+        return None
+    try:
+        response = send_command("runtime-status", {"warmup": False}, start_if_needed=False)
+    except Exception:
+        return None
+    data = response.get("data")
+    return dict(data) if isinstance(data, dict) else None

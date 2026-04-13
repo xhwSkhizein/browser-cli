@@ -72,7 +72,7 @@ def build_parser() -> argparse.ArgumentParser:
     task_parser = subparsers.add_parser(
         "task",
         help="Run or validate a local task directory.",
-        description="Run task.py + task.meta.json from a local task directory.",
+        description="`task` is local editable source. Run task.py + task.meta.json from a local task directory.",
     )
     task_subparsers = task_parser.add_subparsers(dest="task_subcommand", metavar="TASK_COMMAND")
 
@@ -116,6 +116,12 @@ def build_parser() -> argparse.ArgumentParser:
         description="Expose canonical task.py, task.meta.json, and automation.toml templates.",
     )
     task_template_parser.add_argument(
+        "--print",
+        dest="print_template",
+        action="store_true",
+        help="Print the template files to stdout.",
+    )
+    task_template_parser.add_argument(
         "--output",
         help="Write the template files into the given directory.",
     )
@@ -124,7 +130,7 @@ def build_parser() -> argparse.ArgumentParser:
     automation_parser = subparsers.add_parser(
         "automation",
         help="Publish and operate versioned automations.",
-        description="Publish a task snapshot and manage automation service state.",
+        description="`automation` is a published immutable snapshot. Publish a task snapshot and manage automation service state.",
     )
     automation_subparsers = automation_parser.add_subparsers(
         dest="automation_subcommand", metavar="AUTOMATION_COMMAND"

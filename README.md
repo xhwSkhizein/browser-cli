@@ -133,8 +133,8 @@ X_AGENT_ID=agent-b browser-cli tabs
 
 Browser CLI separates local authoring from durable publication:
 
-- `task`: run and validate a source task directory
-- `automation`: publish immutable snapshots and operate them through the local automation service
+- `task` is local editable source
+- `automation` is a published immutable snapshot
 
 Typical task layout:
 

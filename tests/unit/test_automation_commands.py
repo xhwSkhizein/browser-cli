@@ -114,3 +114,6 @@ def test_automation_inspect_combines_service_and_snapshot_data(monkeypatch, tmp_
     assert payload["data"]["automation"]["id"] == "demo"
     assert payload["data"]["versions"][0]["version"] == 2
     assert payload["data"]["latest_run"]["status"] == "success"
+    assert payload["data"]["summary"]["automation_id"] == "demo"
+    assert payload["data"]["summary"]["selected_version"] == 2
+    assert payload["data"]["summary"]["latest_run_status"] == "success"
