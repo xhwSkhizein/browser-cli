@@ -80,6 +80,14 @@ Use this checklist before calling Browser CLI done on a real workstation.
 - Confirm the first command starts the daemon automatically and `stop` tears it down cleanly.
 - If the extension is loaded, confirm the daemon prefers `extension` over `playwright` after a safe idle point.
 
+## Long-Run Runtime Checks
+
+- Keep one daemon alive for at least three rounds of `open`, `snapshot`, `html`, `close`.
+- Run `browser-cli status` between rounds and confirm the `Stability` section reports bounded counts and `command depth: 0` once each round finishes.
+- Run `browser-cli reload` mid-way, then confirm the next `browser-cli status` still reports a usable runtime rather than a wedged degraded state.
+- If extension mode is available, disconnect and reconnect it during the loop and confirm `status`, popup, and command `meta` agree on the active driver and any `state_reset`.
+- Exercise one artifact flow after a disconnect/reconnect cycle and confirm the next artifact still succeeds without stale buffers poisoning the session.
+
 ## Troubleshooting Checks
 
 - With the daemon stopped, run `browser-cli status` and confirm it reports `Status: stopped`.
