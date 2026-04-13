@@ -102,9 +102,12 @@ def _available_actions(
     binding_state: str,
 ) -> list[str]:
     actions = ["refresh-status"]
-    if pending_rebind is not None or active_driver != "extension" or not extension_connected:
-        actions.append("reconnect-extension")
-    elif not capability_complete:
+    if (
+        pending_rebind is not None
+        or active_driver != "extension"
+        or not extension_connected
+        or not capability_complete
+    ):
         actions.append("reconnect-extension")
     if active_driver == "extension" and binding_state in {"stale", "absent"}:
         if "reconnect-extension" not in actions:
@@ -117,9 +120,13 @@ def _pending_rebind_summary(pending_rebind: dict[str, Any]) -> str:
     target = str(pending_rebind.get("target") or "unknown")
     reason = str(pending_rebind.get("reason") or "pending-rebind")
     if reason == "extension-disconnected-waiting-command" and target == "playwright":
-        return "Extension disconnected; Browser CLI will switch to Playwright at the next safe point."
+        return (
+            "Extension disconnected; Browser CLI will switch to Playwright at the next safe point."
+        )
     if reason == "extension-connected" and target == "extension":
-        return "Extension reconnected; Browser CLI will restore extension mode at the next safe point."
+        return (
+            "Extension reconnected; Browser CLI will restore extension mode at the next safe point."
+        )
     return f"Browser CLI is waiting to rebind the active driver to {target} at the next safe point."
 
 

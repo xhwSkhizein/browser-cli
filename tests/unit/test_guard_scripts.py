@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import scripts.guards.run_all as guard_runner
 from scripts.guards.architecture import run as run_architecture_guard
 from scripts.guards.common import repo_root
 from scripts.guards.docs_sync import run as run_docs_guard
@@ -24,3 +25,32 @@ def test_docs_sync_guard_passes_for_current_repo() -> None:
 
 def test_guard_runner_exits_cleanly_for_current_repo() -> None:
     assert run_all_guards() == 0
+
+
+def test_guard_runner_includes_python_compatibility_guard(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(guard_runner, "run_architecture_guard", lambda _root: [])
+    monkeypatch.setattr(guard_runner, "run_product_guard", lambda _root: [])
+    monkeypatch.setattr(guard_runner, "run_docs_guard", lambda _root: [])
+    monkeypatch.setattr(
+        guard_runner,
+        "run_python_compatibility_guard",
+        lambda _root: [
+            guard_runner.Finding(
+                "error",
+                "PY310999",
+                "synthetic python compatibility failure",
+            )
+        ],
+    )
+
+    exit_code = guard_runner.main()
+
+    assert exit_code == 1
+    assert "PY310999" in capsys.readouterr().out
+
+
+def test_lint_script_runs_python_compatibility_guard() -> None:
+    script = (repo_root() / "scripts" / "lint.sh").read_text(encoding="utf-8")
+    assert "python_compatibility.py" in script
+    assert "uv run ruff check src tests scripts" in script
+    assert "uv run ruff format --check src tests scripts" in script

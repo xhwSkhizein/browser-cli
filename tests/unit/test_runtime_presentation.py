@@ -12,7 +12,10 @@ def test_build_runtime_presentation_marks_safe_point_fallback_as_recovering() ->
     raw_status = {
         "browser_started": True,
         "active_driver": "extension",
-        "pending_rebind": {"target": "playwright", "reason": "extension-disconnected-waiting-command"},
+        "pending_rebind": {
+            "target": "playwright",
+            "reason": "extension-disconnected-waiting-command",
+        },
         "extension": {
             "connected": False,
             "capability_complete": False,

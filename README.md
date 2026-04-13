@@ -52,7 +52,7 @@
 ## Installation
 
 **Requirements:**
-- Python 3.11+
+- Python 3.10+
 - Stable Google Chrome installed
 - Playwright Python package
 
@@ -63,12 +63,18 @@
 git clone https://github.com/hongv/browser-cli.git
 cd browser-cli
 
-# Install in editable mode
+# Install CLI/runtime dependencies
 python3 -m pip install -e .
+
+# Install development dependencies if you plan to run tests or repo checks
+python3 -m pip install -e ".[dev]"
+
+# Install Playwright browser binaries used by local integration tests
 python3 -m playwright install chromium
 ```
 
 The CLI targets stable Google Chrome. Playwright Chromium is mainly useful for local integration testing.
+The project baseline is Python 3.10+, and CI validates unit coverage on Python 3.10, 3.11, and 3.12.
 
 ### Optional: Real-Chrome Extension Mode
 
@@ -291,10 +297,14 @@ pytest -q
 Run repository lint and architecture guards with:
 
 ```bash
-./scripts/lint.sh
+python scripts/guards/python_compatibility.py
 python scripts/guards/run_all.py
+./scripts/lint.sh
+./scripts/guard.sh
 ./scripts/check.sh
 ```
+
+`python scripts/guards/python_compatibility.py` is the fastest local check for Python 3.10 compatibility when you are developing on a newer interpreter.
 
 When the runtime behaves unexpectedly, use:
 

@@ -13,9 +13,7 @@ def test_workflow_modules_import_on_current_python() -> None:
     src_path = str(REPO_ROOT / "src")
     current_pythonpath = env.get("PYTHONPATH")
     env["PYTHONPATH"] = (
-        src_path
-        if not current_pythonpath
-        else os.pathsep.join([src_path, current_pythonpath])
+        src_path if not current_pythonpath else os.pathsep.join([src_path, current_pythonpath])
     )
 
     result = subprocess.run(

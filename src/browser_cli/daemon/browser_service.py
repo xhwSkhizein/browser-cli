@@ -7,6 +7,7 @@ import contextlib
 import logging
 from typing import Any
 
+from browser_cli.daemon.runtime_presentation import build_runtime_presentation
 from browser_cli.drivers.base import BrowserDriver
 from browser_cli.drivers.extension_driver import ExtensionDriver
 from browser_cli.drivers.playwright_driver import PlaywrightDriver
@@ -18,7 +19,6 @@ from browser_cli.errors import (
     RefNotFoundError,
 )
 from browser_cli.extension import ExtensionHub
-from browser_cli.daemon.runtime_presentation import build_runtime_presentation
 from browser_cli.profiles.discovery import ChromeEnvironment
 from browser_cli.refs import SemanticRefResolver, SemanticSnapshotGenerator, SnapshotRegistry
 from browser_cli.tabs import TabRegistry

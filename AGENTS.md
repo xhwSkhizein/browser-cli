@@ -216,6 +216,7 @@ Keep these boundaries intact. Do not push browser internals into CLI handlers, d
 - Unit tests live under `tests/unit/`; integration coverage lives under `tests/integration/`.
 - Contract-sensitive areas include CLI parser shape, action catalog parity, daemon lifecycle, semantic refs, driver parity, workflow validation, and `X_AGENT_ID` tab isolation.
 - The repository target is Python 3.10+. Keep runtime code and tests on Python 3.10-compatible syntax and stdlib APIs; local 3.12-only constructs can pass ad hoc checks and still fail CI collection, lint, or guards.
+- `scripts/guards/python_compatibility.py` owns the static Python 3.10 compatibility check; keep new syntax and stdlib-API regression rules there so local 3.12 development fails before CI does.
 - Tests and workflow fixtures must resolve repo assets relative to the checked-out repository, not a developer-specific absolute workspace path; CI runners will fail on hard-coded local paths first in workflow/task fixture coverage.
 - `scripts/lint.sh` owns repository lint execution.
 - `scripts/guard.sh` owns architecture, product-contract, and doc-sync guards.

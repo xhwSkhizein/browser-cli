@@ -12,11 +12,13 @@ from scripts.guards.architecture import run as run_architecture_guard
 from scripts.guards.common import Finding, format_findings, repo_root
 from scripts.guards.docs_sync import run as run_docs_guard
 from scripts.guards.product_contracts import run as run_product_guard
+from scripts.guards.python_compatibility import run as run_python_compatibility_guard
 
 
 def main() -> int:
     root = repo_root()
     findings: list[Finding] = []
+    findings.extend(run_python_compatibility_guard(root))
     findings.extend(run_architecture_guard(root))
     findings.extend(run_product_guard(root))
     findings.extend(run_docs_guard(root))
