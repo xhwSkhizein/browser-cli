@@ -9,9 +9,10 @@ import inspect
 import json
 import logging
 import uuid
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from http import HTTPStatus
-from typing import Any, Awaitable, Callable
+from typing import Any
 
 import websockets
 from websockets.datastructures import Headers

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from browser_cli.workflow.models import PersistedWorkflowDefinition
@@ -26,7 +26,7 @@ def test_compute_next_run_at_daily_is_future() -> None:
         "daily",
         {"hour": 9, "minute": 30},
         timezone_name="UTC",
-        now=datetime(2026, 4, 12, 9, 29, tzinfo=UTC),
+        now=datetime(2026, 4, 12, 9, 29, tzinfo=timezone.utc),
     )
     assert next_run == "2026-04-12T09:30:00+00:00"
 

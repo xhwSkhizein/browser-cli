@@ -11,12 +11,15 @@ REQUIRED_AGENT_PHRASES = [
     "Extension mode is the preferred real-Chrome backend when the Browser CLI extension is connected and healthy.",
     "Driver rebinding may happen automatically only at safe idle points, and it must be reported as `state_reset` rather than treated as perfectly continuous state.",
     "`browser_cli.runtime.read_runner` owns the one-shot read contract and routes it through the daemon-managed browser lifecycle.",
+    "`scripts/guards/python_compatibility.py`",
     "`scripts/lint.sh`",
     "`scripts/guard.sh`",
     "`scripts/check.sh`",
 ]
 
 REQUIRED_README_PHRASES = [
+    "Python 3.10+",
+    "python scripts/guards/python_compatibility.py",
     "python scripts/guards/run_all.py",
     "./scripts/lint.sh",
     "./scripts/check.sh",

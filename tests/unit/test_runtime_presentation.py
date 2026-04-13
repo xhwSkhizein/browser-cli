@@ -12,7 +12,10 @@ def test_build_runtime_presentation_marks_safe_point_fallback_as_recovering() ->
     raw_status = {
         "browser_started": True,
         "active_driver": "extension",
-        "pending_rebind": {"target": "playwright", "reason": "extension-disconnected-waiting-command"},
+        "pending_rebind": {
+            "target": "playwright",
+            "reason": "extension-disconnected-waiting-command",
+        },
         "extension": {
             "connected": False,
             "capability_complete": False,
@@ -188,6 +191,21 @@ class _FakeBrowserService:
                 "tab_count": 1,
                 "managed_tab_count": 1,
                 "binding_state": "tracked",
+            },
+            "tabs": {
+                "count": 1,
+                "busy_count": 0,
+                "active_by_agent": {"agent-a": "page-1"},
+                "records": [
+                    {
+                        "page_id": "page-1",
+                        "owner_agent_id": "agent-a",
+                        "url": "https://example.com",
+                        "title": "Example",
+                        "busy": False,
+                        "last_snapshot_id": None,
+                    }
+                ],
             },
             "last_transition": {},
         }

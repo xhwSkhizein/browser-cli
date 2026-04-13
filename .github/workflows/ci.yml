@@ -77,7 +77,9 @@ jobs:
           pip install -e ".[dev]"
 
       - name: Run Ruff linter
-        run: ruff check src tests scripts
+        run: |
+          python scripts/guards/python_compatibility.py
+          ruff check src tests scripts
 
       - name: Run Ruff formatter check
         run: ruff format --check src tests scripts
