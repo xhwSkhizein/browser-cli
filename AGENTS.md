@@ -21,6 +21,7 @@ The job of this file is not to restate every file in the repo. It should help an
 - Extension mode is the preferred real-Chrome backend when the Browser CLI extension is connected and healthy.
 - `browser-cli status` is the first-line lifecycle diagnosis command.
 - `browser-cli reload` is the runtime reset command; page reload remains public as `browser-cli page-reload`.
+- `runtime-status` includes a daemon-owned `presentation` snapshot; `browser-cli status` and the extension popup must render that shared state rather than inventing their own classifier.
 - `v1` targets stable Google Chrome first and should not silently swap browser families.
 - `v2` uses one daemon-managed browser instance.
 - `v2` command output is JSON-first.
@@ -35,6 +36,7 @@ The job of this file is not to restate every file in the repo. It should help an
 - `task.meta.json` stores structured knowledge, not transcripts.
 - `workflow.toml` publishes a task; it must not duplicate task logic.
 - Do not introduce a public `browser-cli explore` surface or a second browser runtime. Exploration remains an agent activity layered on top of Browser CLI.
+- The extension popup is a human-facing runtime observer and light recovery surface. Agent feedback still flows through command responses and `runtime-status`.
 
 ## Rapid Code Map
 
@@ -52,6 +54,8 @@ Use this section first. Start from the user question, then jump to the owning im
   `src/browser_cli/runtime/read_runner.py`
 - Runtime diagnosis and user-facing lifecycle guidance:
   `src/browser_cli/commands/status.py`
+- Shared daemon runtime presentation classifier:
+  `src/browser_cli/daemon/runtime_presentation.py`
 - Runtime reset flow:
   `src/browser_cli/commands/reload.py`
 - Workflow CLI entrypoints:
@@ -111,6 +115,8 @@ Use this section first. Start from the user question, then jump to the owning im
   `src/browser_cli/extension/protocol.py`
 - Browser extension entrypoints:
   `browser-cli-extension/src/background.js`, `browser-cli-extension/src/protocol.js`, `browser-cli-extension/src/page_runtime.js`
+- Extension popup runtime observer UI and pure view model:
+  `browser-cli-extension/popup.html`, `browser-cli-extension/src/popup.js`, `browser-cli-extension/src/popup_view.js`
 - Extension background feature implementations:
   `browser-cli-extension/src/background/*.js`
 
@@ -160,6 +166,8 @@ Use this section first. Start from the user question, then jump to the owning im
   start at `src/browser_cli/workflow/service/*`, `src/browser_cli/workflow/persistence/*`, `src/browser_cli/workflow/scheduler/*`, and `src/browser_cli/workflow/api/*`.
 - If the user mentions extension capability gaps, artifacts, or real Chrome behavior:
   inspect both `src/browser_cli/extension/*` and `browser-cli-extension/src/*`; many bugs live in protocol drift between Python and extension JS.
+- If the user reports popup/runtime observer drift:
+  start at `src/browser_cli/daemon/runtime_presentation.py`, then `src/browser_cli/extension/session.py`, then `browser-cli-extension/src/background.js`, `browser-cli-extension/src/popup_view.js`, and `browser-cli-extension/src/popup.js`.
 - If a change touches architecture or public product contracts:
   inspect `scripts/guards/architecture.py`, `scripts/guards/product_contracts.py`, and `scripts/guards/docs_sync.py` before making the change final.
 
@@ -173,6 +181,7 @@ Use this section first. Start from the user question, then jump to the owning im
 - `browser_cli.daemon` owns the long-lived daemon, socket transport, request/response protocol, browser lifecycle, runtime status, and command dispatch.
 - `browser_cli.drivers` owns the explicit backend contract plus `playwright_driver` and `extension_driver`. Drivers consume daemon-built locator specs, not raw refs.
 - `browser_cli.extension` owns the extension transport, handshake, heartbeat, required-capability checks, and artifact assembly from WebSocket chunks.
+- `browser_cli.daemon.runtime_presentation` owns the shared runtime classification used by `browser-cli status` and the extension popup.
 - `browser_cli.outputs` owns final rendering for content-first and JSON-first surfaces.
 - `browser_cli.profiles` owns Chrome executable discovery, managed profile directories, profile naming, and lock detection.
 - `browser_cli.refs` owns semantic ref models, snapshot generation, latest-snapshot registry state, and locator reconstruction.
@@ -190,10 +199,13 @@ Keep these boundaries intact. Do not push browser internals into CLI handlers, d
 - Public daemon-backed actions should be added through `ActionSpec`, not by manually bolting ad hoc parsers into `main.py`.
 - The lifecycle command `browser-cli reload` and the page action `browser-cli page-reload` are intentionally different surfaces. Do not collapse them.
 - Public daemon commands return JSON payloads. Preserve `ok/data/meta` shape and machine-readable error codes.
+- `runtime-status` is the agent/runtime truth surface; popup code may read and render it, but must not redefine runtime state semantics.
 - Tab targeting is agent-scoped. Do not add public `--page`, `--page-id`, session IDs, or similar cross-agent escape hatches.
 - Drivers must accept daemon-built `LocatorSpec`, not raw `ref` strings.
 - Drivers must expose snapshot input, not final snapshot rendering. Final semantic snapshot generation stays daemon-owned.
 - Extension and Playwright backends must stay behaviorally aligned on the same public contract even if their internal mechanics differ.
+- Popup daemon status reads and workspace rebuild requests flow through the extension listener HTTP surface in `src/browser_cli/extension/session.py`; keep popup UI logic out of that state interpretation path.
+- The extension listener is implemented on the WebSocket listener stack, which only accepts body-less `GET` HTTP requests before upgrade. If popup control endpoints need to mutate runtime state, keep them narrow and route them through dedicated `GET` paths instead of adding a parallel HTTP server.
 - Prefer `browser-cli status` before manual daemon cleanup. Prefer `browser-cli reload` over ad hoc process killing when runtime state is bad.
 - `task.py` contains reusable automation logic. `workflow.toml` packages and configures that logic; it should not become a second implementation surface.
 - Runtime workflow state belongs to the workflow service persistence layer, not `workflow.toml`. `workflow.toml` remains import/export and reviewable packaging.

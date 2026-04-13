@@ -6,7 +6,7 @@ Use this checklist before calling Browser CLI done on a real workstation.
 
 - Stable Google Chrome is installed.
 - Browser CLI managed profile root exists at `~/.browser-cli/default-profile`.
-- If testing extension mode, the unpacked extension from [`browser-cli-extension/`](/Users/hongv/workspace/m-projects/browser-cli/browser-cli-extension) is loaded in Chrome developer mode.
+- If testing extension mode, the unpacked extension from `browser-cli-extension/` is loaded in Chrome developer mode.
 
 ## Basic Checks
 
@@ -45,15 +45,24 @@ Use this checklist before calling Browser CLI done on a real workstation.
 
 ## Extension Mode Checks
 
-- Load the unpacked extension from [`browser-cli-extension/`](/Users/hongv/workspace/m-projects/browser-cli/browser-cli-extension).
-- Open the extension popup and confirm it reports `connected` once the daemon is up.
+- Load the unpacked extension from `browser-cli-extension/`.
+- Open the extension popup and confirm it reports a healthy runtime summary once the daemon is up.
 - Run `browser-cli status` and confirm the backend section shows whether any required extension capabilities are missing.
-- Confirm the popup also shows `Missing Caps: none` on the healthy extension build.
+- Confirm the popup summary, execution path, workspace ownership, and recovery sections reflect the same daemon state class as `browser-cli status`.
 - Run `browser-cli open https://example.com`.
 - Confirm Browser CLI creates or reuses a dedicated workspace window rather than attaching to arbitrary user tabs.
 - Confirm the response metadata reports `meta.driver = extension`.
 - Disable the extension or disconnect it, then issue another command.
 - Confirm Browser CLI falls back at a safe idle point and the response metadata reports `meta.state_reset = true`.
+
+## Popup Runtime Checks
+
+- Open the Browser CLI extension popup while extension mode is healthy.
+- Confirm the popup shows `Runtime Summary`, `Workspace Ownership`, `Recovery`, and `Daemon Config`.
+- Disconnect the extension and confirm the popup reports a recovering or degraded runtime state rather than only `disconnected`.
+- Confirm `Refresh Status` updates the runtime summary without mutating Browser CLI state.
+- Confirm `Reconnect Extension` retries the extension transport and refreshes the runtime snapshot.
+- Confirm `Rebuild Workspace` only rebuilds Browser CLI-owned workspace state and does not touch arbitrary user tabs.
 
 ## Daemon Checks
 
