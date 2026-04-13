@@ -2,19 +2,43 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from browser_cli.daemon.client import send_command
+from browser_cli.profiles.discovery import ChromeEnvironment
 from browser_cli.task_runtime.models import SnapshotResult
+from browser_cli.task_runtime.read import ReadRequest, ReadResult, run_read_request
 
 
 class BrowserCliTaskClient:
+    def __init__(self, *, chrome_environment: ChromeEnvironment | None = None) -> None:
+        self._chrome_environment = chrome_environment
+
     def invoke(self, action: str, **args: Any) -> dict[str, Any]:
         response = send_command(action, args)
         return dict(response.get("data") or {})
 
     def command(self, action: str, **args: Any) -> dict[str, Any]:
         return self.invoke(action, **args)
+
+    def read(
+        self,
+        url: str,
+        *,
+        output_mode: str = "html",
+        scroll_bottom: bool = False,
+    ) -> ReadResult:
+        return asyncio.run(
+            run_read_request(
+                ReadRequest(
+                    url=url,
+                    output_mode=output_mode,
+                    scroll_bottom=scroll_bottom,
+                ),
+                chrome_environment=self._chrome_environment,
+            )
+        )
 
     def open(self, url: str) -> dict[str, Any]:
         return self.invoke("open", url=url).get("page", {})

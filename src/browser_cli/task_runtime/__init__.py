@@ -14,11 +14,13 @@ from browser_cli.task_runtime.models import (
     SnapshotResult,
     validate_task_metadata,
 )
+from browser_cli.task_runtime.read import ReadResult
 
 __all__ = [
     "BrowserCliTaskClient",
     "Flow",
     "FlowContext",
+    "ReadResult",
     "SnapshotRef",
     "SnapshotResult",
     "load_task_entrypoint",

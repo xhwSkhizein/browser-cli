@@ -8,6 +8,7 @@ from typing import Any
 
 from browser_cli.task_runtime.client import BrowserCliTaskClient
 from browser_cli.task_runtime.models import FlowContext, SnapshotResult
+from browser_cli.task_runtime.read import ReadResult
 
 
 class Flow:
@@ -28,6 +29,15 @@ class Flow:
 
     def open(self, url: str) -> dict[str, Any]:
         return self.client.open(url)
+
+    def read(
+        self,
+        url: str,
+        *,
+        output_mode: str = "html",
+        scroll_bottom: bool = False,
+    ) -> ReadResult:
+        return self.client.read(url, output_mode=output_mode, scroll_bottom=scroll_bottom)
 
     def command(self, action: str, **args: Any) -> dict[str, Any]:
         return self.client.command(action, **args)
