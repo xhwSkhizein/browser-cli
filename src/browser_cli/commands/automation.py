@@ -7,6 +7,7 @@ from argparse import Namespace
 from pathlib import Path
 
 from browser_cli.automation import load_automation_manifest, publish_task_dir
+from browser_cli.automation.models import AutomationManifest
 from browser_cli.automation.service.client import (
     automation_service_ui_url,
     ensure_automation_service_running,
@@ -88,20 +89,24 @@ def run_automation_command(args: Namespace) -> str:
             versions,
             version=getattr(args, "version", None),
         )
-        automation_data = payload.get("data") or {}
+        live_automation_data = dict(payload.get("data") or {})
+        selected_automation_data, selected_latest_run = _selected_snapshot_payload(
+            selected, fallback_automation=live_automation_data
+        )
         return render_json_payload(
             {
                 "ok": True,
                 "data": {
-                    "automation": automation_data,
+                    "automation": selected_automation_data,
                     "versions": versions,
                     "selected_version": selected,
-                    "latest_run": automation_data.get("latest_run"),
+                    "latest_run": selected_latest_run,
                     "summary": _build_inspect_summary(
                         args.automation_id,
-                        automation_data,
+                        selected_automation_data,
                         versions,
                         selected,
+                        selected_latest_run,
                     ),
                 },
                 "meta": {"action": "automation-inspect"},
@@ -181,11 +186,20 @@ def _load_snapshot_versions(automation_id: str) -> list[dict[str, object]]:
             continue
         publish_path = entry / "publish.json"
         publish_data = _read_json_file(publish_path)
+        snapshot_manifest = _load_snapshot_manifest(entry / "automation.toml")
         versions.append(
             {
                 "version": int(entry.name),
                 "snapshot_dir": str(entry),
                 "publish": publish_data,
+                "snapshot_automation": (
+                    _snapshot_manifest_to_automation_payload(snapshot_manifest)
+                    if snapshot_manifest is not None
+                    else None
+                ),
+                "snapshot_latest_run": publish_data.get("latest_run")
+                if isinstance(publish_data.get("latest_run"), dict)
+                else None,
                 "task_path": str(entry / "task.py"),
                 "task_meta_path": str(entry / "task.meta.json"),
             }
@@ -225,8 +239,8 @@ def _build_inspect_summary(
     automation_data: dict[str, object],
     versions: list[dict[str, object]],
     selected: dict[str, object] | None,
+    latest_run: dict[str, object] | None,
 ) -> dict[str, object]:
-    latest_run = automation_data.get("latest_run")
     latest_run_status = None
     if isinstance(latest_run, dict):
         latest_run_status = latest_run.get("status")
@@ -239,6 +253,65 @@ def _build_inspect_summary(
         "selected_task_path": selected.get("task_path") if selected else None,
         "schedule_mode": automation_data.get("schedule_kind"),
         "latest_run_status": latest_run_status,
+    }
+
+
+def _selected_snapshot_payload(
+    selected: dict[str, object] | None,
+    *,
+    fallback_automation: dict[str, object],
+) -> tuple[dict[str, object], dict[str, object] | None]:
+    if selected is None:
+        latest_run = fallback_automation.get("latest_run")
+        return fallback_automation, latest_run if isinstance(latest_run, dict) else None
+    snapshot_automation = selected.get("snapshot_automation")
+    snapshot_latest_run = selected.get("snapshot_latest_run")
+    if isinstance(snapshot_automation, dict):
+        latest_run = snapshot_latest_run if isinstance(snapshot_latest_run, dict) else None
+        return snapshot_automation, latest_run
+    latest_run = fallback_automation.get("latest_run")
+    return fallback_automation, latest_run if isinstance(latest_run, dict) else None
+
+
+def _load_snapshot_manifest(path: Path) -> AutomationManifest | None:
+    if not path.exists():
+        return None
+    return load_automation_manifest(path)
+
+
+def _snapshot_manifest_to_automation_payload(manifest: AutomationManifest) -> dict[str, object]:
+    schedule = dict(manifest.schedule)
+    return {
+        "id": manifest.automation.id,
+        "name": manifest.automation.name,
+        "description": manifest.automation.description,
+        "version": manifest.automation.version,
+        "task_path": str(manifest.task.path),
+        "task_meta_path": str(manifest.task.meta_path),
+        "entrypoint": manifest.task.entrypoint,
+        "enabled": None,
+        "definition_status": "snapshot",
+        "definition_error": None,
+        "schedule_kind": str(schedule.get("mode") or "manual"),
+        "schedule_payload": schedule,
+        "timezone": str(schedule.get("timezone") or "UTC"),
+        "output_dir": str(manifest.outputs.artifact_dir),
+        "result_json_path": str(manifest.outputs.result_json_path)
+        if manifest.outputs.result_json_path
+        else None,
+        "stdout_mode": manifest.outputs.stdout,
+        "input_overrides": dict(manifest.inputs),
+        "before_run_hooks": list(manifest.hooks.before_run),
+        "after_success_hooks": list(manifest.hooks.after_success),
+        "after_failure_hooks": list(manifest.hooks.after_failure),
+        "retry_attempts": int(manifest.runtime.retry_attempts or 0),
+        "retry_backoff_seconds": 0,
+        "timeout_seconds": manifest.runtime.timeout_seconds,
+        "created_at": None,
+        "updated_at": None,
+        "last_run_at": None,
+        "next_run_at": None,
+        "latest_run": None,
     }
 
 

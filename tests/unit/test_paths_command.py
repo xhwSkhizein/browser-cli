@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from argparse import Namespace
+from pathlib import Path
 
 from browser_cli.commands.paths import run_paths_command
 
@@ -18,8 +19,8 @@ def test_paths_text_output_lists_runtime_locations(monkeypatch, tmp_path) -> Non
 def test_paths_json_payload_uses_stable_keys(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("BROWSER_CLI_HOME", str(tmp_path / "home"))
     payload = json.loads(run_paths_command(Namespace(json=True)))
-    assert payload["data"]["home"].endswith("/home")
-    assert payload["data"]["tasks_dir"].endswith("/home/tasks")
-    assert payload["data"]["automation_service_log_path"].endswith(
-        "/home/run/automation-service.log"
-    )
+    assert Path(payload["data"]["home"]).name == "home"
+    assert Path(payload["data"]["tasks_dir"]).name == "tasks"
+    assert Path(payload["data"]["tasks_dir"]).parent.name == "home"
+    assert Path(payload["data"]["automation_service_log_path"]).name == "automation-service.log"
+    assert Path(payload["data"]["automation_service_log_path"]).parent.name == "run"

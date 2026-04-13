@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import shutil
 import sys
 from argparse import Namespace
@@ -10,7 +11,10 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from browser_cli.automation.service.client import read_automation_service_run_info
+from browser_cli.automation.service.client import (
+    _probe_automation_service,
+    read_automation_service_run_info,
+)
 from browser_cli.constants import AppPaths, get_app_paths
 from browser_cli.daemon.client import run_info_is_compatible, send_command
 from browser_cli.daemon.transport import probe_socket, read_run_info
@@ -121,14 +125,20 @@ def _playwright_check() -> DoctorCheck:
 
 
 def _home_check(app_paths: AppPaths) -> DoctorCheck:
-    try:
-        app_paths.home.mkdir(parents=True, exist_ok=True)
-    except OSError as exc:
+    if not app_paths.home.exists():
+        return DoctorCheck(
+            id="home",
+            status="fail",
+            summary="Browser CLI home does not exist yet.",
+            details=str(app_paths.home),
+            next="create the Browser CLI home directory or run a Browser CLI command that initializes it, then re-run browser-cli doctor",
+        )
+    if not _is_writable_directory(app_paths.home):
         return DoctorCheck(
             id="home",
             status="fail",
             summary="Browser CLI home is not writable.",
-            details=str(exc),
+            details=str(app_paths.home),
             next="set BROWSER_CLI_HOME to a writable directory and re-run browser-cli doctor",
         )
     return DoctorCheck(
@@ -141,14 +151,20 @@ def _home_check(app_paths: AppPaths) -> DoctorCheck:
 
 def _managed_profile_check() -> DoctorCheck:
     profile_root = get_app_paths().home / "default-profile"
-    try:
-        profile_root.mkdir(parents=True, exist_ok=True)
-    except OSError as exc:
+    if not profile_root.exists():
+        return DoctorCheck(
+            id="managed_profile",
+            status="fail",
+            summary="Managed profile directory does not exist yet.",
+            details=str(profile_root),
+            next="run browser-cli read https://example.com once to initialize the managed profile, then re-run browser-cli doctor",
+        )
+    if not _is_writable_directory(profile_root):
         return DoctorCheck(
             id="managed_profile",
             status="fail",
             summary="Managed profile directory is not writable.",
-            details=str(exc),
+            details=str(profile_root),
             next="fix permissions for the Browser CLI home directory and re-run browser-cli doctor",
         )
 
@@ -172,44 +188,34 @@ def _managed_profile_check() -> DoctorCheck:
 
 
 def _daemon_check(app_paths: AppPaths) -> DoctorCheck:
-    if probe_socket():
-        return DoctorCheck(
-            id="daemon",
-            status="pass",
-            summary="Browser daemon is reachable.",
-            details=str(app_paths.socket_path),
-        )
     run_info = read_run_info()
-    if run_info:
-        return DoctorCheck(
-            id="daemon",
-            status="warn",
-            summary="Daemon runtime metadata exists but the daemon is not reachable.",
-            details=str(app_paths.run_info_path),
-            next="run browser-cli reload",
-        )
-    return DoctorCheck(
+    return _runtime_reachability_check(
         id="daemon",
-        status="warn",
-        summary="Daemon is not running yet.",
-        next="run browser-cli read https://example.com or browser-cli status when you are ready",
+        metadata_exists=run_info is not None,
+        reachable=probe_socket(),
+        metadata_path=app_paths.run_info_path,
+        reachable_summary="Browser daemon is reachable.",
+        unreachable_summary="Daemon runtime metadata exists but the daemon is not reachable.",
+        missing_summary="Daemon is not running yet.",
+        reachable_details=app_paths.socket_path,
+        unreachable_next="run browser-cli reload",
+        missing_next="run browser-cli read https://example.com or browser-cli status when you are ready",
     )
 
 
 def _automation_service_check(app_paths: AppPaths) -> DoctorCheck:
     run_info = read_automation_service_run_info()
-    if run_info:
-        return DoctorCheck(
-            id="automation_service",
-            status="pass",
-            summary="Automation service metadata exists.",
-            details=str(app_paths.automation_service_run_info_path),
-        )
-    return DoctorCheck(
+    return _runtime_reachability_check(
         id="automation_service",
-        status="warn",
-        summary="Automation service is not running yet.",
-        next="run browser-cli automation status or browser-cli automation ui when you need published automation management",
+        metadata_exists=run_info is not None,
+        reachable=_probe_automation_service(run_info),
+        metadata_path=app_paths.automation_service_run_info_path,
+        reachable_summary="Automation service is reachable.",
+        unreachable_summary="Automation service metadata exists but service is not reachable.",
+        missing_summary="Automation service is not running yet.",
+        reachable_details=app_paths.automation_service_run_info_path,
+        unreachable_next="run browser-cli automation status or browser-cli automation ui after restarting the service",
+        missing_next="run browser-cli automation status or browser-cli automation ui when you need published automation management",
     )
 
 
@@ -281,3 +287,43 @@ def _daemon_runtime_payload() -> dict[str, Any] | None:
         return None
     data = response.get("data")
     return dict(data) if isinstance(data, dict) else None
+
+
+def _is_writable_directory(path: Path) -> bool:
+    return path.is_dir() and os.access(path, os.W_OK)
+
+
+def _runtime_reachability_check(
+    *,
+    id: str,
+    metadata_exists: bool,
+    reachable: bool,
+    metadata_path: Path,
+    reachable_summary: str,
+    unreachable_summary: str,
+    missing_summary: str,
+    reachable_details: Path,
+    unreachable_next: str,
+    missing_next: str,
+) -> DoctorCheck:
+    if reachable:
+        return DoctorCheck(
+            id=id,
+            status="pass",
+            summary=reachable_summary,
+            details=str(reachable_details),
+        )
+    if metadata_exists:
+        return DoctorCheck(
+            id=id,
+            status="warn",
+            summary=unreachable_summary,
+            details=str(metadata_path),
+            next=unreachable_next,
+        )
+    return DoctorCheck(
+        id=id,
+        status="warn",
+        summary=missing_summary,
+        next=missing_next,
+    )

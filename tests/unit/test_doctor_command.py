@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from argparse import Namespace
+from pathlib import Path
 
 from browser_cli.commands.doctor import collect_doctor_report, run_doctor_command
 
@@ -75,3 +76,36 @@ def test_doctor_reports_extension_state_from_runtime_status(monkeypatch, tmp_pat
     extension_check = next(item for item in report["checks"] if item["id"] == "extension")
     assert extension_check["status"] == "warn"
     assert "video-stop" in extension_check["details"]
+
+
+def test_doctor_home_and_profile_checks_are_read_only(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    monkeypatch.setenv("BROWSER_CLI_HOME", str(home))
+    monkeypatch.setattr("browser_cli.commands.doctor._daemon_runtime_payload", lambda: None)
+    monkeypatch.setattr(
+        "browser_cli.commands.doctor._discover_chrome_executable", lambda: Path("/tmp/chrome")
+    )
+    report = collect_doctor_report()
+    home_check = next(item for item in report["checks"] if item["id"] == "home")
+    profile_check = next(item for item in report["checks"] if item["id"] == "managed_profile")
+    assert home_check["status"] == "fail"
+    assert profile_check["status"] == "fail"
+    assert not home.exists()
+
+
+def test_doctor_automation_service_requires_reachability(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    run_dir = home / "run"
+    run_dir.mkdir(parents=True)
+    monkeypatch.setenv("BROWSER_CLI_HOME", str(home))
+    monkeypatch.setattr(
+        "browser_cli.commands.doctor.read_automation_service_run_info",
+        lambda: {"host": "127.0.0.1", "port": 19824},
+    )
+    monkeypatch.setattr(
+        "browser_cli.commands.doctor._probe_automation_service", lambda run_info: False
+    )
+    check = collect_doctor_report()
+    automation_check = next(item for item in check["checks"] if item["id"] == "automation_service")
+    assert automation_check["status"] == "warn"
+    assert "not reachable" in automation_check["summary"]

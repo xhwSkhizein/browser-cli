@@ -79,9 +79,12 @@ Publish your local task when you want a durable automation snapshot:
 
 ```bash
 browser-cli automation publish my_task
+browser-cli automation list
+browser-cli automation inspect <automation-id>
 browser-cli automation status
 browser-cli automation ui
 ```
 
+Replace `<automation-id>` with the ID shown by `browser-cli automation list`.
 After publish, use the automation CLI to inspect the published snapshot rather
 than editing snapshot files directly.

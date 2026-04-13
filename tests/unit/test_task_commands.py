@@ -7,6 +7,7 @@ from pathlib import Path
 from browser_cli.cli.main import build_parser
 from browser_cli.commands.task import run_task_command
 from browser_cli.constants import get_app_paths
+from browser_cli.errors import InvalidInputError
 
 
 def test_build_parser_exposes_task_and_automation_commands(monkeypatch, tmp_path: Path) -> None:
@@ -102,3 +103,17 @@ def test_task_template_can_write_and_print(tmp_path: Path) -> None:
     )
     assert "Template written to" in payload
     assert "task.py" in payload
+
+
+def test_task_template_refuses_to_overwrite_existing_files(tmp_path: Path) -> None:
+    output_dir = tmp_path / "demo"
+    output_dir.mkdir()
+    (output_dir / "task.py").write_text("existing", encoding="utf-8")
+    try:
+        run_task_command(
+            Namespace(task_subcommand="template", output=str(output_dir), print_template=False)
+        )
+    except InvalidInputError as exc:
+        assert "overwrite existing files" in str(exc)
+    else:  # pragma: no cover - defensive
+        raise AssertionError("Expected InvalidInputError")

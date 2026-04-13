@@ -24,6 +24,12 @@ def run_task_command(args: Namespace) -> str:
         print_template = bool(getattr(args, "print_template", False))
         if output:
             output_dir = Path(output).expanduser().resolve()
+            existing_files = [name for name in TASK_TEMPLATE_FILES if (output_dir / name).exists()]
+            if existing_files:
+                joined = ", ".join(existing_files)
+                raise InvalidInputError(
+                    f"Template output would overwrite existing files in {output_dir}: {joined}"
+                )
             output_dir.mkdir(parents=True, exist_ok=True)
             for name, body in TASK_TEMPLATE_FILES.items():
                 (output_dir / name).write_text(body, encoding="utf-8")
