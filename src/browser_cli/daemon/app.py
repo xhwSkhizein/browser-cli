@@ -19,6 +19,7 @@ from browser_cli.errors import (
 from browser_cli.profiles.discovery import ChromeEnvironment
 
 from .models import DaemonRequest, DaemonResponse
+from .runtime_presentation import build_runtime_presentation
 from .state import DaemonState
 
 logger = logging.getLogger(__name__)
@@ -174,7 +175,7 @@ class BrowserDaemonApp:
         warmup = bool(request.args.get("warmup"))
         browser = await self._state.browser_service.runtime_status(warmup=warmup)
         records, active_by_agent = await self._state.tabs.snapshot_state()
-        return {
+        raw_status = {
             **browser,
             "tabs": {
                 "count": len(records),
@@ -192,6 +193,10 @@ class BrowserDaemonApp:
                     for record in records
                 ],
             },
+        }
+        return {
+            **raw_status,
+            "presentation": build_runtime_presentation(raw_status),
         }
 
     async def _handle_open(self, request: DaemonRequest) -> dict[str, Any]:
