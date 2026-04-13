@@ -26,9 +26,10 @@ SHARED_IMPORTS = {
 ALLOWED_DEPENDENCIES: dict[str, set[str]] = {
     "actions": set(),
     "agent_scope": {"constants"},
+    "automation": {"automation", "errors", "task_runtime"},
     "browser": {"browser", "constants", "errors", "network", "profiles", "refs"},
     "cli": {"actions", "commands", "errors", "exit_codes"},
-    "commands": {"daemon", "errors", "outputs", "runtime", "workflow"},
+    "commands": {"automation", "daemon", "errors", "outputs", "runtime", "task_runtime"},
     "daemon": {
         "agent_scope",
         "browser",
@@ -49,7 +50,6 @@ ALLOWED_DEPENDENCIES: dict[str, set[str]] = {
     "runtime": {"daemon", "errors", "profiles"},
     "tabs": {"constants", "errors"},
     "task_runtime": {"daemon", "errors", "task_runtime"},
-    "workflow": {"errors", "task_runtime", "workflow"},
 }
 
 

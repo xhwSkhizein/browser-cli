@@ -13,6 +13,8 @@ def test_top_level_help(capsys) -> None:
     assert exit_code == 0
     assert "browser-cli" in captured.out
     assert "read" in captured.out
+    assert "task" in captured.out
+    assert "automation" in captured.out
     assert "status" in captured.out
     assert "open" in captured.out
     assert "click" in captured.out

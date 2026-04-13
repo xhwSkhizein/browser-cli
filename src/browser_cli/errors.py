@@ -111,15 +111,31 @@ class OperationFailedError(BrowserCliError):
         super().__init__(message, exit_codes.TEMPORARY_FAILURE, error_code)
 
 
-class WorkflowServiceNotAvailableError(BrowserCliError):
-    def __init__(self, message: str = "Workflow service is not available.") -> None:
+class AutomationServiceNotAvailableError(BrowserCliError):
+    def __init__(self, message: str = "Automation service is not available.") -> None:
         super().__init__(
             message,
             exit_codes.TEMPORARY_FAILURE,
-            error_codes.WORKFLOW_SERVICE_NOT_AVAILABLE,
+            error_codes.AUTOMATION_SERVICE_NOT_AVAILABLE,
         )
 
 
-class WorkflowInvalidError(BrowserCliError):
+class AutomationServiceError(BrowserCliError):
+    def __init__(self, payload: dict[str, object]) -> None:
+        error_code = str(payload.get("error_code") or error_codes.INTERNAL_ERROR)
+        exit_code = (
+            exit_codes.USAGE_ERROR
+            if error_code in {error_codes.INVALID_INPUT, error_codes.AUTOMATION_INVALID}
+            else exit_codes.TEMPORARY_FAILURE
+        )
+        super().__init__(
+            str(payload.get("error_message") or "Automation service request failed."),
+            exit_code,
+            error_code,
+        )
+        self.payload = payload
+
+
+class AutomationInvalidError(BrowserCliError):
     def __init__(self, message: str) -> None:
-        super().__init__(message, exit_codes.USAGE_ERROR, error_codes.WORKFLOW_INVALID)
+        super().__init__(message, exit_codes.USAGE_ERROR, error_codes.AUTOMATION_INVALID)

@@ -1,0 +1,33 @@
+[automation]
+id = "lazy_scroll_capture"
+name = "Lazy Scroll Capture"
+description = "Scroll a lazy-loaded page until content stabilizes and export HTML plus scroll history."
+version = "0.1.0"
+
+[task]
+path = "task.py"
+meta_path = "task.meta.json"
+entrypoint = "run"
+
+[inputs]
+max_rounds = 8
+wait_seconds = 0.3
+
+[schedule]
+mode = "interval"
+timezone = "Asia/Shanghai"
+interval_seconds = 900
+
+[outputs]
+artifact_dir = "artifacts"
+result_json_path = "artifacts/result.json"
+stdout = "json"
+
+[hooks]
+before_run = []
+after_success = []
+after_failure = []
+
+[runtime]
+retry_attempts = 0
+log_level = "info"

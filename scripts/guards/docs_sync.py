@@ -20,6 +20,8 @@ REQUIRED_AGENT_PHRASES = [
 
 REQUIRED_README_PHRASES = [
     "Python 3.10+",
+    "browser-cli task validate",
+    "browser-cli automation publish",
     "python scripts/guards/python_compatibility.py",
     "python scripts/guards/run_all.py",
     "./scripts/lint.sh",
