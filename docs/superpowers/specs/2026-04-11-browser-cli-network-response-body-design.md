@@ -1,15 +1,21 @@
 # Browser CLI Network Response Body Design
 
 Date: 2026-04-11
-Status: Drafted for review
+Status: Implemented on main
 Owner: Codex
-Repo: `/Users/hongv/workspace/m-projects/browser-cli`
+Repo: `/home/hongv/workspace/browser-cli`
 
 ## Summary
 
 This spec upgrades Browser CLI's `network-*` actions from a request-metadata
 observer into a response-capable network inspection surface that agents can use
 directly.
+
+Update on 2026-04-14:
+
+- the response-capable `network-*` contract is now implemented on `main`
+- the Douyin workaround described below should be read as historical motivation
+  for the design, not as the current product limitation
 
 The key product decision is:
 
@@ -25,21 +31,21 @@ The goal is to make tasks like "wait for a signed JSON response and parse it"
 work directly through Browser CLI without extra `performance` probing, cookie
 replay, or ad hoc Python HTTP logic inside `task.py`.
 
-## Problem Statement
+## Historical Problem Statement
 
-Browser CLI currently exposes:
+At the time this spec was written, Browser CLI exposed:
 
 - `network-start`
 - `network`
 - `network-stop`
 
-but the actual behavior is only request capture:
+but the actual behavior was only request capture:
 
 - extension mode monkey-patches `fetch` and `XMLHttpRequest` in page runtime
 - Playwright mode listens for request events only
 - response headers and response bodies are not part of the public contract
 
-This is insufficient for real browser automation tasks where the browser is
+That was insufficient for real browser automation tasks where the browser is
 valuable precisely because it can execute signed requests and receive the
 resulting response bodies.
 

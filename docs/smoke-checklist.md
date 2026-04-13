@@ -23,6 +23,8 @@ Use this checklist before calling Browser CLI done on a real workstation.
 - `browser-cli page-reload`
 - `browser-cli task validate tasks/interactive_reveal_capture`
 - `browser-cli automation publish tasks/interactive_reveal_capture`
+- `browser-cli task validate tasks/douyin_video_download`
+- `browser-cli automation publish tasks/douyin_video_download`
 - `browser-cli stop`
 - Confirm `browser-cli read ...` does not leave an extra visible tab behind after it exits.
 - Confirm the JSON metadata for daemon-backed commands includes `meta.driver`.
@@ -122,6 +124,10 @@ Use this checklist before calling Browser CLI done on a real workstation.
 - Run `browser-cli task run tasks/interactive_reveal_capture --set url=<fixture-url>`.
 - Confirm the task writes `artifacts/result.json` or its documented artifacts.
 - Confirm the created HTML artifact contains the expected rendered content.
+- Run `browser-cli task validate tasks/douyin_video_download`.
+- Run `browser-cli automation publish tasks/douyin_video_download`.
+- Run `browser-cli automation inspect douyin_video_download`.
+- Confirm the published automation points at the Douyin task snapshot and keeps the default `url`, `wait_rounds`, `wait_seconds`, and `timeout_seconds` inputs.
 - Run `browser-cli automation publish tasks/lazy_scroll_capture`.
 - Run `browser-cli automation status`.
 - Confirm the automation service reports at least one persisted automation.

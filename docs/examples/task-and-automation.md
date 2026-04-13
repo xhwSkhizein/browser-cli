@@ -1,11 +1,19 @@
 # Task And Automation Examples
 
-Browser CLI ships with two reference task directories:
+Browser CLI currently ships with three automation-packaged reference and real-site tasks:
 
 - [`tasks/interactive_reveal_capture/task.py`](../../tasks/interactive_reveal_capture/task.py)
 - [`tasks/lazy_scroll_capture/task.py`](../../tasks/lazy_scroll_capture/task.py)
+- [`tasks/douyin_video_download/task.py`](../../tasks/douyin_video_download/task.py)
 
-Both also include `automation.toml` examples for import/export review.
+All three also include `automation.toml` examples for import/export review.
+
+The repository also includes a real-site task example that remains task-first:
+
+- [`tasks/karpathy_nitter_latest_five/task.py`](../../tasks/karpathy_nitter_latest_five/task.py)
+
+That task is useful for direct `browser-cli task run ...` validation, but it
+does not yet serve as the canonical automation publish example.
 
 ## Direct Task Runtime Pattern
 
@@ -31,6 +39,16 @@ browser-cli task validate tasks/interactive_reveal_capture
 browser-cli task run tasks/interactive_reveal_capture --set url=https://example.com
 ```
 
+Real-site examples can be run the same way:
+
+```bash
+browser-cli task validate tasks/douyin_video_download
+browser-cli task run tasks/douyin_video_download --set url=https://v.douyin.com/6Zy2Ip3kk-g
+
+browser-cli task validate tasks/karpathy_nitter_latest_five
+browser-cli task run tasks/karpathy_nitter_latest_five
+```
+
 ## One-Shot Read Pattern
 
 Use `Flow.read(...)` when a task wants the same one-shot behavior as CLI `read`:
@@ -50,6 +68,8 @@ For durable recurring automation, publish or import an automation:
 
 ```bash
 browser-cli automation publish tasks/interactive_reveal_capture
+browser-cli automation publish tasks/douyin_video_download
+browser-cli automation inspect douyin_video_download
 browser-cli automation ui
 browser-cli automation status
 ```
