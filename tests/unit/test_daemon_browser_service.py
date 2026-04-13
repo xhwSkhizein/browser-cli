@@ -324,6 +324,53 @@ def test_browser_service_runtime_status_includes_last_transition_and_live_worksp
     asyncio.run(_scenario())
 
 
+def test_browser_service_runtime_status_for_popup_includes_busy_tab_snapshot(
+    _patched_browser_service: _FakeExtensionHub,
+) -> None:
+    async def _scenario() -> None:
+        tabs = TabRegistry()
+        service = browser_service_module.BrowserService(tabs)
+        await service.ensure_started()
+
+        page = await service.new_tab(url="https://example.com/busy")
+        await tabs.add_tab(
+            page_id=page["page_id"],
+            owner_agent_id="agent-a",
+            url=page["url"],
+            title=page["title"],
+        )
+
+        async with tabs.claim_active_tab(
+            agent_id="agent-a",
+            request_id="req-1",
+            command="html",
+        ):
+            raw_status = await service.runtime_status()
+            popup_status = await service.runtime_status_for_popup()
+
+        assert raw_status["tabs"] == {
+            "count": 1,
+            "busy_count": 1,
+            "active_by_agent": {"agent-a": page["page_id"]},
+            "records": [
+                {
+                    "page_id": page["page_id"],
+                    "owner_agent_id": "agent-a",
+                    "url": "https://example.com/busy",
+                    "title": f"playwright:{page['page_id']}",
+                    "busy": True,
+                    "last_snapshot_id": None,
+                }
+            ],
+        }
+        assert popup_status["tabs"] == raw_status["tabs"]
+        assert popup_status["presentation"]["workspace_state"]["busy_tab_count"] == 1
+
+        await service.stop()
+
+    asyncio.run(_scenario())
+
+
 def test_browser_service_rebuild_workspace_binding_clears_tab_snapshot_state(
     _patched_browser_service: _FakeExtensionHub,
 ) -> None:

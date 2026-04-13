@@ -227,6 +227,7 @@ class BrowserService:
                     else None
                 )
             ),
+            "tabs": await self._tab_runtime_status(),
         }
 
     async def runtime_status_for_popup(self) -> dict[str, Any]:
@@ -254,6 +255,26 @@ class BrowserService:
         return {
             **rebuilt,
             "tab_state_reset": True,
+        }
+
+    async def _tab_runtime_status(self) -> dict[str, Any]:
+        records, active_by_agent = await self._tabs.snapshot_state()
+        return {
+            "count": len(records),
+            "busy_count": sum(1 for record in records if record.busy is not None),
+            "active_by_agent": active_by_agent,
+            "records": [self._serialize_tab_record(record) for record in records],
+        }
+
+    @staticmethod
+    def _serialize_tab_record(record: TabRecord) -> dict[str, Any]:
+        return {
+            "page_id": record.page_id,
+            "owner_agent_id": record.owner_agent_id,
+            "url": record.url,
+            "title": record.title,
+            "busy": record.busy is not None,
+            "last_snapshot_id": record.last_snapshot_id,
         }
 
     async def new_tab(

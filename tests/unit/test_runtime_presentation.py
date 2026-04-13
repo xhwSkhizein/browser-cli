@@ -189,6 +189,21 @@ class _FakeBrowserService:
                 "managed_tab_count": 1,
                 "binding_state": "tracked",
             },
+            "tabs": {
+                "count": 1,
+                "busy_count": 0,
+                "active_by_agent": {"agent-a": "page-1"},
+                "records": [
+                    {
+                        "page_id": "page-1",
+                        "owner_agent_id": "agent-a",
+                        "url": "https://example.com",
+                        "title": "Example",
+                        "busy": False,
+                        "last_snapshot_id": None,
+                    }
+                ],
+            },
             "last_transition": {},
         }
 

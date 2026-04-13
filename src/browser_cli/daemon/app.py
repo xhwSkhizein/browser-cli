@@ -177,27 +177,7 @@ class BrowserDaemonApp:
 
     async def _handle_runtime_status(self, request: DaemonRequest) -> dict[str, Any]:
         warmup = bool(request.args.get("warmup"))
-        browser = await self._state.browser_service.runtime_status(warmup=warmup)
-        records, active_by_agent = await self._state.tabs.snapshot_state()
-        raw_status = {
-            **browser,
-            "tabs": {
-                "count": len(records),
-                "busy_count": sum(1 for record in records if record.busy is not None),
-                "active_by_agent": active_by_agent,
-                "records": [
-                    {
-                        "page_id": record.page_id,
-                        "owner_agent_id": record.owner_agent_id,
-                        "url": record.url,
-                        "title": record.title,
-                        "busy": record.busy is not None,
-                        "last_snapshot_id": record.last_snapshot_id,
-                    }
-                    for record in records
-                ],
-            },
-        }
+        raw_status = await self._state.browser_service.runtime_status(warmup=warmup)
         return {
             **raw_status,
             "presentation": build_runtime_presentation(raw_status),
