@@ -154,7 +154,7 @@ the implementation, and where should a change land first.
 - Example tasks and packaged automations:
   `tasks/*`
 - Browser-CLI-specific agent delivery guidance:
-  `skills/browser-cli-explore-delivery/SKILL.md`
+  `skills/browser-cli-delivery/SKILL.md`
 - Tests for behavior and contracts:
   `tests/unit/*`, `tests/integration/*`
 
