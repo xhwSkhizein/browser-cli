@@ -10,11 +10,13 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from browser_cli.automation.loader import load_automation_manifest
-from browser_cli.automation.models import (
-    PersistedAutomationDefinition,
+from browser_cli.automation.models import PersistedAutomationDefinition
+from browser_cli.automation.projections import (
     manifest_to_persisted_definition,
+    payload_to_persisted_definition,
+    persisted_definition_to_config_payload,
+    persisted_definition_to_manifest_toml,
 )
-from browser_cli.automation.toml import dumps_toml_sections
 from browser_cli.automation.web import render_index_html
 from browser_cli.errors import BrowserCliError, InvalidInputError
 
@@ -49,7 +51,11 @@ class AutomationRequestHandler(BaseHTTPRequestHandler):
                 return
             if path == "/api/service/status":
                 self._send_json(
-                    {"ok": True, "data": self.server.runtime.status_payload(), "meta": {}}
+                    {
+                        "ok": True,
+                        "data": self.server.runtime.status_payload(),
+                        "meta": {},
+                    }
                 )
                 return
             if path == "/api/service/stop" and method == "POST":
@@ -66,9 +72,15 @@ class AutomationRequestHandler(BaseHTTPRequestHandler):
                 return
             if path == "/api/automations" and method == "POST":
                 body = self._read_json_body()
-                created = self.server.runtime.store.upsert_automation(_payload_to_automation(body))
+                created = self.server.runtime.store.upsert_automation(
+                    payload_to_persisted_definition(body)
+                )
                 self._send_json(
-                    {"ok": True, "data": self._serialize_automation(created), "meta": {}},
+                    {
+                        "ok": True,
+                        "data": self._serialize_automation(created),
+                        "meta": {},
+                    },
                     status=HTTPStatus.CREATED,
                 )
                 return
@@ -82,7 +94,11 @@ class AutomationRequestHandler(BaseHTTPRequestHandler):
                 automation = manifest_to_persisted_definition(manifest, enabled=enabled)
                 created = self.server.runtime.store.upsert_automation(automation)
                 self._send_json(
-                    {"ok": True, "data": self._serialize_automation(created), "meta": {}}
+                    {
+                        "ok": True,
+                        "data": self._serialize_automation(created),
+                        "meta": {},
+                    }
                 )
                 return
             if path.startswith("/api/automations/") and path.endswith("/runs") and method == "GET":
@@ -101,7 +117,11 @@ class AutomationRequestHandler(BaseHTTPRequestHandler):
                 automation_id = path.split("/")[3]
                 updated = self.server.runtime.store.set_enabled(automation_id, True)
                 self._send_json(
-                    {"ok": True, "data": self._serialize_automation(updated), "meta": {}}
+                    {
+                        "ok": True,
+                        "data": self._serialize_automation(updated),
+                        "meta": {},
+                    }
                 )
                 return
             if (
@@ -112,7 +132,11 @@ class AutomationRequestHandler(BaseHTTPRequestHandler):
                 automation_id = path.split("/")[3]
                 updated = self.server.runtime.store.set_enabled(automation_id, False)
                 self._send_json(
-                    {"ok": True, "data": self._serialize_automation(updated), "meta": {}}
+                    {
+                        "ok": True,
+                        "data": self._serialize_automation(updated),
+                        "meta": {},
+                    }
                 )
                 return
             if path.startswith("/api/automations/") and path.endswith("/run") and method == "POST":
@@ -128,7 +152,11 @@ class AutomationRequestHandler(BaseHTTPRequestHandler):
                 automation_id = path.split("/")[3]
                 automation = self.server.runtime.store.get_automation(automation_id)
                 self._send_json(
-                    {"ok": True, "data": {"toml": _automation_to_toml(automation)}, "meta": {}}
+                    {
+                        "ok": True,
+                        "data": {"toml": persisted_definition_to_manifest_toml(automation)},
+                        "meta": {},
+                    }
                 )
                 return
             if path.startswith("/api/automations/") and method == "GET":
@@ -147,10 +175,14 @@ class AutomationRequestHandler(BaseHTTPRequestHandler):
                 payload = self._read_json_body()
                 payload["id"] = automation_id
                 updated = self.server.runtime.store.upsert_automation(
-                    _payload_to_automation(payload)
+                    payload_to_persisted_definition(payload)
                 )
                 self._send_json(
-                    {"ok": True, "data": self._serialize_automation(updated), "meta": {}}
+                    {
+                        "ok": True,
+                        "data": self._serialize_automation(updated),
+                        "meta": {},
+                    }
                 )
                 return
             if path.startswith("/api/runs/") and path.endswith("/retry") and method == "POST":
@@ -175,7 +207,11 @@ class AutomationRequestHandler(BaseHTTPRequestHandler):
                 )
                 return
             self._send_json(
-                {"ok": False, "error_message": f"Not found: {path}", "error_code": "NOT_FOUND"},
+                {
+                    "ok": False,
+                    "error_message": f"Not found: {path}",
+                    "error_code": "NOT_FOUND",
+                },
                 status=HTTPStatus.NOT_FOUND,
             )
         except KeyError as exc:
@@ -230,39 +266,23 @@ class AutomationRequestHandler(BaseHTTPRequestHandler):
         return json.loads(raw.decode("utf-8"))
 
     def _serialize_automation(
-        self, automation: PersistedAutomationDefinition, *, include_latest_run: bool = False
+        self,
+        automation: PersistedAutomationDefinition,
+        *,
+        include_latest_run: bool = False,
     ) -> dict:
-        payload = {
-            "id": automation.id,
-            "name": automation.name,
-            "description": automation.description,
-            "version": automation.version,
-            "task_path": str(automation.task_path),
-            "task_meta_path": str(automation.task_meta_path),
-            "entrypoint": automation.entrypoint,
-            "enabled": automation.enabled,
-            "definition_status": automation.definition_status,
-            "definition_error": automation.definition_error,
-            "schedule_kind": automation.schedule_kind,
-            "schedule_payload": automation.schedule_payload,
-            "timezone": automation.timezone,
-            "output_dir": str(automation.output_dir),
-            "result_json_path": str(automation.result_json_path)
-            if automation.result_json_path
-            else None,
-            "stdout_mode": automation.stdout_mode,
-            "input_overrides": automation.input_overrides,
-            "before_run_hooks": list(automation.before_run_hooks),
-            "after_success_hooks": list(automation.after_success_hooks),
-            "after_failure_hooks": list(automation.after_failure_hooks),
-            "retry_attempts": automation.retry_attempts,
-            "retry_backoff_seconds": automation.retry_backoff_seconds,
-            "timeout_seconds": automation.timeout_seconds,
-            "created_at": automation.created_at,
-            "updated_at": automation.updated_at,
-            "last_run_at": automation.last_run_at,
-            "next_run_at": automation.next_run_at,
-        }
+        payload = persisted_definition_to_config_payload(automation)
+        payload.update(
+            {
+                "enabled": automation.enabled,
+                "definition_status": automation.definition_status,
+                "definition_error": automation.definition_error,
+                "created_at": automation.created_at,
+                "updated_at": automation.updated_at,
+                "last_run_at": automation.last_run_at,
+                "next_run_at": automation.next_run_at,
+            }
+        )
         if include_latest_run:
             runs = self.server.runtime.store.list_runs(automation.id, limit=1)
             payload["latest_run"] = self._serialize_run(runs[0]) if runs else None
@@ -293,95 +313,6 @@ class AutomationRequestHandler(BaseHTTPRequestHandler):
             "created_at": event.created_at,
             "payload": event.payload,
         }
-
-
-def _payload_to_automation(payload: dict) -> PersistedAutomationDefinition:
-    automation_id = str(payload.get("id") or "").strip()
-    if not automation_id:
-        raise ValueError("Automation id is required.")
-    output_dir_raw = str(payload.get("output_dir") or "").strip()
-    output_dir = Path(output_dir_raw) if output_dir_raw else Path()
-    result_json_raw = str(payload.get("result_json_path") or "").strip()
-    return PersistedAutomationDefinition(
-        id=automation_id,
-        name=str(payload.get("name") or automation_id),
-        description=str(payload.get("description") or ""),
-        version=str(payload.get("version") or "0.1.0"),
-        task_path=Path(str(payload.get("task_path") or "")),
-        task_meta_path=Path(str(payload.get("task_meta_path") or "")),
-        entrypoint=str(payload.get("entrypoint") or "run"),
-        enabled=bool(payload.get("enabled")),
-        schedule_kind=str(payload.get("schedule_kind") or "manual"),
-        schedule_payload=dict(payload.get("schedule_payload") or {}),
-        timezone=str(payload.get("timezone") or "UTC"),
-        output_dir=output_dir,
-        result_json_path=Path(result_json_raw) if result_json_raw else None,
-        stdout_mode=str(payload.get("stdout_mode") or "json"),
-        input_overrides=dict(payload.get("input_overrides") or {}),
-        before_run_hooks=tuple(payload.get("before_run_hooks") or []),
-        after_success_hooks=tuple(payload.get("after_success_hooks") or []),
-        after_failure_hooks=tuple(payload.get("after_failure_hooks") or []),
-        retry_attempts=int(payload.get("retry_attempts") or 0),
-        retry_backoff_seconds=int(payload.get("retry_backoff_seconds") or 0),
-        timeout_seconds=float(payload["timeout_seconds"])
-        if payload.get("timeout_seconds") is not None
-        else None,
-    )
-
-
-def _automation_to_toml(automation: PersistedAutomationDefinition) -> str:
-    schedule_values = {"mode": automation.schedule_kind, "timezone": automation.timezone}
-    for key, value in automation.schedule_payload.items():
-        if key not in {"mode", "timezone"}:
-            schedule_values[key] = value
-    runtime_values: dict[str, object | None] = {
-        "retry_attempts": automation.retry_attempts,
-        "retry_backoff_seconds": automation.retry_backoff_seconds,
-        "timeout_seconds": automation.timeout_seconds,
-        "log_level": "info",
-    }
-    return dumps_toml_sections(
-        [
-            (
-                "automation",
-                {
-                    "id": automation.id,
-                    "name": automation.name,
-                    "description": automation.description,
-                    "version": automation.version,
-                },
-            ),
-            (
-                "task",
-                {
-                    "path": str(automation.task_path),
-                    "meta_path": str(automation.task_meta_path),
-                    "entrypoint": automation.entrypoint,
-                },
-            ),
-            ("inputs", dict(automation.input_overrides)),
-            ("schedule", schedule_values),
-            (
-                "outputs",
-                {
-                    "artifact_dir": str(automation.output_dir),
-                    "result_json_path": (
-                        str(automation.result_json_path) if automation.result_json_path else ""
-                    ),
-                    "stdout": automation.stdout_mode,
-                },
-            ),
-            (
-                "hooks",
-                {
-                    "before_run": list(automation.before_run_hooks),
-                    "after_success": list(automation.after_success_hooks),
-                    "after_failure": list(automation.after_failure_hooks),
-                },
-            ),
-            ("runtime", runtime_values),
-        ]
-    )
 
 
 def _read_text(path: Path | None) -> str:
