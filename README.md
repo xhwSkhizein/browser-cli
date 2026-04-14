@@ -20,18 +20,18 @@ reliable browser control from the command line.
 ## Architecture
 
 ```text
-┌─────────────────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────────────────────────┐
 │  Task/Automation Layer  (task.py + task.meta.json + automation.toml) │
-├─────────────────────────────────────────────────────────────┤
-│  Browser Daemon  ──►  60+ commands  ──►  Semantic Ref System       │
-│  ├─ read: one-shot page capture                                  │
-│  ├─ open/snapshot/click/fill: interactive control                │
-│  ├─ console/network/trace: observation & debugging               │
-│  ├─ verify-*: assertions                                         │
-│  └─ ... 60+ commands total                                       │
-├─────────────────────────────────────────────────────────────┤
-│  Dual Backend: Playwright (default) ◄──► Chrome Extension (opt)  │
-└─────────────────────────────────────────────────────────────┘
+├──────────────────────────────────────────────────────────────────────┤
+│  Browser Daemon  ──►  60+ commands  ──►  Semantic Ref System         │
+│  ├─ read: one-shot page capture                                      │
+│  ├─ open/snapshot/click/fill: interactive control                    │
+│  ├─ console/network/trace: observation & debugging                   │
+│  ├─ verify-*: assertions                                             │
+│  └─ ... 60+ commands total                                           │
+├──────────────────────────────────────────────────────────────────────┤
+│  Dual Backend: Playwright (default) ◄──► Chrome Extension (opt)      │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
 | Component | Purpose |
