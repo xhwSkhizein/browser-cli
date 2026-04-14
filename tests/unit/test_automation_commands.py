@@ -57,6 +57,40 @@ def test_automation_publish_reports_next_commands(monkeypatch, tmp_path: Path) -
     assert payload["data"]["next_commands"]["inspect"] == "browser-cli automation inspect demo"
 
 
+def test_automation_publish_returns_manifest_source(monkeypatch, tmp_path: Path) -> None:
+    task_dir = tmp_path / "task"
+    task_dir.mkdir()
+    (task_dir / "task.py").write_text(
+        "def run(flow, inputs):\n    return {'ok': True}\n", encoding="utf-8"
+    )
+    (task_dir / "task.meta.json").write_text(
+        '{"task":{"id":"demo","name":"Demo","goal":"Run"},"environment":{},"success_path":{},"recovery_hints":{},"failures":[],"knowledge":{}}',
+        encoding="utf-8",
+    )
+    (task_dir / "automation.toml").write_text(
+        "[automation]\n"
+        'id = "demo"\n'
+        'name = "Demo"\n'
+        "[task]\n"
+        'path = "task.py"\n'
+        'meta_path = "task.meta.json"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("BROWSER_CLI_HOME", str(tmp_path / "home"))
+    monkeypatch.setattr(
+        "browser_cli.commands.automation.ensure_automation_service_running",
+        lambda: None,
+    )
+    monkeypatch.setattr(
+        "browser_cli.commands.automation.request_automation_service",
+        lambda method, path, body=None, start_if_needed=True: {"ok": True, "data": {"id": "demo"}},
+    )
+    payload = json.loads(
+        run_automation_command(Namespace(automation_subcommand="publish", path=str(task_dir)))
+    )
+    assert payload["data"]["published"]["manifest_source"] == "task_dir"
+
+
 def test_automation_list_returns_service_items(monkeypatch) -> None:
     monkeypatch.setattr(
         "browser_cli.commands.automation.request_automation_service",

@@ -43,6 +43,7 @@ def run_automation_command(args: Namespace) -> str:
                         "automation_id": published.automation_id,
                         "automation_name": published.automation_name,
                         "version": published.version,
+                        "manifest_source": published.manifest_source,
                         "source_task_dir": str(source_task_dir),
                         "snapshot_dir": str(published.snapshot_dir),
                         "manifest_path": str(published.manifest_path),
