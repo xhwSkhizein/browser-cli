@@ -164,3 +164,12 @@ def test_reload_command_renders_summary(capsys) -> None:
     captured = capsys.readouterr()
     assert exit_code == 0
     assert captured.out == "Reload: complete\n"
+
+
+def test_install_skills_help_mentions_target(capsys) -> None:
+    exit_code = main(["install-skills", "--help"])
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "--dry-run" in captured.out
+    assert "--target" in captured.out
+    assert "packaged skills" in captured.out.lower()

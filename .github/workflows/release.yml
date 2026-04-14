@@ -24,5 +24,13 @@ jobs:
       - name: Build package
         run: uv build --no-sources
 
+      - name: Verify wheel-packaged skills
+        run: |
+          uv run pytest tests/unit/test_release_artifacts.py -v
+          python -m venv .pkg-smoke-venv
+          .pkg-smoke-venv/bin/pip install dist/*.whl
+          target_dir="$(mktemp -d)"
+          .pkg-smoke-venv/bin/browser-cli install-skills --dry-run --target "$target_dir"
+
       - name: Publish to PyPI
         run: uv publish

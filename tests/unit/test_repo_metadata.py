@@ -35,3 +35,11 @@ def test_repo_pins_python_version_for_uv() -> None:
 
 def test_repo_tracks_uv_lockfile() -> None:
     assert (_repo_root() / "uv.lock").exists()
+
+
+def test_repo_includes_packaged_browser_cli_skills_in_wheel_config() -> None:
+    data = _load_pyproject()
+
+    package_data = data["tool"]["setuptools"].get("package-data", {})
+    assert "browser_cli.packaged_skills" in package_data
+    assert package_data["browser_cli.packaged_skills"] == ["*/SKILL.md"]

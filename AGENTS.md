@@ -146,6 +146,8 @@ the implementation, and where should a change land first.
 
 - User-facing output rendering:
   `src/browser_cli/outputs/render.py`, `src/browser_cli/outputs/json.py`
+- Packaged Browser CLI skill assets shipped with the installed wheel:
+  `src/browser_cli/packaged_skills/*`
 - Error taxonomy and exit codes:
   `src/browser_cli/errors.py`, `src/browser_cli/error_codes.py`, `src/browser_cli/exit_codes.py`
 
@@ -219,6 +221,7 @@ the implementation, and where should a change land first.
 - `browser_cli.drivers` owns the explicit backend contract plus `playwright_driver` and `extension_driver`. Drivers consume daemon-built locator specs, not raw refs.
 - `browser_cli.extension` owns the extension transport, handshake, heartbeat, required-capability checks, and artifact assembly from WebSocket chunks.
 - `browser_cli.outputs` owns final rendering for content-first and JSON-first surfaces.
+- `browser_cli.packaged_skills` owns the Browser CLI skill assets that are shipped in installed distributions and consumed by `browser-cli install-skills`.
 - `browser_cli.profiles` owns Chrome executable discovery, managed profile directories, profile naming, and lock detection.
 - `browser_cli.refs` owns semantic ref models, snapshot generation, latest-snapshot registry state, and locator reconstruction.
 - `browser_cli.tabs` owns agent-visible tab state, active-tab tracking, and busy-state conflict rules.
