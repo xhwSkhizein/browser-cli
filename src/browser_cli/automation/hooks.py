@@ -13,6 +13,7 @@ def run_hook_commands(
     *,
     cwd: Path,
     extra_env: dict[str, Any] | None = None,
+    timeout_seconds: float | None = None,
 ) -> list[dict[str, Any]]:
     results: list[dict[str, Any]] = []
     env = os.environ.copy()
@@ -26,6 +27,7 @@ def run_hook_commands(
             env=env,
             capture_output=True,
             text=True,
+            timeout=timeout_seconds,
         )
         results.append(
             {
