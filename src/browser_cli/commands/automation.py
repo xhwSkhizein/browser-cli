@@ -202,7 +202,9 @@ def _load_snapshot_versions(automation_id: str) -> list[dict[str, object]]:
             continue
         publish_path = entry / "publish.json"
         publish_data = _read_json_file(publish_path)
-        snapshot_manifest, snapshot_config_error = _load_snapshot_manifest(entry / "automation.toml")
+        snapshot_manifest, snapshot_config_error = _load_snapshot_manifest(
+            entry / "automation.toml"
+        )
         versions.append(
             {
                 "version": int(entry.name),

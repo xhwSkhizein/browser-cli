@@ -48,9 +48,7 @@ def test_publish_task_dir_creates_versioned_snapshot(tmp_path: Path, monkeypatch
     assert (published.snapshot_dir / "automation.toml").exists()
 
 
-def test_publish_task_dir_preserves_source_manifest_fields(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_publish_task_dir_preserves_source_manifest_fields(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("BROWSER_CLI_HOME", str(tmp_path / "home"))
     task_dir = tmp_path / "task"
     task_dir.mkdir()

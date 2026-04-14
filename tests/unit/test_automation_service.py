@@ -5,8 +5,8 @@ from pathlib import Path
 
 from browser_cli.automation.models import PersistedAutomationDefinition
 from browser_cli.automation.persistence import AutomationStore
-from browser_cli.automation.service.runtime import AutomationServiceRuntime
 from browser_cli.automation.scheduler import compute_next_run_at, normalize_schedule
+from browser_cli.automation.service.runtime import AutomationServiceRuntime
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -145,16 +145,11 @@ def test_douyin_automation_manifest_exists() -> None:
     assert 'id = "douyin_video_download"' in payload
 
 
-def test_automation_service_marks_run_failed_on_timeout(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_automation_service_marks_run_failed_on_timeout(tmp_path: Path, monkeypatch) -> None:
     task_dir = tmp_path / "task"
     task_dir.mkdir()
     (task_dir / "task.py").write_text(
-        "import time\n"
-        "def run(flow, inputs):\n"
-        "    time.sleep(0.3)\n"
-        "    return {'ok': True}\n",
+        "import time\ndef run(flow, inputs):\n    time.sleep(0.3)\n    return {'ok': True}\n",
         encoding="utf-8",
     )
     (task_dir / "task.meta.json").write_text(
@@ -195,16 +190,11 @@ def test_automation_service_marks_run_failed_on_timeout(
     )
 
 
-def test_automation_service_does_not_retry_timeout_failure(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_automation_service_does_not_retry_timeout_failure(tmp_path: Path, monkeypatch) -> None:
     task_dir = tmp_path / "task"
     task_dir.mkdir()
     (task_dir / "task.py").write_text(
-        "import time\n"
-        "def run(flow, inputs):\n"
-        "    time.sleep(0.3)\n"
-        "    return {'ok': True}\n",
+        "import time\ndef run(flow, inputs):\n    time.sleep(0.3)\n    return {'ok': True}\n",
         encoding="utf-8",
     )
     (task_dir / "task.meta.json").write_text(
