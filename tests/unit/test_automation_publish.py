@@ -92,6 +92,46 @@ def test_publish_task_dir_preserves_source_manifest_fields(tmp_path: Path, monke
     assert manifest.runtime.retry_backoff_seconds == 7
 
 
+def test_publish_task_dir_preserves_hooks_timeout_and_log_level(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv("BROWSER_CLI_HOME", str(tmp_path / "home"))
+    task_dir = tmp_path / "task"
+    task_dir.mkdir()
+    (task_dir / "task.py").write_text(
+        "def run(flow, inputs):\n    return {'ok': True}\n", encoding="utf-8"
+    )
+    (task_dir / "task.meta.json").write_text(
+        '{"task":{"id":"demo","name":"Demo","goal":"Run"},"environment":{},"success_path":{},"recovery_hints":{},"failures":[],"knowledge":{}}',
+        encoding="utf-8",
+    )
+    (task_dir / "automation.toml").write_text(
+        "[automation]\n"
+        'id = "demo"\n'
+        'name = "Demo"\n'
+        "[task]\n"
+        'path = "task.py"\n'
+        'meta_path = "task.meta.json"\n'
+        "[hooks]\n"
+        'before_run = ["echo before"]\n'
+        'after_success = ["echo success"]\n'
+        'after_failure = ["echo failure"]\n'
+        "[runtime]\n"
+        "timeout_seconds = 6.5\n"
+        'log_level = "debug"\n',
+        encoding="utf-8",
+    )
+
+    published = publish_task_dir(task_dir, app_paths=get_app_paths())
+    manifest = load_automation_manifest(published.manifest_path)
+
+    assert manifest.hooks.before_run == ("echo before",)
+    assert manifest.hooks.after_success == ("echo success",)
+    assert manifest.hooks.after_failure == ("echo failure",)
+    assert manifest.runtime.timeout_seconds == 6.5
+    assert manifest.runtime.log_level == "debug"
+
+
 def test_publish_task_dir_generates_defaults_when_manifest_is_absent(
     tmp_path: Path, monkeypatch
 ) -> None:

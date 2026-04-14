@@ -6,8 +6,9 @@ import threading
 from pathlib import Path
 
 from browser_cli.automation.api import AutomationHttpServer, AutomationRequestHandler
-from browser_cli.automation.api.server import _payload_to_automation
+from browser_cli.automation.loader import load_automation_manifest
 from browser_cli.automation.persistence import AutomationStore
+from browser_cli.automation.projections import payload_to_persisted_definition
 from browser_cli.automation.service.runtime import AutomationServiceRuntime
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -77,7 +78,6 @@ def test_automation_api_crud_and_export(tmp_path: Path) -> None:
         )
         assert "[automation]" in export_payload["data"]["toml"]
         assert 'id = "interactive_reveal_capture"' in export_payload["data"]["toml"]
-        assert 'result_json_path = ""' in export_payload["data"]["toml"]
         assert "retry_backoff_seconds = 7" in export_payload["data"]["toml"]
         assert "timeout_seconds = 0" not in export_payload["data"]["toml"]
     finally:
@@ -108,8 +108,8 @@ def test_automation_api_returns_not_found_for_missing_run(tmp_path: Path) -> Non
         thread.join(timeout=2.0)
 
 
-def test_payload_to_automation_preserves_stdout_and_retry_backoff() -> None:
-    persisted = _payload_to_automation(
+def test_payload_to_automation_preserves_stdout_retry_backoff_and_log_level() -> None:
+    persisted = payload_to_persisted_definition(
         {
             "id": "demo",
             "name": "Demo",
@@ -120,9 +120,79 @@ def test_payload_to_automation_preserves_stdout_and_retry_backoff() -> None:
             "retry_attempts": 1,
             "retry_backoff_seconds": 9,
             "timeout_seconds": 4.0,
+            "log_level": "debug",
         }
     )
 
     assert persisted.stdout_mode == "text"
     assert persisted.retry_backoff_seconds == 9
     assert persisted.timeout_seconds == 4.0
+    assert persisted.log_level == "debug"
+
+
+def test_automation_api_export_round_trips_supported_fields(tmp_path: Path) -> None:
+    runtime = AutomationServiceRuntime(store=AutomationStore(tmp_path / "automations.db"))
+    server = AutomationHttpServer(("127.0.0.1", 0), AutomationRequestHandler, runtime)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    host, port = server.server_address[:2]
+    try:
+        (tmp_path / "task.py").write_text(
+            "def run(flow, inputs):\n    return {'ok': True}\n",
+            encoding="utf-8",
+        )
+        (tmp_path / "task.meta.json").write_text(
+            '{"task":{"id":"demo","name":"Demo","goal":"Run"},"environment":{},"success_path":{},"recovery_hints":{},"failures":[],"knowledge":{}}',
+            encoding="utf-8",
+        )
+        create_payload = _request(
+            host,
+            int(port),
+            "POST",
+            "/api/automations",
+            {
+                "id": "demo",
+                "name": "Demo",
+                "description": "Round trip",
+                "version": "7",
+                "task_path": str(tmp_path / "task.py"),
+                "task_meta_path": str(tmp_path / "task.meta.json"),
+                "entrypoint": "run",
+                "schedule_kind": "interval",
+                "schedule_payload": {
+                    "mode": "interval",
+                    "interval_seconds": 900,
+                    "timezone": "Asia/Shanghai",
+                },
+                "timezone": "Asia/Shanghai",
+                "output_dir": str(tmp_path / "runs"),
+                "result_json_path": str(tmp_path / "runs" / "result.json"),
+                "stdout_mode": "text",
+                "input_overrides": {"url": "https://example.com"},
+                "before_run_hooks": ["echo before"],
+                "after_success_hooks": ["echo success"],
+                "after_failure_hooks": ["echo failure"],
+                "retry_attempts": 2,
+                "retry_backoff_seconds": 11,
+                "timeout_seconds": 42.5,
+                "log_level": "debug",
+            },
+        )
+        assert create_payload["data"]["id"] == "demo"
+
+        export_payload = _request(host, int(port), "GET", "/api/automations/demo/export")
+        manifest_path = tmp_path / "exported.toml"
+        manifest_path.write_text(export_payload["data"]["toml"], encoding="utf-8")
+        manifest = load_automation_manifest(manifest_path)
+
+        assert manifest.inputs == {"url": "https://example.com"}
+        assert manifest.schedule["interval_seconds"] == 900
+        assert manifest.outputs.stdout == "text"
+        assert manifest.hooks.after_success == ("echo success",)
+        assert manifest.runtime.retry_backoff_seconds == 11
+        assert manifest.runtime.timeout_seconds == 42.5
+        assert manifest.runtime.log_level == "debug"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2.0)

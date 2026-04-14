@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from browser_cli.automation.loader import load_automation_manifest
-from browser_cli.automation.models import AutomationManifest
+from browser_cli.automation.projections import manifest_to_snapshot_manifest_toml
 from browser_cli.automation.toml import dumps_toml_sections
 from browser_cli.constants import AppPaths
 from browser_cli.task_runtime import validate_task_dir
@@ -51,7 +51,7 @@ def publish_task_dir(task_dir: Path, *, app_paths: AppPaths) -> PublishedAutomat
     if source_manifest_path.exists():
         manifest_source = "task_dir"
         source_manifest = load_automation_manifest(source_manifest_path)
-        rendered_manifest = render_automation_manifest_from_manifest(
+        rendered_manifest = manifest_to_snapshot_manifest_toml(
             source_manifest,
             version=version,
             task_path=task_path,
@@ -144,84 +144,6 @@ def render_automation_manifest(
         ),
     ]
     return dumps_toml_sections(sections)
-
-
-def render_automation_manifest_from_manifest(
-    manifest: AutomationManifest,
-    *,
-    version: int,
-    task_path: Path,
-    task_meta_path: Path,
-    output_dir: Path,
-) -> str:
-    schedule = dict(manifest.schedule)
-    artifact_dir = output_dir
-    result_json_path = _remap_result_json_path(
-        manifest.outputs.artifact_dir,
-        manifest.outputs.result_json_path,
-        artifact_dir,
-    )
-    sections: list[tuple[str, dict[str, Any]]] = [
-        (
-            "automation",
-            {
-                "id": str(manifest.automation.id),
-                "name": str(manifest.automation.name),
-                "description": str(manifest.automation.description),
-                "version": str(version),
-            },
-        ),
-        (
-            "task",
-            {
-                "path": str(task_path),
-                "meta_path": str(task_meta_path),
-                "entrypoint": str(manifest.task.entrypoint),
-            },
-        ),
-        ("inputs", dict(manifest.inputs)),
-        ("schedule", schedule),
-        (
-            "outputs",
-            {
-                "artifact_dir": str(artifact_dir),
-                "result_json_path": str(result_json_path) if result_json_path else None,
-                "stdout": str(manifest.outputs.stdout),
-            },
-        ),
-        (
-            "hooks",
-            {
-                "before_run": list(manifest.hooks.before_run),
-                "after_success": list(manifest.hooks.after_success),
-                "after_failure": list(manifest.hooks.after_failure),
-            },
-        ),
-        (
-            "runtime",
-            {
-                "retry_attempts": int(manifest.runtime.retry_attempts),
-                "retry_backoff_seconds": int(manifest.runtime.retry_backoff_seconds),
-                "timeout_seconds": manifest.runtime.timeout_seconds,
-                "log_level": str(manifest.runtime.log_level),
-            },
-        ),
-    ]
-    return dumps_toml_sections(sections)
-
-
-def _remap_result_json_path(
-    source_artifact_dir: Path,
-    source_result_json_path: Path | None,
-    target_artifact_dir: Path,
-) -> Path | None:
-    if source_result_json_path is None:
-        return None
-    try:
-        relative = source_result_json_path.relative_to(source_artifact_dir)
-    except ValueError:
-        return target_artifact_dir / source_result_json_path.name
-    return target_artifact_dir / relative
 
 
 def _next_version(versions_dir: Path) -> int:

@@ -108,3 +108,8 @@ browser-cli automation ui
 Replace `<automation-id>` with the ID shown by `browser-cli automation list`.
 After publish, use the automation CLI to inspect the published snapshot rather
 than editing snapshot files directly.
+
+## Remove Browser CLI
+
+To remove Browser CLI later, including Browser CLI home data and local cleanup
+steps for maintainers, see [`docs/uninstall.md`](docs/uninstall.md).

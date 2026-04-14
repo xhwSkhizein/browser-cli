@@ -264,3 +264,102 @@ def test_automation_inspect_version_reports_snapshot_config_error(
     assert payload["data"]["snapshot_config"] is None
     assert "snapshot_config_error" in payload["data"]
     assert payload["data"]["live_config"]["name"] == "Demo Live"
+
+
+def test_automation_inspect_version_aligns_snapshot_and_live_config_shapes(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("BROWSER_CLI_HOME", str(tmp_path / "home"))
+    version_dir = tmp_path / "home" / "automations" / "demo" / "versions" / "1"
+    version_dir.mkdir(parents=True)
+    (version_dir / "task.py").write_text(
+        "def run(flow, inputs):\n    return {'ok': True}\n", encoding="utf-8"
+    )
+    (version_dir / "task.meta.json").write_text(
+        '{"task":{"id":"demo","name":"Demo","goal":"Run"},"environment":{},"success_path":{},"recovery_hints":{},"failures":[],"knowledge":{}}',
+        encoding="utf-8",
+    )
+    (version_dir / "automation.toml").write_text(
+        "[automation]\n"
+        'id = "demo"\n'
+        'name = "Demo Snapshot"\n'
+        'description = "Snapshot"\n'
+        'version = "1"\n'
+        "[task]\n"
+        'path = "task.py"\n'
+        'meta_path = "task.meta.json"\n'
+        "[inputs]\n"
+        'url = "https://example.com"\n'
+        "[schedule]\n"
+        'mode = "interval"\n'
+        "interval_seconds = 900\n"
+        'timezone = "Asia/Shanghai"\n'
+        "[outputs]\n"
+        'artifact_dir = "artifacts"\n'
+        'result_json_path = "artifacts/result.json"\n'
+        'stdout = "text"\n'
+        "[hooks]\n"
+        'before_run = ["echo before"]\n'
+        'after_success = ["echo success"]\n'
+        'after_failure = ["echo failure"]\n'
+        "[runtime]\n"
+        "retry_attempts = 2\n"
+        "retry_backoff_seconds = 11\n"
+        "timeout_seconds = 42.5\n"
+        'log_level = "debug"\n',
+        encoding="utf-8",
+    )
+    (version_dir / "publish.json").write_text(
+        f'{{"automation_id":"demo","version":1,"source_task_path":"/tmp/task","snapshot_dir":"{version_dir}"}}',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "browser_cli.commands.automation.request_automation_service",
+        lambda method, path, body=None, start_if_needed=True: {
+            "ok": True,
+            "data": {
+                "id": "demo",
+                "name": "Demo Live",
+                "description": "Live",
+                "version": "2",
+                "task_path": str(version_dir / "task.py"),
+                "task_meta_path": str(version_dir / "task.meta.json"),
+                "entrypoint": "run",
+                "schedule_kind": "interval",
+                "schedule_payload": {
+                    "mode": "interval",
+                    "interval_seconds": 900,
+                    "timezone": "Asia/Shanghai",
+                },
+                "timezone": "Asia/Shanghai",
+                "output_dir": str(tmp_path / "home" / "automations" / "demo"),
+                "result_json_path": str(tmp_path / "home" / "automations" / "demo" / "result.json"),
+                "stdout_mode": "text",
+                "input_overrides": {"url": "https://example.com"},
+                "before_run_hooks": ["echo before"],
+                "after_success_hooks": ["echo success"],
+                "after_failure_hooks": ["echo failure"],
+                "retry_attempts": 2,
+                "retry_backoff_seconds": 11,
+                "timeout_seconds": 42.5,
+                "log_level": "debug",
+                "enabled": True,
+                "definition_status": "valid",
+                "latest_run": {"status": "success"},
+            },
+        },
+    )
+
+    payload = json.loads(
+        run_automation_command(
+            Namespace(automation_subcommand="inspect", automation_id="demo", version=1)
+        )
+    )
+
+    snapshot_keys = set(payload["data"]["snapshot_config"])
+    live_keys = set(payload["data"]["live_config"])
+
+    assert snapshot_keys == live_keys
+    assert payload["data"]["snapshot_config"]["log_level"] == "debug"
+    assert payload["data"]["live_config"]["retry_backoff_seconds"] == 11
+    assert payload["data"]["live_config"]["log_level"] == "debug"

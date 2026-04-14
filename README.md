@@ -81,6 +81,7 @@ browser-cli --help
 ```
 
 Installed users should start with [`docs/installed-with-uv.md`](docs/installed-with-uv.md).
+For removal and local cleanup guidance, see [`docs/uninstall.md`](docs/uninstall.md).
 
 ## Development
 
@@ -258,6 +259,8 @@ Exit codes:
 ## Documentation
 
 - Repo navigation and subsystem ownership: [`AGENTS.md`](AGENTS.md)
+- Installed-user guide: [`docs/installed-with-uv.md`](docs/installed-with-uv.md)
+- Uninstall and cleanup guide: [`docs/uninstall.md`](docs/uninstall.md)
 - Explore-to-task skill: [`skills/browser-cli-explore-delivery/SKILL.md`](skills/browser-cli-explore-delivery/SKILL.md)
 - Smoke checklist: [`docs/smoke-checklist.md`](docs/smoke-checklist.md)
 

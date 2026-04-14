@@ -348,8 +348,8 @@ class BrowserDaemonApp:
         return {"page": payload}
 
     async def _handle_resize(self, request: DaemonRequest) -> dict[str, Any]:
-        width = int(request.args.get("width") or 0)
-        height = int(request.args.get("height") or 0)
+        width = self._require_int(request.args, "width")
+        height = self._require_int(request.args, "height")
         if width <= 0 or height <= 0:
             raise InvalidInputError("width and height must be positive integers.")
         return await self._run_active_page_action(
@@ -473,43 +473,52 @@ class BrowserDaemonApp:
         )
 
     async def _handle_scroll(self, request: DaemonRequest) -> dict[str, Any]:
-        dx = int(request.args.get("dx") or 0)
-        dy = int(request.args.get("dy") or 700)
+        dx = self._optional_int(request.args, "dx") or 0
+        dy = self._optional_int(request.args, "dy") or 700
         return await self._run_active_page_action(
             request, lambda page_id: self._state.browser_service.wheel(page_id, dx=dx, dy=dy)
         )
 
     async def _handle_mouse_click(self, request: DaemonRequest) -> dict[str, Any]:
+        x = self._require_int(request.args, "x")
+        y = self._require_int(request.args, "y")
+        count = self._optional_int(request.args, "count") or 1
         return await self._run_active_page_action(
             request,
             lambda page_id: self._state.browser_service.mouse_click(
                 page_id,
-                x=int(request.args.get("x")),
-                y=int(request.args.get("y")),
+                x=x,
+                y=y,
                 button=str(request.args.get("button") or "left"),
-                count=int(request.args.get("count") or 1),
+                count=count,
             ),
         )
 
     async def _handle_mouse_move(self, request: DaemonRequest) -> dict[str, Any]:
+        x = self._require_int(request.args, "x")
+        y = self._require_int(request.args, "y")
         return await self._run_active_page_action(
             request,
             lambda page_id: self._state.browser_service.mouse_move(
                 page_id,
-                x=int(request.args.get("x")),
-                y=int(request.args.get("y")),
+                x=x,
+                y=y,
             ),
         )
 
     async def _handle_mouse_drag(self, request: DaemonRequest) -> dict[str, Any]:
+        x1 = self._require_int(request.args, "x1")
+        y1 = self._require_int(request.args, "y1")
+        x2 = self._require_int(request.args, "x2")
+        y2 = self._require_int(request.args, "y2")
         return await self._run_active_page_action(
             request,
             lambda page_id: self._state.browser_service.mouse_drag(
                 page_id,
-                x1=int(request.args.get("x1")),
-                y1=int(request.args.get("y1")),
-                x2=int(request.args.get("x2")),
-                y2=int(request.args.get("y2")),
+                x1=x1,
+                y1=y1,
+                x2=x2,
+                y2=y2,
             ),
         )
 
@@ -545,7 +554,7 @@ class BrowserDaemonApp:
         )
 
     async def _handle_wait(self, request: DaemonRequest) -> dict[str, Any]:
-        seconds = request.args.get("seconds")
+        seconds = self._optional_float(request.args, "seconds")
         text = request.args.get("text")
         gone = bool(request.args.get("gone"))
         exact = bool(request.args.get("exact"))
@@ -553,7 +562,7 @@ class BrowserDaemonApp:
             request,
             lambda page_id: self._state.browser_service.wait(
                 page_id,
-                seconds=float(seconds) if seconds is not None else None,
+                seconds=seconds,
                 text=str(text) if text else None,
                 gone=gone,
                 exact=exact,
@@ -561,7 +570,7 @@ class BrowserDaemonApp:
         )
 
     async def _handle_wait_network(self, request: DaemonRequest) -> dict[str, Any]:
-        timeout_seconds = float(request.args.get("timeout") or 30.0)
+        timeout_seconds = self._optional_float(request.args, "timeout") or 30.0
         return await self._run_active_page_action(
             request,
             lambda page_id: self._state.browser_service.wait_for_network_idle(
@@ -612,7 +621,7 @@ class BrowserDaemonApp:
 
     async def _handle_network_wait(self, request: DaemonRequest) -> dict[str, Any]:
         filters = self._network_filters_from_request(request.args)
-        timeout_seconds = float(request.args.get("timeout_seconds") or 30.0)
+        timeout_seconds = self._optional_float(request.args, "timeout_seconds") or 30.0
         return await self._run_active_page_action(
             request,
             lambda page_id: self._state.browser_service.wait_for_network_record(
@@ -686,9 +695,7 @@ class BrowserDaemonApp:
                 value=self._require_str(request.args, "value"),
                 domain=self._optional_str(request.args, "domain"),
                 path=str(request.args.get("path") or "/"),
-                expires=float(request.args["expires"])
-                if request.args.get("expires") is not None
-                else None,
+                expires=self._optional_float(request.args, "expires"),
                 http_only=bool(request.args.get("http_only")),
                 secure=bool(request.args.get("secure")),
                 same_site=self._optional_str(request.args, "same_site"),
@@ -725,7 +732,7 @@ class BrowserDaemonApp:
     async def _handle_verify_text(self, request: DaemonRequest) -> dict[str, Any]:
         text = self._require_str(request.args, "text")
         exact = bool(request.args.get("exact"))
-        timeout = float(request.args.get("timeout") or 5.0)
+        timeout = self._optional_float(request.args, "timeout") or 5.0
         return await self._run_active_page_action(
             request,
             lambda page_id: self._state.browser_service.verify_text(
@@ -736,7 +743,7 @@ class BrowserDaemonApp:
     async def _handle_verify_visible(self, request: DaemonRequest) -> dict[str, Any]:
         role = self._require_str(request.args, "role")
         name = self._require_str(request.args, "name")
-        timeout = float(request.args.get("timeout") or 5.0)
+        timeout = self._optional_float(request.args, "timeout") or 5.0
         return await self._run_active_page_action(
             request,
             lambda page_id: self._state.browser_service.verify_visible(
@@ -811,14 +818,14 @@ class BrowserDaemonApp:
         )
 
     async def _handle_video_start(self, request: DaemonRequest) -> dict[str, Any]:
-        width = request.args.get("width")
-        height = request.args.get("height")
+        width = self._optional_int(request.args, "width")
+        height = self._optional_int(request.args, "height")
         return await self._run_active_page_action(
             request,
             lambda page_id: self._state.browser_service.start_video(
                 page_id,
-                width=int(width) if width is not None else None,
-                height=int(height) if height is not None else None,
+                width=width,
+                height=height,
             ),
         )
 
@@ -864,13 +871,52 @@ class BrowserDaemonApp:
         return value or None
 
     @classmethod
+    def _require_int(cls, args: dict[str, Any], key: str) -> int:
+        raw = args.get(key)
+        if raw is None or str(raw).strip() == "":
+            raise InvalidInputError(f"{key} is required.")
+        try:
+            return int(raw)
+        except (TypeError, ValueError) as exc:
+            raise InvalidInputError(f"{key} must be an integer.") from exc
+
+    @classmethod
+    def _optional_int(cls, args: dict[str, Any], key: str) -> int | None:
+        raw = args.get(key)
+        if raw is None or str(raw).strip() == "":
+            return None
+        try:
+            return int(raw)
+        except (TypeError, ValueError) as exc:
+            raise InvalidInputError(f"{key} must be an integer.") from exc
+
+    @classmethod
+    def _require_float(cls, args: dict[str, Any], key: str) -> float:
+        raw = args.get(key)
+        if raw is None or str(raw).strip() == "":
+            raise InvalidInputError(f"{key} is required.")
+        try:
+            return float(raw)
+        except (TypeError, ValueError) as exc:
+            raise InvalidInputError(f"{key} must be a number.") from exc
+
+    @classmethod
+    def _optional_float(cls, args: dict[str, Any], key: str) -> float | None:
+        raw = args.get(key)
+        if raw is None or str(raw).strip() == "":
+            return None
+        try:
+            return float(raw)
+        except (TypeError, ValueError) as exc:
+            raise InvalidInputError(f"{key} must be a number.") from exc
+
+    @classmethod
     def _network_filters_from_request(cls, args: dict[str, Any]) -> dict[str, Any]:
-        status = args.get("status")
         return {
             "url_contains": cls._optional_str(args, "url_contains"),
             "url_regex": cls._optional_str(args, "url_regex"),
             "method": cls._optional_str(args, "method"),
-            "status": int(status) if status is not None else None,
+            "status": cls._optional_int(args, "status"),
             "resource_type": cls._optional_str(args, "resource_type"),
             "mime_contains": cls._optional_str(args, "mime_contains"),
             "include_static": bool(args.get("include_static")),

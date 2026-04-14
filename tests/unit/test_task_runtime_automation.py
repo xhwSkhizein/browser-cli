@@ -6,7 +6,7 @@ import pytest
 
 from browser_cli.automation.hooks import run_hook_commands
 from browser_cli.automation.loader import load_automation_manifest
-from browser_cli.automation.models import manifest_to_persisted_definition
+from browser_cli.automation.projections import manifest_to_persisted_definition
 from browser_cli.task_runtime import parse_input_overrides
 from browser_cli.task_runtime.models import TaskMetadataError, validate_task_metadata
 
@@ -79,6 +79,7 @@ def test_load_automation_manifest_preserves_retry_backoff_and_stdout(tmp_path: P
     assert persisted.stdout_mode == "text"
     assert persisted.retry_backoff_seconds == 7
     assert persisted.timeout_seconds == 12.5
+    assert persisted.log_level == "info"
 
 
 def test_run_hook_commands_executes_shell_commands(tmp_path: Path) -> None:

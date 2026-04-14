@@ -83,6 +83,7 @@ class PersistedAutomationDefinition:
     retry_attempts: int = 0
     retry_backoff_seconds: int = 0
     timeout_seconds: float | None = None
+    log_level: str = "info"
     created_at: str | None = None
     updated_at: str | None = None
     last_run_at: str | None = None
@@ -121,26 +122,6 @@ def manifest_to_persisted_definition(
     *,
     enabled: bool = False,
 ) -> PersistedAutomationDefinition:
-    return PersistedAutomationDefinition(
-        id=manifest.automation.id,
-        name=manifest.automation.name,
-        task_path=manifest.task.path,
-        task_meta_path=manifest.task.meta_path,
-        output_dir=manifest.outputs.artifact_dir,
-        description=manifest.automation.description,
-        version=str(manifest.automation.version),
-        entrypoint=manifest.task.entrypoint,
-        enabled=enabled,
-        schedule_kind=str(manifest.schedule.get("mode") or "manual"),
-        schedule_payload=dict(manifest.schedule),
-        timezone=str(manifest.schedule.get("timezone") or "UTC"),
-        result_json_path=manifest.outputs.result_json_path,
-        stdout_mode=manifest.outputs.stdout,
-        input_overrides=dict(manifest.inputs),
-        before_run_hooks=manifest.hooks.before_run,
-        after_success_hooks=manifest.hooks.after_success,
-        after_failure_hooks=manifest.hooks.after_failure,
-        retry_attempts=manifest.runtime.retry_attempts,
-        retry_backoff_seconds=manifest.runtime.retry_backoff_seconds,
-        timeout_seconds=manifest.runtime.timeout_seconds,
-    )
+    from browser_cli.automation.projections import manifest_to_persisted_definition as _impl
+
+    return _impl(manifest, enabled=enabled)

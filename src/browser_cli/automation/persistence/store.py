@@ -63,6 +63,7 @@ class AutomationStore:
                     retry_attempts INTEGER NOT NULL DEFAULT 0,
                     retry_backoff_seconds INTEGER NOT NULL DEFAULT 0,
                     timeout_seconds REAL,
+                    log_level TEXT NOT NULL DEFAULT 'info',
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
                     last_run_at TEXT,
@@ -100,6 +101,25 @@ class AutomationStore:
                     ON automation_run_events(run_id, created_at ASC);
                 """
             )
+            self._ensure_column(
+                conn,
+                "automations",
+                "log_level",
+                "TEXT NOT NULL DEFAULT 'info'",
+            )
+
+    @staticmethod
+    def _ensure_column(
+        conn: sqlite3.Connection,
+        table: str,
+        column: str,
+        ddl: str,
+    ) -> None:
+        columns = {
+            str(row["name"]) for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
+        }
+        if column not in columns:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
@@ -126,14 +146,14 @@ class AutomationStore:
                     schedule_payload_json, timezone, output_dir, result_json_path, stdout_mode,
                     input_overrides_json, before_run_hooks_json, after_success_hooks_json,
                     after_failure_hooks_json, retry_attempts, retry_backoff_seconds,
-                    timeout_seconds, created_at, updated_at, last_run_at, next_run_at
+                    timeout_seconds, log_level, created_at, updated_at, last_run_at, next_run_at
                 ) VALUES (
                     :id, :name, :description, :version, :task_path, :task_meta_path, :entrypoint,
                     :enabled, :definition_status, :definition_error, :schedule_kind,
                     :schedule_payload_json, :timezone, :output_dir, :result_json_path, :stdout_mode,
                     :input_overrides_json, :before_run_hooks_json, :after_success_hooks_json,
                     :after_failure_hooks_json, :retry_attempts, :retry_backoff_seconds,
-                    :timeout_seconds, :created_at, :updated_at, :last_run_at, :next_run_at
+                    :timeout_seconds, :log_level, :created_at, :updated_at, :last_run_at, :next_run_at
                 )
                 ON CONFLICT(id) DO UPDATE SET
                     name = excluded.name,
@@ -158,6 +178,7 @@ class AutomationStore:
                     retry_attempts = excluded.retry_attempts,
                     retry_backoff_seconds = excluded.retry_backoff_seconds,
                     timeout_seconds = excluded.timeout_seconds,
+                    log_level = excluded.log_level,
                     updated_at = excluded.updated_at,
                     next_run_at = excluded.next_run_at
                 """,
@@ -557,6 +578,7 @@ def _automation_to_row(automation: PersistedAutomationDefinition) -> dict[str, A
         "retry_attempts": automation.retry_attempts,
         "retry_backoff_seconds": automation.retry_backoff_seconds,
         "timeout_seconds": automation.timeout_seconds,
+        "log_level": automation.log_level,
         "created_at": automation.created_at,
         "updated_at": automation.updated_at,
         "last_run_at": automation.last_run_at,
@@ -591,6 +613,7 @@ def _row_to_automation(row: sqlite3.Row) -> PersistedAutomationDefinition:
         timeout_seconds=float(row["timeout_seconds"])
         if row["timeout_seconds"] is not None
         else None,
+        log_level=str(row["log_level"] or "info"),
         created_at=str(row["created_at"]) if row["created_at"] else None,
         updated_at=str(row["updated_at"]) if row["updated_at"] else None,
         last_run_at=str(row["last_run_at"]) if row["last_run_at"] else None,

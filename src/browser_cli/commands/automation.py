@@ -8,6 +8,12 @@ from pathlib import Path
 
 from browser_cli.automation import load_automation_manifest, publish_task_dir
 from browser_cli.automation.models import AutomationManifest
+from browser_cli.automation.projections import (
+    manifest_to_config_payload,
+    manifest_to_persisted_definition,
+    payload_to_persisted_definition,
+    persisted_definition_to_config_payload,
+)
 from browser_cli.automation.service.client import (
     automation_service_ui_url,
     ensure_automation_service_running,
@@ -86,6 +92,13 @@ def run_automation_command(args: Namespace) -> str:
         )
         versions = _load_snapshot_versions(args.automation_id)
         live_automation_data = dict(payload.get("data") or {})
+        live_config = (
+            persisted_definition_to_config_payload(
+                payload_to_persisted_definition(live_automation_data)
+            )
+            if live_automation_data
+            else None
+        )
         selected = (
             _select_snapshot_version(
                 args.automation_id,
@@ -113,7 +126,7 @@ def run_automation_command(args: Namespace) -> str:
                 "data": {
                     "snapshot_config": snapshot_config,
                     "snapshot_config_error": snapshot_config_error,
-                    "live_config": live_automation_data,
+                    "live_config": live_config,
                     "versions": versions,
                     "selected_version": selected,
                     "latest_run": latest_run_payload,
@@ -131,12 +144,15 @@ def run_automation_command(args: Namespace) -> str:
     if subcommand == "import":
         ensure_automation_service_running()
         manifest = load_automation_manifest(args.path)
+        automation = manifest_to_persisted_definition(
+            manifest, enabled=bool(getattr(args, "enable", False))
+        )
+        body = persisted_definition_to_config_payload(automation)
+        body["enabled"] = automation.enabled
         payload = request_automation_service(
             "POST",
             "/api/automations",
-            body=_manifest_to_automation_payload(
-                manifest, enabled=bool(getattr(args, "enable", False))
-            ),
+            body=body,
             start_if_needed=False,
         )
         payload["meta"] = {"action": "automation-import"}
@@ -285,63 +301,4 @@ def _load_snapshot_manifest(path: Path) -> tuple[AutomationManifest | None, str 
 
 
 def _snapshot_manifest_to_automation_payload(manifest: AutomationManifest) -> dict[str, object]:
-    schedule = dict(manifest.schedule)
-    return {
-        "id": manifest.automation.id,
-        "name": manifest.automation.name,
-        "description": manifest.automation.description,
-        "version": manifest.automation.version,
-        "task_path": str(manifest.task.path),
-        "task_meta_path": str(manifest.task.meta_path),
-        "entrypoint": manifest.task.entrypoint,
-        "enabled": None,
-        "definition_status": "snapshot",
-        "definition_error": None,
-        "schedule_kind": str(schedule.get("mode") or "manual"),
-        "schedule_payload": schedule,
-        "timezone": str(schedule.get("timezone") or "UTC"),
-        "output_dir": str(manifest.outputs.artifact_dir),
-        "result_json_path": str(manifest.outputs.result_json_path)
-        if manifest.outputs.result_json_path
-        else None,
-        "stdout_mode": manifest.outputs.stdout,
-        "input_overrides": dict(manifest.inputs),
-        "before_run_hooks": list(manifest.hooks.before_run),
-        "after_success_hooks": list(manifest.hooks.after_success),
-        "after_failure_hooks": list(manifest.hooks.after_failure),
-        "retry_attempts": int(manifest.runtime.retry_attempts or 0),
-        "retry_backoff_seconds": int(manifest.runtime.retry_backoff_seconds or 0),
-        "timeout_seconds": manifest.runtime.timeout_seconds,
-        "created_at": None,
-        "updated_at": None,
-        "last_run_at": None,
-        "next_run_at": None,
-        "latest_run": None,
-    }
-
-
-def _manifest_to_automation_payload(manifest, *, enabled: bool) -> dict[str, object]:
-    schedule = dict(manifest.schedule)
-    return {
-        "id": manifest.automation.id,
-        "name": manifest.automation.name,
-        "description": manifest.automation.description,
-        "version": manifest.automation.version,
-        "task_path": str(manifest.task.path),
-        "task_meta_path": str(manifest.task.meta_path),
-        "entrypoint": manifest.task.entrypoint,
-        "enabled": enabled,
-        "schedule_kind": str(schedule.get("mode") or "manual"),
-        "schedule_payload": schedule,
-        "timezone": str(schedule.get("timezone") or "UTC"),
-        "output_dir": str(manifest.outputs.artifact_dir),
-        "result_json_path": str(manifest.outputs.result_json_path or ""),
-        "stdout_mode": manifest.outputs.stdout,
-        "input_overrides": dict(manifest.inputs),
-        "before_run_hooks": list(manifest.hooks.before_run),
-        "after_success_hooks": list(manifest.hooks.after_success),
-        "after_failure_hooks": list(manifest.hooks.after_failure),
-        "retry_attempts": int(manifest.runtime.retry_attempts or 0),
-        "retry_backoff_seconds": int(manifest.runtime.retry_backoff_seconds or 0),
-        "timeout_seconds": manifest.runtime.timeout_seconds,
-    }
+    return manifest_to_config_payload(manifest)
