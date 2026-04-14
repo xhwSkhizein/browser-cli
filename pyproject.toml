@@ -3,7 +3,7 @@ requires = ["setuptools>=69", "setuptools-scm>=8.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "browser-cli"
+name = "browserctl"
 description = "CLI-first browser reader for rendered HTML and page snapshots"
 dynamic = ["version"]
 readme = "README.md"

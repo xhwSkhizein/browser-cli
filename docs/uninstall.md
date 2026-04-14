@@ -84,7 +84,7 @@ Removing Browser CLI home deletes:
 If you also installed Browser CLI as a uv tool, remove it separately:
 
 ```bash
-uv tool uninstall browser-cli
+uv tool uninstall browserctl
 ```
 
 This does not remove:

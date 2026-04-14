@@ -30,10 +30,13 @@ Requirements:
 Typical install flow:
 
 ```bash
-uv tool install browser-cli
+uv tool install browserctl
 browser-cli doctor
 browser-cli paths
 ```
+
+The published package name is `browserctl`. The installed command remains
+`browser-cli`.
 
 If `browser-cli` is not on your shell `PATH`, inspect the tool bin directory
 with:
@@ -57,7 +60,7 @@ browser-cli read https://example.com --scroll-bottom
 If you do not want a persistent install, run Browser CLI directly with `uvx`:
 
 ```bash
-uvx browser-cli read https://example.com
+uvx --from browserctl browser-cli read https://example.com
 ```
 
 ## Install From Git

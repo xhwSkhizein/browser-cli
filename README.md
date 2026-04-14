@@ -61,16 +61,19 @@ Requirements:
 Install as a tool:
 
 ```bash
-uv tool install browser-cli
+uv tool install browserctl
 browser-cli doctor
 browser-cli paths
 browser-cli read https://example.com
 ```
 
+The published package name is `browserctl`. The installed command remains
+`browser-cli`.
+
 Run without installing:
 
 ```bash
-uvx browser-cli read https://example.com
+uvx --from browserctl browser-cli read https://example.com
 ```
 
 Install from Git:

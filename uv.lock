@@ -3,7 +3,7 @@ revision = 3
 requires-python = ">=3.10"
 
 [[package]]
-name = "browser-cli"
+name = "browserctl"
 source = { editable = "." }
 dependencies = [
     { name = "playwright" },

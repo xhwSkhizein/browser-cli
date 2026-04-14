@@ -81,7 +81,7 @@ def _package_check() -> DoctorCheck:
             id="package",
             status="fail",
             summary="Python package import failed.",
-            next="reinstall browser-cli in this Python environment and re-run browser-cli doctor",
+            next="reinstall browserctl in this Python environment and re-run browser-cli doctor",
         )
     return DoctorCheck(
         id="package",
@@ -116,7 +116,7 @@ def _playwright_check() -> DoctorCheck:
             status="fail",
             summary="Playwright Python package is not installed.",
             next=(
-                "reinstall browser-cli with uv tool install --reinstall browser-cli, "
+                "reinstall browserctl with uv tool install --reinstall browserctl, "
                 "or run uv sync --dev in a repository checkout, then re-run browser-cli doctor"
             ),
         )
