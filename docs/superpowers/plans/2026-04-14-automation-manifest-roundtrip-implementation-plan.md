@@ -43,7 +43,7 @@
 - Create: `tests/unit/test_automation_projections.py`
 - Test: `tests/unit/test_automation_projections.py`
 
-- [ ] **Step 1: Write failing projection regression tests**
+- [x] **Step 1: Write failing projection regression tests**
 
 Create `tests/unit/test_automation_projections.py`:
 
@@ -267,7 +267,7 @@ git commit -m "test: add automation projection round-trip regressions"
 - Test: `tests/unit/test_automation_projections.py`
 - Test: `tests/unit/test_task_runtime_automation.py`
 
-- [ ] **Step 1: Implement shared projection helpers**
+- [x] **Step 1: Implement shared projection helpers**
 
 Create `src/browser_cli/automation/projections.py`:
 
@@ -509,7 +509,7 @@ def _remap_result_json_path(
     return target_artifact_dir / relative
 ```
 
-- [ ] **Step 2: Convert `models.py` into a compatibility wrapper**
+- [x] **Step 2: Convert `models.py` into a compatibility wrapper**
 
 Update `src/browser_cli/automation/models.py`:
 
@@ -526,7 +526,7 @@ def manifest_to_persisted_definition(
     return _impl(manifest, enabled=enabled)
 ```
 
-- [ ] **Step 3: Point the existing manifest regression test at the shared behavior**
+- [x] **Step 3: Point the existing manifest regression test at the shared behavior**
 
 Update `tests/unit/test_task_runtime_automation.py`:
 
@@ -541,7 +541,7 @@ continues covering the new projection module, and append:
     assert persisted.log_level == "info"
 ```
 
-- [ ] **Step 4: Run the focused projection suites**
+- [x] **Step 4: Run the focused projection suites**
 
 Run:
 
@@ -569,7 +569,7 @@ git commit -m "refactor: add shared automation projections"
 - Test: `tests/unit/test_automation_publish.py`
 - Test: `tests/unit/test_automation_api.py`
 
-- [ ] **Step 1: Add failing publish and export regressions for the remaining supported fields**
+- [x] **Step 1: Add failing publish and export regressions for the remaining supported fields**
 
 Append to `tests/unit/test_automation_publish.py`:
 
@@ -694,7 +694,7 @@ uv run pytest tests/unit/test_automation_publish.py tests/unit/test_automation_a
 
 Expected: FAIL because publish and export still use local assembly code paths that do not share the new projection layer.
 
-- [ ] **Step 2: Refactor publish and API export/import serialization**
+- [x] **Step 2: Refactor publish and API export/import serialization**
 
 Update `src/browser_cli/automation/publisher.py`:
 
@@ -829,7 +829,7 @@ And wire the row conversion helpers:
 Delete `_automation_to_toml()` and `_payload_to_automation()` after routing all
 callers through the shared projection layer.
 
-- [ ] **Step 3: Run the focused publish and API suites**
+- [x] **Step 3: Run the focused publish and API suites**
 
 Run:
 
@@ -839,7 +839,7 @@ uv run pytest tests/unit/test_automation_publish.py tests/unit/test_automation_a
 
 Expected: PASS
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/browser_cli/automation/publisher.py src/browser_cli/automation/api/server.py tests/unit/test_automation_publish.py tests/unit/test_automation_api.py
@@ -853,7 +853,7 @@ git commit -m "refactor: route automation publish and export through projections
 - Modify: `tests/unit/test_automation_commands.py`
 - Test: `tests/unit/test_automation_commands.py`
 
-- [ ] **Step 1: Add a failing inspect parity regression**
+- [x] **Step 1: Add a failing inspect parity regression**
 
 Append to `tests/unit/test_automation_commands.py`:
 
@@ -965,7 +965,7 @@ uv run pytest tests/unit/test_automation_commands.py -v
 Expected: FAIL because `snapshot_config` and `live_config` are still built by
 different code paths with different field sets and runtime defaults.
 
-- [ ] **Step 2: Route inspect config rendering through shared projections**
+- [x] **Step 2: Route inspect config rendering through shared projections**
 
 Update `src/browser_cli/commands/automation.py`:
 
@@ -1008,7 +1008,7 @@ And return:
 
 Keep `latest_run`, `versions`, and `summary` as separate operational sections.
 
-- [ ] **Step 3: Run the inspect command suite**
+- [x] **Step 3: Run the inspect command suite**
 
 Run:
 
@@ -1035,7 +1035,7 @@ git commit -m "fix: align automation inspect config views"
 - Test: `tests/unit/test_automation_api.py`
 - Test: `tests/unit/test_automation_commands.py`
 
-- [ ] **Step 1: Run the focused automation round-trip suites**
+- [x] **Step 1: Run the focused automation round-trip suites**
 
 Run:
 
@@ -1050,7 +1050,7 @@ uv run pytest \
 
 Expected: PASS
 
-- [ ] **Step 2: Run repository validation**
+- [x] **Step 2: Run repository validation**
 
 Run:
 
@@ -1062,7 +1062,7 @@ Run:
 
 Expected: all three scripts exit `0`.
 
-- [ ] **Step 3: Update this plan file to mark the completed steps**
+- [x] **Step 3: Update this plan file to mark the completed steps**
 
 Update the completed steps in this file:
 
