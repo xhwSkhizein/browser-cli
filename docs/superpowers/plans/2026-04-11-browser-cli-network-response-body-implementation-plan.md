@@ -103,7 +103,9 @@ docs/
   superpowers/specs/
   superpowers/plans/
 skills/
-  browser-cli-explore-delivery/
+  browser-cli-delivery/
+  browser-cli-explore/
+  browser-cli-converge/
 ```
 
 The exact file split may evolve during implementation, but the old page-runtime
@@ -350,4 +352,3 @@ Before calling the work complete, verify:
 - large bodies do not cause uncontrolled memory growth
 - extension and Playwright backends pass the same public expectations
 - no old request-only `network` semantics remain in code or docs
-

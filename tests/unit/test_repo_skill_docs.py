@@ -12,18 +12,24 @@ def _read(path: str) -> str:
 
 
 def test_browser_cli_skill_topology_exists() -> None:
-    root = _repo_root()
+    skills_dir = _repo_root() / "skills"
+    actual = {
+        path.name
+        for path in skills_dir.iterdir()
+        if path.is_dir() and path.name.startswith("browser-cli-")
+    }
 
-    assert (root / "skills" / "browser-cli-delivery" / "SKILL.md").exists()
-    assert (root / "skills" / "browser-cli-explore" / "SKILL.md").exists()
-    assert (root / "skills" / "browser-cli-converge" / "SKILL.md").exists()
+    assert actual == {
+        "browser-cli-delivery",
+        "browser-cli-explore",
+        "browser-cli-converge",
+    }
 
 
 def test_agents_points_to_browser_cli_delivery_skill() -> None:
     agents_text = _read("AGENTS.md")
 
     assert "skills/browser-cli-delivery/SKILL.md" in agents_text
-    assert "skills/browser-cli-explore-delivery/SKILL.md" not in agents_text
 
 
 def test_browser_cli_explore_skill_records_feedback_into_task_metadata() -> None:
@@ -58,12 +64,3 @@ def test_browser_cli_delivery_skill_orchestrates_explore_converge_and_optional_a
     assert "automation.toml" in skill_text
     assert "publish" in skill_text
     assert "If validation fails because evidence is missing, go back to explore" in skill_text
-
-
-def test_legacy_browser_cli_explore_delivery_skill_redirects_to_new_entrypoint() -> None:
-    skill_text = _read("skills/browser-cli-explore-delivery/SKILL.md")
-
-    assert "Compatibility wrapper" in skill_text
-    assert "browser-cli-delivery" in skill_text
-    assert "browser-cli-explore" in skill_text
-    assert "browser-cli-converge" in skill_text

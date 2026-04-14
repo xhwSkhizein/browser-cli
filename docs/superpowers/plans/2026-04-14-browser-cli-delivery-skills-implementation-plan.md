@@ -4,7 +4,7 @@
 
 **Goal:** Replace the single delivery-oriented skill with a three-skill Browser CLI delivery stack that captures exploration feedback into `task.meta.json`, converges validated paths into `task.py`, and keeps `automation.toml` plus publish optional.
 
-**Architecture:** Add three new skills under `skills/` with clear role boundaries: `browser-cli-delivery` as the orchestrator, `browser-cli-explore` as the metadata-first exploration skill, and `browser-cli-converge` as the task-code convergence skill. Lock the new topology with repo text-contract tests, update `AGENTS.md` to point maintainers at the new entrypoint, and keep `skills/browser-cli-explore-delivery/SKILL.md` as a compatibility wrapper instead of the primary workflow definition.
+**Architecture:** Add three new skills under `skills/` with clear role boundaries: `browser-cli-delivery` as the orchestrator, `browser-cli-explore` as the metadata-first exploration skill, and `browser-cli-converge` as the task-code convergence skill. Lock the new topology with repo text-contract tests, update `AGENTS.md` to point maintainers at the new entrypoint, and remove the legacy single-skill directory after its references are cleaned up.
 
 **Tech Stack:** Markdown skill docs, pytest repo text-contract tests, AGENTS.md repository guidance, Browser CLI task and automation contracts
 
@@ -20,8 +20,6 @@
   Responsibility: convergence rules for `task.py`, `Flow` usage, metadata-code alignment, task validation.
 - Create: `tests/unit/test_repo_skill_docs.py`
   Responsibility: lock the new skill topology and the required contract text so future edits do not drift back to the old single-skill model.
-- Modify: `skills/browser-cli-explore-delivery/SKILL.md`
-  Responsibility: compatibility wrapper that redirects callers to `browser-cli-delivery` while preserving migration context.
 - Modify: `AGENTS.md`
   Responsibility: point Browser CLI maintainers to the new top-level skill instead of the old one.
 - Modify: `docs/superpowers/plans/2026-04-14-browser-cli-delivery-skills-implementation-plan.md`
@@ -61,7 +59,6 @@ def test_agents_points_to_browser_cli_delivery_skill() -> None:
     agents_text = _read("AGENTS.md")
 
     assert "skills/browser-cli-delivery/SKILL.md" in agents_text
-    assert "skills/browser-cli-explore-delivery/SKILL.md" not in agents_text
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
@@ -505,69 +502,56 @@ git add tests/unit/test_repo_skill_docs.py skills/browser-cli-delivery/SKILL.md
 git commit -m "docs: add browser-cli delivery skill"
 ```
 
-## Task 5: Convert The Legacy Skill Into A Compatibility Wrapper
+## Task 5: Remove The Legacy Single-Skill Directory
 
 **Files:**
-- Modify: `skills/browser-cli-explore-delivery/SKILL.md`
+- Delete: the legacy Browser CLI single-skill directory and its helper files
 - Modify: `tests/unit/test_repo_skill_docs.py`
 - Test: `tests/unit/test_repo_skill_docs.py`
 
-- [ ] **Step 1: Extend the repo text-contract test for legacy redirection**
+- [ ] **Step 1: Extend the repo text-contract test so only the new skill directories remain**
 
 Append to `tests/unit/test_repo_skill_docs.py`:
 
 ```python
-def test_legacy_browser_cli_explore_delivery_skill_redirects_to_new_entrypoint() -> None:
-    skill_text = _read("skills/browser-cli-explore-delivery/SKILL.md")
+def test_browser_cli_skill_topology_exists() -> None:
+    skills_dir = _repo_root() / "skills"
+    actual = {
+        path.name
+        for path in skills_dir.iterdir()
+        if path.is_dir() and path.name.startswith("browser-cli-")
+    }
 
-    assert "Compatibility wrapper" in skill_text
-    assert "browser-cli-delivery" in skill_text
-    assert "browser-cli-explore" in skill_text
-    assert "browser-cli-converge" in skill_text
+    assert actual == {
+        "browser-cli-delivery",
+        "browser-cli-explore",
+        "browser-cli-converge",
+    }
 ```
 
-- [ ] **Step 2: Run the legacy wrapper test to verify it fails**
+- [ ] **Step 2: Run the topology test to verify it fails**
 
 Run:
 
 ```bash
-pytest tests/unit/test_repo_skill_docs.py::test_legacy_browser_cli_explore_delivery_skill_redirects_to_new_entrypoint -v
+pytest tests/unit/test_repo_skill_docs.py::test_browser_cli_skill_topology_exists -v
 ```
 
-Expected: FAIL because the legacy skill still contains the old single-skill workflow.
+Expected: FAIL because the legacy skill directory still exists.
 
-- [ ] **Step 3: Replace the old body with a compact compatibility wrapper**
+- [ ] **Step 3: Delete the legacy single-skill directory and its reference files**
 
-Write `skills/browser-cli-explore-delivery/SKILL.md`:
+Delete:
 
-```markdown
----
-name: browser-cli-explore-delivery
-description: Compatibility wrapper for the newer Browser CLI delivery skill stack.
----
+- the legacy Browser CLI single-skill directory under `skills/`
+- its helper files under `agents/` and `references/`
 
-# Browser CLI Explore Delivery
-
-Compatibility wrapper.
-
-Use `browser-cli-delivery` as the main entrypoint for Browser CLI task delivery.
-
-- `browser-cli-explore` owns Browser CLI exploration and feedback capture into
-  `task.meta.json`
-- `browser-cli-converge` owns convergence into `task.py`
-- `browser-cli-delivery` owns stage transitions, validation rollback, optional
-  `automation.toml`, and optional publish
-
-Do not extend this wrapper with new primary workflow logic. Put new delivery
-guidance in the three new skills.
-```
-
-- [ ] **Step 4: Run the legacy wrapper test to verify it passes**
+- [ ] **Step 4: Run the topology test to verify it passes**
 
 Run:
 
 ```bash
-pytest tests/unit/test_repo_skill_docs.py::test_legacy_browser_cli_explore_delivery_skill_redirects_to_new_entrypoint -v
+pytest tests/unit/test_repo_skill_docs.py::test_browser_cli_skill_topology_exists -v
 ```
 
 Expected: PASS
@@ -575,8 +559,9 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add tests/unit/test_repo_skill_docs.py skills/browser-cli-explore-delivery/SKILL.md
-git commit -m "docs: redirect legacy browser-cli delivery skill"
+git add tests/unit/test_repo_skill_docs.py
+git rm -r <legacy-skill-dir>
+git commit -m "docs: remove legacy browser-cli delivery skill"
 ```
 
 ## Task 6: Run Full Validation And Record The Final State
@@ -628,7 +613,7 @@ Expected: exit code 0
 - [ ] **Step 5: Commit the completed delivery-skill migration**
 
 ```bash
-git add skills/browser-cli-delivery/SKILL.md skills/browser-cli-explore/SKILL.md skills/browser-cli-converge/SKILL.md skills/browser-cli-explore-delivery/SKILL.md AGENTS.md tests/unit/test_repo_skill_docs.py docs/superpowers/plans/2026-04-14-browser-cli-delivery-skills-implementation-plan.md
+git add skills/browser-cli-delivery/SKILL.md skills/browser-cli-explore/SKILL.md skills/browser-cli-converge/SKILL.md AGENTS.md tests/unit/test_repo_skill_docs.py docs/superpowers/plans/2026-04-14-browser-cli-delivery-skills-implementation-plan.md
 git commit -m "docs: add browser-cli delivery skill stack"
 ```
 

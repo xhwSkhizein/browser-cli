@@ -26,9 +26,7 @@ optional, user-driven branches rather than mandatory output.
 
 ## Problem Statement
 
-The current repository already contains a delivery-oriented skill:
-
-- `skills/browser-cli-explore-delivery/SKILL.md`
+The current repository previously relied on a single delivery-oriented skill.
 
 That skill points agents toward the right deliverables, but it still behaves
 mostly like a linear checklist. It does not yet make the core feedback loop the
@@ -450,21 +448,20 @@ skills/
     SKILL.md
 ```
 
-The existing `skills/browser-cli-explore-delivery/` material may be reused as
-source material, but it should not remain the primary design shape if it
-prevents the new layered model.
+Legacy single-skill guidance may be reused as source material, but it should
+not remain the primary design shape if it prevents the new layered model.
 
 ## Migration Guidance
 
-This design does not require immediate deletion of the existing delivery skill.
+This design allows the old single-skill layout to be retired after references
+have been updated.
 
 A safe migration path is:
 
 1. add the three new skills
-2. port the reusable repository-specific guidance from the old skill
-3. update references or documentation that point to the old skill
-4. decide later whether the old skill becomes a compatibility wrapper or is
-   removed
+2. port the reusable repository-specific guidance into the new skills
+3. update references or documentation that point to the legacy layout
+4. remove the legacy directory once the repository no longer depends on it
 
 ## Open Questions
 

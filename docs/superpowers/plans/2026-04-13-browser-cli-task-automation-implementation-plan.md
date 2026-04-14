@@ -85,10 +85,12 @@
   - Reframe the product around task and automation.
 - `AGENTS.md`
   - Update durable navigation guidance, code map entries, and debugging paths.
-- `skills/browser-cli-explore-delivery/SKILL.md`
-  - Require canonical task templates and `browser-cli task validate`.
-- `skills/browser-cli-explore-delivery/references/preflight-and-runtime.md`
-  - Update task execution/publish guidance.
+- `skills/browser-cli-delivery/SKILL.md`
+  - Define orchestration, validation rollback, and optional automation gating.
+- `skills/browser-cli-explore/SKILL.md`
+  - Capture task execution and exploration guidance.
+- `skills/browser-cli-converge/SKILL.md`
+  - Capture task-code convergence and validation guidance.
 - `scripts/guards/product_contracts.py`
   - Freeze the new top-level `task` and `automation` surfaces.
 - `scripts/guards/architecture.py`
@@ -1125,8 +1127,9 @@ git commit -m "refactor: remove legacy workflow surface"
 **Files:**
 - Modify: `README.md`
 - Modify: `AGENTS.md`
-- Modify: `skills/browser-cli-explore-delivery/SKILL.md`
-- Modify: `skills/browser-cli-explore-delivery/references/preflight-and-runtime.md`
+- Create: `skills/browser-cli-delivery/SKILL.md`
+- Create: `skills/browser-cli-explore/SKILL.md`
+- Create: `skills/browser-cli-converge/SKILL.md`
 - Modify: `docs/smoke-checklist.md`
 - Create: `docs/examples/task-and-automation.md`
 - Delete: `docs/examples/task-and-workflow.md`
@@ -1237,7 +1240,7 @@ Expected: PASS
 - [ ] **Step 7: Commit**
 
 ```bash
-git add README.md AGENTS.md skills/browser-cli-explore-delivery/SKILL.md skills/browser-cli-explore-delivery/references/preflight-and-runtime.md docs/smoke-checklist.md docs/examples/task-and-automation.md scripts/guards/product_contracts.py scripts/guards/architecture.py scripts/guards/docs_sync.py
+git add README.md AGENTS.md skills/browser-cli-delivery/SKILL.md skills/browser-cli-explore/SKILL.md skills/browser-cli-converge/SKILL.md docs/smoke-checklist.md docs/examples/task-and-automation.md scripts/guards/product_contracts.py scripts/guards/architecture.py scripts/guards/docs_sync.py
 git rm docs/examples/task-and-workflow.md
 git commit -m "docs: update task and automation guidance"
 ```
