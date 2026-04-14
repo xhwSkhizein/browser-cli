@@ -18,6 +18,9 @@ the implementation, and where should a change land first.
 
 - Primary interface is CLI.
 - Primary implementation language is Python.
+- Repository development is uv-only.
+- Repository dependency resolution is pinned through `uv.lock`.
+- Repository local Python selection is pinned through `.python-version`.
 - `read` stays intentionally small: one URL positional plus `--snapshot` and `--scroll-bottom`.
 - Managed profile mode is the default browser backend.
 - Managed profile mode uses Browser CLI's dedicated Chrome data root at `~/.browser-cli/default-profile`.
@@ -47,7 +50,7 @@ the implementation, and where should a change land first.
 
 - CLI shape, command names, help text, and top-level parser wiring:
   `src/browser_cli/cli/main.py`
-- Pip-user diagnostics:
+- Install and runtime diagnostics:
   `src/browser_cli/commands/doctor.py`
 - Runtime path discovery:
   `src/browser_cli/commands/paths.py`
@@ -248,6 +251,7 @@ public interactive commands.
 - The guard implementations live under `scripts/guards/`.
 - After each code change, run lint and guard as part of the full validation flow.
 - After each code change, run lint, tests, and guard.
+- After dependency metadata changes, run `uv sync --dev` before lint, tests, and guard.
 - After each code change, run `scripts/lint.sh`, `scripts/test.sh`, and `scripts/guard.sh`, or run `scripts/check.sh`.
 - When architecture, package boundaries, or frozen product decisions change, update `AGENTS.md` and the corresponding guard rules in the same change.
 - When a new top-level `browser_cli` package, public CLI surface, or major runtime contract is introduced, update both this file and the guard expectations before considering the change complete.

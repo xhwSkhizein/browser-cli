@@ -11,6 +11,9 @@ REQUIRED_AGENT_PHRASES = [
     "Extension mode is the preferred real-Chrome backend when the Browser CLI extension is connected and healthy.",
     "Driver rebinding may happen automatically only at safe idle points, and it must be reported as `state_reset` rather than treated as perfectly continuous state.",
     "`browser_cli.task_runtime` owns the public Python read contract and routes one-shot read through the daemon-managed browser lifecycle.",
+    "Repository development is uv-only.",
+    "`uv.lock`",
+    "`.python-version`",
     "`scripts/guards/python_compatibility.py`",
     "`scripts/lint.sh`",
     "`scripts/test.sh`",
@@ -20,10 +23,11 @@ REQUIRED_AGENT_PHRASES = [
 
 REQUIRED_README_PHRASES = [
     "Python 3.10+",
+    "uv sync --dev",
+    "uv tool install browser-cli",
+    "uvx browser-cli",
     "browser-cli task validate",
     "browser-cli automation publish",
-    "python scripts/guards/python_compatibility.py",
-    "python scripts/guards/run_all.py",
     "./scripts/lint.sh",
     "./scripts/test.sh",
     "./scripts/check.sh",

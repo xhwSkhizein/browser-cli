@@ -55,25 +55,45 @@ reliable browser control from the command line.
 Requirements:
 
 - Python 3.10+
+- [uv](https://docs.astral.sh/uv/)
 - Stable Google Chrome
-- Playwright Python package
 
-Install from source:
+Install as a tool:
+
+```bash
+uv tool install browser-cli
+browser-cli doctor
+browser-cli paths
+browser-cli read https://example.com
+```
+
+Run without installing:
+
+```bash
+uvx browser-cli read https://example.com
+```
+
+Install from Git:
+
+```bash
+uv tool install git+https://github.com/hongv/browser-cli.git
+browser-cli --help
+```
+
+Installed users should start with [`docs/installed-with-uv.md`](docs/installed-with-uv.md).
+
+## Development
+
+Clone the repository and sync the managed development environment:
 
 ```bash
 git clone https://github.com/hongv/browser-cli.git
 cd browser-cli
-
-python3 -m pip install -e .
-python3 -m pip install -e ".[dev]"
-python3 -m playwright install chromium
+uv sync --dev
 ```
 
 The CLI targets stable Google Chrome. Playwright Chromium is mainly useful for
-local integration testing.
-
-Installed users should start with [`docs/installed-with-pip.md`](docs/installed-with-pip.md).
-The first two commands to run are `browser-cli doctor` and `browser-cli paths`.
+local integration testing and is installed through the repo environment.
 
 ### Optional: Extension Mode
 
@@ -89,9 +109,8 @@ daemon can prefer the extension backend at safe idle points.
 
 ## Quick Start
 
-If you installed Browser CLI from `pip`, use the dedicated installed-user guide
-at [`docs/installed-with-pip.md`](docs/installed-with-pip.md). The short version
-is:
+If you installed Browser CLI with uv, use the dedicated installed-user guide at
+[`docs/installed-with-uv.md`](docs/installed-with-uv.md). The short version is:
 
 ```bash
 browser-cli doctor
@@ -247,7 +266,6 @@ Run guards:
 
 ```bash
 ./scripts/guard.sh
-python scripts/guards/run_all.py
 ```
 
 Run the full local validation flow:
@@ -259,7 +277,7 @@ Run the full local validation flow:
 Fast Python 3.10 compatibility check:
 
 ```bash
-python scripts/guards/python_compatibility.py
+uv run python scripts/guards/python_compatibility.py
 ```
 
 When the runtime behaves unexpectedly, use:
