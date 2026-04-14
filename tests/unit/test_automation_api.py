@@ -6,6 +6,7 @@ import threading
 from pathlib import Path
 
 from browser_cli.automation.api import AutomationHttpServer, AutomationRequestHandler
+from browser_cli.automation.api.server import _payload_to_automation
 from browser_cli.automation.persistence import AutomationStore
 from browser_cli.automation.service.runtime import AutomationServiceRuntime
 
@@ -105,3 +106,23 @@ def test_automation_api_returns_not_found_for_missing_run(tmp_path: Path) -> Non
         server.shutdown()
         server.server_close()
         thread.join(timeout=2.0)
+
+
+def test_payload_to_automation_preserves_stdout_and_retry_backoff() -> None:
+    persisted = _payload_to_automation(
+        {
+            "id": "demo",
+            "name": "Demo",
+            "task_path": "/tmp/task.py",
+            "task_meta_path": "/tmp/task.meta.json",
+            "output_dir": "/tmp/out",
+            "stdout_mode": "text",
+            "retry_attempts": 1,
+            "retry_backoff_seconds": 9,
+            "timeout_seconds": 4.0,
+        }
+    )
+
+    assert persisted.stdout_mode == "text"
+    assert persisted.retry_backoff_seconds == 9
+    assert persisted.timeout_seconds == 4.0

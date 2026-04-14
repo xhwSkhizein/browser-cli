@@ -316,6 +316,7 @@ def _payload_to_automation(payload: dict) -> PersistedAutomationDefinition:
         timezone=str(payload.get("timezone") or "UTC"),
         output_dir=output_dir,
         result_json_path=Path(result_json_raw) if result_json_raw else None,
+        stdout_mode=str(payload.get("stdout_mode") or "json"),
         input_overrides=dict(payload.get("input_overrides") or {}),
         before_run_hooks=tuple(payload.get("before_run_hooks") or []),
         after_success_hooks=tuple(payload.get("after_success_hooks") or []),

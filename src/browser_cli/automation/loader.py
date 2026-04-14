@@ -88,6 +88,9 @@ def load_automation_manifest(path: str | Path) -> AutomationManifest:
             if (data.get("runtime") or {}).get("timeout_seconds") is not None
             else None,
             retry_attempts=int((data.get("runtime") or {}).get("retry_attempts") or 0),
+            retry_backoff_seconds=int(
+                (data.get("runtime") or {}).get("retry_backoff_seconds") or 0
+            ),
             log_level=str((data.get("runtime") or {}).get("log_level") or "info"),
         ),
     )
