@@ -163,6 +163,8 @@ the implementation, and where should a change land first.
   `skills/browser-cli-delivery/SKILL.md`
 - Tests for behavior and contracts:
   `tests/unit/*`, `tests/integration/*`
+- Repo-local git branch protection hooks:
+  `.githooks/pre-commit`, `.githooks/pre-push`
 
 ## Common Navigation Paths
 
@@ -215,6 +217,8 @@ the implementation, and where should a change land first.
   -> inspect `src/browser_cli/extension/session.py` and `tests/unit/test_extension_transport.py`.
 - If a change touches architecture or public product contracts:
   inspect `scripts/guards/architecture.py`, `scripts/guards/product_contracts.py`, and `scripts/guards/docs_sync.py` before making the change final.
+- If repo-local branch protection appears inactive in a clone:
+  inspect `.githooks/pre-commit`, `.githooks/pre-push`, and `git config --local core.hooksPath`; the hooks are repo-owned but activation is clone-local.
 
 ## Architectural Boundaries
 
@@ -242,6 +246,8 @@ public interactive commands.
 
 - Top-level parser registration lives in `src/browser_cli/cli/main.py`. `read`, `doctor`, `paths`, `task`, `automation`, `status`, and lifecycle `reload` are hand-wired there; the rest come from `get_action_specs()`.
 - `browser-cli install-skills` installs the packaged Browser CLI skills into `~/.agents/skills` by default and `--target` overrides the destination root.
+- Repo-local contributor branch protection lives under `.githooks/`; activate it
+  per clone with `git config core.hooksPath .githooks`.
 - Public daemon-backed actions should be added through `ActionSpec`, not by manually bolting ad hoc parsers into `main.py`.
 - The lifecycle command `browser-cli reload` and the page action `browser-cli page-reload` are intentionally different surfaces. Do not collapse them.
 - Public daemon commands return JSON payloads. Preserve `ok/data/meta` shape and machine-readable error codes.
