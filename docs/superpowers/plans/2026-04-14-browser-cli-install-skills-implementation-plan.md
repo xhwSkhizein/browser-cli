@@ -4,7 +4,7 @@
 
 **Goal:** Make `browser-cli install-skills` install exactly the three Browser CLI skills from wheel-packaged assets, with `--target` support and release-artifact validation.
 
-**Architecture:** Move the release-backed skill assets under `src/browser_cli/packaged_skills/` so the installed wheel owns the runtime source of truth. Replace the current path-guessing logic in `install_skills.py` with `importlib.resources`-based discovery plus a fixed public whitelist, then lock the behavior with command tests and a build-artifact smoke check.
+**Architecture:** Move the release-backed skill assets under `src/browser_cli/packaged_skills/` so the installed wheel owns the runtime source of truth. Replace the current path-guessing logic in `install_skills.py` with `importlib.resources`-based discovery plus a fixed public whitelist, document the new package and `install-skills --target` contract in `AGENTS.md`, and lock the behavior with command tests, guard expectations, and a build-artifact smoke check.
 
 **Tech Stack:** Python 3.10, `importlib.resources`, `argparse`, `shutil`, `pytest`, uv build/install workflows, GitHub Actions
 
@@ -24,12 +24,20 @@
   Responsibility: replace repository/pip heuristics with packaged whitelist discovery, `--target` support, and fail-fast validation.
 - Modify: `src/browser_cli/cli/main.py`
   Responsibility: expose `--target` on the top-level command and keep help text aligned with the new contract.
+- Modify: `AGENTS.md`
+  Responsibility: document the `browser_cli.packaged_skills` package and the public `browser-cli install-skills --target` behavior in the repo navigation guide.
 - Modify: `pyproject.toml`
   Responsibility: ensure packaged skill assets are included in the wheel.
+- Modify: `scripts/guards/architecture.py`
+  Responsibility: whitelist the new `browser_cli.packaged_skills` top-level package boundary.
+- Modify: `scripts/guards/docs_sync.py`
+  Responsibility: require the maintained `install-skills --target` AGENTS.md contract text.
 - Create: `tests/unit/test_install_skills_command.py`
   Responsibility: cover whitelist discovery, install/update behavior, `--target`, and failure paths.
 - Modify: `tests/unit/test_cli.py`
   Responsibility: assert `install-skills --help` exposes `--target`.
+- Modify: `tests/unit/test_repo_skill_docs.py`
+  Responsibility: lock the `packaged_skills` architecture entry and packaged skill doc sync expectations.
 - Modify: `tests/unit/test_repo_metadata.py`
   Responsibility: lock packaging metadata needed for packaged skill assets.
 - Create: `tests/unit/test_release_artifacts.py`

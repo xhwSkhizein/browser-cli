@@ -560,7 +560,7 @@ Expected: PASS
 
 ```bash
 git add tests/unit/test_repo_skill_docs.py
-git rm -r <legacy-skill-dir>
+git rm -r skills/browser-cli-explore-delivery
 git commit -m "docs: remove legacy browser-cli delivery skill"
 ```
 

@@ -317,7 +317,7 @@ network patch should not survive the final migration.
    - `/Users/hongv/workspace/m-projects/browser-cli/docs/smoke-checklist.md`
    - task examples
    - Browser CLI docs that mention network observation
-2. Update the explore-delivery skill references to prefer:
+2. Update the delivery/explore/converge skill references to prefer:
    - `network-wait` for response-dependent tasks
    - `network-start/network/network-stop` for broader collection
 3. Remove obsolete wording that says Browser CLI only captures network requests.

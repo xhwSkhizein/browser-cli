@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from browser_cli.commands import install_skills as install_skills_module
-from browser_cli.errors import InvalidInputError
+from browser_cli.errors import InvalidInputError, OperationFailedError
 
 
 def _write_skill(root: Path, name: str, *, body: str | None = None) -> Path:
@@ -50,6 +50,22 @@ def test_discover_packaged_skills_fails_when_a_required_skill_is_missing(
     monkeypatch.setattr(install_skills_module, "_packaged_skills_root", lambda: source_root)
 
     with pytest.raises(InvalidInputError, match="browser-cli-converge"):
+        install_skills_module.discover_packaged_skills()
+
+
+def test_discover_packaged_skills_fails_when_skill_doc_is_missing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    source_root = tmp_path / "source"
+    incomplete_skill = source_root / "browser-cli-converge"
+    incomplete_skill.mkdir(parents=True)
+    _write_skill(source_root, "browser-cli-delivery")
+    _write_skill(source_root, "browser-cli-explore")
+    monkeypatch.setattr(install_skills_module, "_packaged_skills_root", lambda: source_root)
+
+    with pytest.raises(
+        InvalidInputError, match=r"browser-cli-converge.*SKILL\.md|SKILL\.md.*browser-cli-converge"
+    ):
         install_skills_module.discover_packaged_skills()
 
 
@@ -99,6 +115,38 @@ def test_install_skills_from_paths_replaces_existing_skill_directory(tmp_path: P
     assert results == [("browser-cli-delivery", "updated")]
     assert (target / "SKILL.md").read_text(encoding="utf-8") == "# new\n"
     assert not (target / "stale.txt").exists()
+
+
+def test_install_skills_from_paths_preserves_existing_skill_when_copy_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source_root = tmp_path / "source"
+    target_root = tmp_path / "target"
+    source = _write_skill(source_root, "browser-cli-delivery", body="# new\n")
+    target = target_root / "browser-cli-delivery"
+    target.mkdir(parents=True)
+    (target / "SKILL.md").write_text("# old\n", encoding="utf-8")
+    (target / "stale.txt").write_text("stale\n", encoding="utf-8")
+
+    def broken_copy(_source: install_skills_module.Traversable | Path, destination: Path) -> None:
+        destination.mkdir(parents=True, exist_ok=False)
+        (destination / "SKILL.md").write_text("# partial\n", encoding="utf-8")
+        raise OSError("copy failed")
+
+    monkeypatch.setattr(install_skills_module, "_copy_skill_tree", broken_copy)
+
+    with pytest.raises(OperationFailedError, match="copy failed"):
+        install_skills_module.install_skills_from_paths(
+            [install_skills_module.PackagedSkill(name="browser-cli-delivery", source=source)],
+            target_root,
+            dry_run=False,
+        )
+
+    assert (target / "SKILL.md").read_text(encoding="utf-8") == "# old\n"
+    assert (target / "stale.txt").read_text(encoding="utf-8") == "stale\n"
+    assert not any(
+        path.name.startswith("browser-cli-delivery.tmp-") for path in target_root.iterdir()
+    )
 
 
 def test_run_install_skills_command_uses_explicit_target(

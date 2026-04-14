@@ -11,10 +11,10 @@ def _repo_root() -> Path:
 
 
 def test_built_wheel_contains_packaged_browser_cli_skills() -> None:
-    wheels = sorted((_repo_root() / "dist").glob("*.whl"))
+    wheels = list((_repo_root() / "dist").glob("*.whl"))
     if not wheels:
         pytest.skip("Build a wheel before running this test: uv build --wheel")
-    wheel_path = wheels[-1]
+    wheel_path = max(wheels, key=lambda path: path.stat().st_mtime)
     with zipfile.ZipFile(wheel_path) as archive:
         names = set(archive.namelist())
     assert "browser_cli/packaged_skills/browser-cli-delivery/SKILL.md" in names
