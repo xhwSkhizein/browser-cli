@@ -54,3 +54,20 @@ def test_lint_script_runs_python_compatibility_guard() -> None:
     assert "python_compatibility.py" in script
     assert "uv run ruff check src tests scripts" in script
     assert "uv run ruff format --check src tests scripts" in script
+
+
+def test_repository_scripts_require_uv_and_do_not_fallback_to_pip_or_python() -> None:
+    for script_name in ("lint.sh", "test.sh", "guard.sh"):
+        script = (repo_root() / "scripts" / script_name).read_text(encoding="utf-8")
+        assert "command -v uv >/dev/null 2>&1" in script
+        assert "uv is required" in script
+        assert ".venv/bin/python" not in script
+        assert "python or python3 is required" not in script
+        assert "python -m pip" not in script
+
+
+def test_test_and_guard_scripts_execute_through_uv() -> None:
+    test_script = (repo_root() / "scripts" / "test.sh").read_text(encoding="utf-8")
+    guard_script = (repo_root() / "scripts" / "guard.sh").read_text(encoding="utf-8")
+    assert "uv run pytest -q" in test_script
+    assert "uv run python scripts/guards/run_all.py" in guard_script
