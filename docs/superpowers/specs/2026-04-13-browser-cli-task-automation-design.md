@@ -344,8 +344,8 @@ This means:
 Because first release does not require `task init`, consistency must come from
 task contract documentation, validation, and skill behavior.
 
-The `browser-cli-explore-delivery` skill should be upgraded to a stronger task
-generation contract.
+The Browser CLI delivery skill stack should enforce a stronger task generation
+contract.
 
 It should include:
 

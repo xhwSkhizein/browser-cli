@@ -103,7 +103,9 @@ docs/
   superpowers/specs/
   superpowers/plans/
 skills/
-  browser-cli-explore-delivery/
+  browser-cli-delivery/
+  browser-cli-explore/
+  browser-cli-converge/
 ```
 
 The exact file split may evolve during implementation, but the old page-runtime
@@ -315,7 +317,7 @@ network patch should not survive the final migration.
    - `/Users/hongv/workspace/m-projects/browser-cli/docs/smoke-checklist.md`
    - task examples
    - Browser CLI docs that mention network observation
-2. Update the explore-delivery skill references to prefer:
+2. Update the delivery/explore/converge skill references to prefer:
    - `network-wait` for response-dependent tasks
    - `network-start/network/network-stop` for broader collection
 3. Remove obsolete wording that says Browser CLI only captures network requests.
@@ -350,4 +352,3 @@ Before calling the work complete, verify:
 - large bodies do not cause uncontrolled memory growth
 - extension and Playwright backends pass the same public expectations
 - no old request-only `network` semantics remain in code or docs
-

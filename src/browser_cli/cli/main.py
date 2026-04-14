@@ -231,13 +231,17 @@ def build_parser() -> argparse.ArgumentParser:
 
     skills_parser = subparsers.add_parser(
         "install-skills",
-        help="Install packaged skills to ~/.agents/skills.",
-        description="Copy bundled skills from the package to the user's skills directory.",
+        help="Install packaged skills for Browser CLI to a skills directory.",
+        description="Copy packaged skills for Browser CLI from the installed package to the target skills directory.",
     )
     skills_parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Show what would be installed without making changes.",
+    )
+    skills_parser.add_argument(
+        "--target",
+        help="Optional target directory. Defaults to ~/.agents/skills.",
     )
     skills_parser.set_defaults(handler=run_install_skills_command)
 

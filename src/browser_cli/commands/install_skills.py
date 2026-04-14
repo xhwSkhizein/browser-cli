@@ -1,147 +1,138 @@
-"""Command to install bundled skills to the user's skills directory."""
+"""Install packaged Browser CLI skills into a target skills directory."""
 
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
-import subprocess
-import sys
+import uuid
+from dataclasses import dataclass
+from importlib import resources
+from importlib.abc import Traversable
 from pathlib import Path
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from collections.abc import Sequence
+from browser_cli.errors import InvalidInputError, OperationFailedError
 
-
-def _get_pip_show_location() -> Path | None:
-    """Get package installation root from pip show."""
-    try:
-        result = subprocess.run(
-            [sys.executable, "-m", "pip", "show", "browser-cli"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        for line in result.stdout.splitlines():
-            if line.startswith("Location:"):
-                location = line.split(":", 1)[1].strip()
-                return Path(location)
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        pass
-    return None
+PUBLIC_SKILL_NAMES = (
+    "browser-cli-converge",
+    "browser-cli-delivery",
+    "browser-cli-explore",
+)
 
 
-def _find_git_root() -> Path | None:
-    """Find git repository root (for development mode)."""
-    import browser_cli
-
-    package_path = Path(browser_cli.__file__).parent
-    current = package_path
-    while current.parent != current:
-        if (current / ".git").exists():
-            return current
-        current = current.parent
-    return None
+@dataclass(frozen=True, slots=True)
+class PackagedSkill:
+    name: str
+    source: Traversable | Path
 
 
-def get_skills_source_path() -> Path | None:
-    """Get the path to bundled skills.
-
-    Tries pip installation location first, then git root for development.
-    """
-    # Try pip installation location
-    pip_location = _get_pip_show_location()
-    if pip_location:
-        skills_path = pip_location / "skills"
-        if skills_path.exists() and skills_path.is_dir():
-            return skills_path
-
-    # Try git root (development mode)
-    git_root = _find_git_root()
-    if git_root:
-        skills_path = git_root / "skills"
-        if skills_path.exists() and skills_path.is_dir():
-            return skills_path
-
-    return None
+def _packaged_skills_root() -> Traversable:
+    return resources.files("browser_cli.packaged_skills")
 
 
-def get_skills_target_path() -> Path:
-    """Get the target path for skills installation."""
+def discover_packaged_skills() -> list[PackagedSkill]:
+    root = _packaged_skills_root()
+    discovered: list[PackagedSkill] = []
+    for name in PUBLIC_SKILL_NAMES:
+        skill_root = root.joinpath(name)
+        if not skill_root.is_dir():
+            raise InvalidInputError(f"Packaged skill is missing from this build: {name}")
+        skill_doc = skill_root.joinpath("SKILL.md")
+        if not skill_doc.is_file():
+            raise InvalidInputError(
+                f"Packaged skill is incomplete in this build: {name} is missing SKILL.md"
+            )
+        discovered.append(PackagedSkill(name=name, source=skill_root))
+    return discovered
+
+
+def get_skills_target_path(target: str | None) -> Path:
+    if target:
+        return Path(target).expanduser().resolve()
     return Path.home() / ".agents" / "skills"
 
 
-def install_skills(
-    source: Path,
+def install_skills_from_paths(
+    skills: list[PackagedSkill],
     target: Path,
+    *,
     dry_run: bool = False,
-) -> Sequence[tuple[str, str]]:
-    """Install skills from source to target directory.
-
-    Args:
-        source: Path to bundled skills directory.
-        target: Path to user's skills directory.
-        dry_run: If True, only report what would be done.
-
-    Returns:
-        List of (skill_name, status) tuples.
-    """
+) -> list[tuple[str, str]]:
     results: list[tuple[str, str]] = []
-
     if not dry_run:
-        target.mkdir(parents=True, exist_ok=True)
-
-    for skill_dir in sorted(source.iterdir()):
-        if not skill_dir.is_dir():
-            continue
-
-        skill_target = target / skill_dir.name
-
-        if skill_target.exists():
-            if dry_run:
-                results.append((skill_dir.name, "would update"))
-            else:
-                shutil.rmtree(skill_target)
-                shutil.copytree(skill_dir, skill_target)
-                results.append((skill_dir.name, "updated"))
-        else:
-            if dry_run:
-                results.append((skill_dir.name, "would install"))
-            else:
-                shutil.copytree(skill_dir, skill_target)
-                results.append((skill_dir.name, "installed"))
-
+        try:
+            target.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            raise OperationFailedError(
+                f"Could not create skills target directory {target}: {exc}"
+            ) from exc
+    for skill in skills:
+        destination = target / skill.name
+        exists = destination.exists()
+        status = (
+            "would update"
+            if dry_run and exists
+            else "would install"
+            if dry_run
+            else "updated"
+            if exists
+            else "installed"
+        )
+        if not dry_run:
+            _install_one_skill(skill, destination)
+        results.append((skill.name, status))
     return results
 
 
-def run_install_skills_command(args: argparse.Namespace) -> str | None:
-    """Run the install-skills command.
+def _install_one_skill(skill: PackagedSkill, destination: Path) -> None:
+    source = skill.source if isinstance(skill.source, Traversable) else Path(skill.source)
+    staged = destination.with_name(f"{destination.name}.tmp-{uuid.uuid4().hex}")
+    try:
+        _copy_skill_tree(source, staged)
+        backup = _swap_staged_directory(staged, destination)
+        if backup is not None:
+            shutil.rmtree(backup, ignore_errors=True)
+    except OSError as exc:
+        if staged.exists():
+            shutil.rmtree(staged, ignore_errors=True)
+        raise OperationFailedError(
+            f"Could not install skill {skill.name} to {destination}: {exc}"
+        ) from exc
 
-    Args:
-        args: Parsed CLI arguments.
 
-    Returns:
-        Output message to print, or None on failure.
-    """
-    source = get_skills_source_path()
-    if source is None:
-        sys.stderr.write("Error: bundled skills not found in package\n")
-        return None
+def _copy_skill_tree(source: Traversable | Path, destination: Path) -> None:
+    destination.mkdir(parents=True, exist_ok=False)
+    for child in source.iterdir():
+        child_destination = destination / child.name
+        if child.is_dir():
+            _copy_skill_tree(child, child_destination)
+            continue
+        with child.open("rb") as handle, child_destination.open("wb") as output:
+            shutil.copyfileobj(handle, output)
 
-    target = get_skills_target_path()
 
-    results = install_skills(source, target, dry_run=args.dry_run)
+def _swap_staged_directory(staged: Path, destination: Path) -> Path | None:
+    backup: Path | None = None
+    if destination.exists():
+        backup = destination.with_name(f"{destination.name}.bak-{uuid.uuid4().hex}")
+        os.replace(destination, backup)
+    try:
+        os.replace(staged, destination)
+    except OSError:
+        if backup is not None and backup.exists() and not destination.exists():
+            os.replace(backup, destination)
+        raise
+    return backup
 
-    if not results:
-        return "No skills to install.\n"
 
+def run_install_skills_command(args: argparse.Namespace) -> str:
+    skills = discover_packaged_skills()
+    target = get_skills_target_path(getattr(args, "target", None))
+    results = install_skills_from_paths(skills, target, dry_run=bool(args.dry_run))
     mode = "(dry-run) " if args.dry_run else ""
     lines = [f"{mode}Installing skills to {target}:", ""]
-
     for skill_name, status in results:
         lines.append(f"  {skill_name}: {status}")
-
     lines.append("")
     lines.append(f"Total: {len(results)} skill(s)")
-
     return "\n".join(lines) + "\n"

@@ -45,6 +45,7 @@ ALLOWED_DEPENDENCIES: dict[str, set[str]] = {
     "drivers": {"browser", "errors", "extension", "profiles", "refs"},
     "extension": {"constants", "errors", "extension"},
     "outputs": set(),
+    "packaged_skills": set(),
     "profiles": {"errors"},
     "refs": {"refs"},
     "tabs": {"constants", "errors"},
