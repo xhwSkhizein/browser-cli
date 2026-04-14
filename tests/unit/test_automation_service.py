@@ -6,6 +6,7 @@ from pathlib import Path
 from browser_cli.automation.models import PersistedAutomationDefinition
 from browser_cli.automation.persistence import AutomationStore
 from browser_cli.automation.scheduler import compute_next_run_at, normalize_schedule
+from browser_cli.automation.service.runtime import AutomationServiceRuntime
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -142,3 +143,86 @@ def test_douyin_automation_manifest_exists() -> None:
     payload = manifest_path.read_text(encoding="utf-8")
     assert "[automation]" in payload
     assert 'id = "douyin_video_download"' in payload
+
+
+def test_automation_service_marks_run_failed_on_timeout(tmp_path: Path, monkeypatch) -> None:
+    task_dir = tmp_path / "task"
+    task_dir.mkdir()
+    (task_dir / "task.py").write_text(
+        "import time\ndef run(flow, inputs):\n    time.sleep(0.3)\n    return {'ok': True}\n",
+        encoding="utf-8",
+    )
+    (task_dir / "task.meta.json").write_text(
+        '{"task":{"id":"demo","name":"Demo","goal":"Run"},"environment":{},"success_path":{},"recovery_hints":{},"failures":[],"knowledge":{}}',
+        encoding="utf-8",
+    )
+    store = AutomationStore(tmp_path / "automations.db")
+    store.upsert_automation(
+        PersistedAutomationDefinition(
+            id="demo",
+            name="Demo",
+            task_path=task_dir / "task.py",
+            task_meta_path=task_dir / "task.meta.json",
+            output_dir=tmp_path / "out",
+            timeout_seconds=0.05,
+        )
+    )
+    run = store.create_run("demo", trigger_type="manual")
+    runtime = AutomationServiceRuntime(store=store)
+
+    class _FakeClient:
+        def command(self, action: str) -> dict:
+            assert action == "runtime-status"
+            return {}
+
+    monkeypatch.setattr("browser_cli.automation.service.runtime.BrowserCliTaskClient", _FakeClient)
+
+    runtime._execute_run(run.run_id)
+    updated = store.get_run(run.run_id)
+    events = store.list_run_events(run.run_id)
+
+    assert updated.status == "failed"
+    assert updated.error_code == "AUTOMATION_RUN_TIMEOUT"
+    assert "timed out" in str(updated.error_message).lower()
+    assert any(
+        event.event_type == "run_timed_out" and event.payload.get("stage") == "task_execution"
+        for event in events
+    )
+
+
+def test_automation_service_does_not_retry_timeout_failure(tmp_path: Path, monkeypatch) -> None:
+    task_dir = tmp_path / "task"
+    task_dir.mkdir()
+    (task_dir / "task.py").write_text(
+        "import time\ndef run(flow, inputs):\n    time.sleep(0.3)\n    return {'ok': True}\n",
+        encoding="utf-8",
+    )
+    (task_dir / "task.meta.json").write_text(
+        '{"task":{"id":"demo","name":"Demo","goal":"Run"},"environment":{},"success_path":{},"recovery_hints":{},"failures":[],"knowledge":{}}',
+        encoding="utf-8",
+    )
+    store = AutomationStore(tmp_path / "automations.db")
+    store.upsert_automation(
+        PersistedAutomationDefinition(
+            id="demo",
+            name="Demo",
+            task_path=task_dir / "task.py",
+            task_meta_path=task_dir / "task.meta.json",
+            output_dir=tmp_path / "out",
+            timeout_seconds=0.05,
+            retry_attempts=3,
+        )
+    )
+    run = store.create_run("demo", trigger_type="manual")
+    runtime = AutomationServiceRuntime(store=store)
+
+    class _FakeClient:
+        def command(self, action: str) -> dict:
+            assert action == "runtime-status"
+            return {}
+
+    monkeypatch.setattr("browser_cli.automation.service.runtime.BrowserCliTaskClient", _FakeClient)
+
+    runtime._execute_run(run.run_id)
+    runs = store.list_runs("demo", limit=10)
+    assert [item.status for item in runs] == ["failed"]

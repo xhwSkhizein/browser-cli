@@ -180,6 +180,12 @@ browser-cli automation status
 browser-cli automation ui
 ```
 
+Publication semantics:
+
+- `automation publish` snapshots `task.py`, `task.meta.json`, and `automation.toml` together under `~/.browser-cli/automations/<automation-id>/versions/<version>/`
+- if source `automation.toml` exists, Browser CLI uses it as the publish-time configuration truth
+- if source `automation.toml` is absent, Browser CLI publishes generated defaults and reports that explicitly via `manifest_source`
+
 Export a persisted automation back to `automation.toml`:
 
 ```bash
@@ -205,6 +211,12 @@ browser-cli automation publish tasks/douyin_video_download
 browser-cli automation inspect douyin_video_download
 browser-cli automation status
 ```
+
+Inspect semantics:
+
+- `browser-cli automation inspect <automation-id>` shows the current live automation-service configuration
+- `browser-cli automation inspect <automation-id> --version <n>` shows `snapshot_config` for the immutable published version and `live_config` for the current service state
+- `latest_run` remains a separate operational view
 
 ## Output Contracts
 
@@ -241,6 +253,7 @@ Exit codes:
 - Managed profile mode is the default backend.
 - Extension mode is the preferred real-Chrome backend when connected and healthy.
 - Driver rebinding happens only at safe idle points and is reported as `state_reset`.
+- `runtime.timeout_seconds` is the total wall-clock timeout for one automation run in the automation service.
 
 ## Documentation
 

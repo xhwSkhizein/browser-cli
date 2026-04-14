@@ -139,3 +139,8 @@ class AutomationServiceError(BrowserCliError):
 class AutomationInvalidError(BrowserCliError):
     def __init__(self, message: str) -> None:
         super().__init__(message, exit_codes.USAGE_ERROR, error_codes.AUTOMATION_INVALID)
+
+
+class AutomationRunTimeoutError(OperationFailedError):
+    def __init__(self, message: str = "Automation run timed out.") -> None:
+        super().__init__(message, error_code=error_codes.AUTOMATION_RUN_TIMEOUT)

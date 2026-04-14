@@ -48,6 +48,72 @@ def test_publish_task_dir_creates_versioned_snapshot(tmp_path: Path, monkeypatch
     assert (published.snapshot_dir / "automation.toml").exists()
 
 
+def test_publish_task_dir_preserves_source_manifest_fields(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("BROWSER_CLI_HOME", str(tmp_path / "home"))
+    task_dir = tmp_path / "task"
+    task_dir.mkdir()
+    (task_dir / "task.py").write_text(
+        "def run(flow, inputs):\n    return {'ok': True}\n", encoding="utf-8"
+    )
+    (task_dir / "task.meta.json").write_text(
+        '{"task":{"id":"demo","name":"Demo","goal":"Run"},"environment":{},"success_path":{},"recovery_hints":{},"failures":[],"knowledge":{}}',
+        encoding="utf-8",
+    )
+    (task_dir / "automation.toml").write_text(
+        "[automation]\n"
+        'id = "demo"\n'
+        'name = "Demo"\n'
+        "[task]\n"
+        'path = "task.py"\n'
+        'meta_path = "task.meta.json"\n'
+        "[inputs]\n"
+        'url = "https://example.com"\n'
+        "[schedule]\n"
+        'mode = "manual"\n'
+        'timezone = "Asia/Shanghai"\n'
+        "[outputs]\n"
+        'artifact_dir = "artifacts"\n'
+        'result_json_path = "artifacts/result.json"\n'
+        'stdout = "text"\n'
+        "[runtime]\n"
+        "retry_attempts = 1\n"
+        "retry_backoff_seconds = 7\n",
+        encoding="utf-8",
+    )
+
+    published = publish_task_dir(task_dir, app_paths=get_app_paths())
+    manifest = load_automation_manifest(published.manifest_path)
+
+    assert published.manifest_source == "task_dir"
+    assert manifest.inputs == {"url": "https://example.com"}
+    assert manifest.schedule["timezone"] == "Asia/Shanghai"
+    assert manifest.outputs.result_json_path is not None
+    assert manifest.outputs.stdout == "text"
+    assert manifest.runtime.retry_backoff_seconds == 7
+
+
+def test_publish_task_dir_generates_defaults_when_manifest_is_absent(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv("BROWSER_CLI_HOME", str(tmp_path / "home"))
+    task_dir = tmp_path / "task"
+    task_dir.mkdir()
+    (task_dir / "task.py").write_text(
+        "def run(flow, inputs):\n    return {'ok': True}\n", encoding="utf-8"
+    )
+    (task_dir / "task.meta.json").write_text(
+        '{"task":{"id":"demo","name":"Demo","goal":"Run"},"environment":{},"success_path":{},"recovery_hints":{},"failures":[],"knowledge":{}}',
+        encoding="utf-8",
+    )
+
+    published = publish_task_dir(task_dir, app_paths=get_app_paths())
+    manifest = load_automation_manifest(published.manifest_path)
+
+    assert published.manifest_source == "generated_defaults"
+    assert manifest.schedule["timezone"] == "UTC"
+    assert manifest.inputs == {}
+
+
 def test_publish_task_dir_accepts_douyin_example(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv("BROWSER_CLI_HOME", str(tmp_path / "home"))
     published = publish_task_dir(

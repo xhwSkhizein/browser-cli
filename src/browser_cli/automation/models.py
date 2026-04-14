@@ -40,6 +40,7 @@ class AutomationHooks:
 class AutomationRuntime:
     timeout_seconds: float | None = None
     retry_attempts: int = 0
+    retry_backoff_seconds: int = 0
     log_level: str = "info"
 
 
@@ -140,5 +141,6 @@ def manifest_to_persisted_definition(
         after_success_hooks=manifest.hooks.after_success,
         after_failure_hooks=manifest.hooks.after_failure,
         retry_attempts=manifest.runtime.retry_attempts,
+        retry_backoff_seconds=manifest.runtime.retry_backoff_seconds,
         timeout_seconds=manifest.runtime.timeout_seconds,
     )
