@@ -21,7 +21,7 @@ the implementation, and where should a change land first.
 - Repository development is uv-only.
 - Repository dependency resolution is pinned through `uv.lock`.
 - Repository local Python selection is pinned through `.python-version`.
-- Published package name is `browserctl`; the installed CLI command remains `browser-cli`.
+- Published package name is `browser-control-and-automation-cli`; the installed CLI command remains `browser-cli`.
 - Published distributions must not include PEP 440 local version identifiers; `setuptools-scm` local suffixes are stripped so PyPI accepts non-tagged builds.
 - `read` stays intentionally small: one URL positional plus `--snapshot` and `--scroll-bottom`.
 - Managed profile mode is the default browser backend.
@@ -269,7 +269,7 @@ public interactive commands.
 - `scripts/guard.sh` owns architecture, product-contract, and doc-sync guards.
 - `scripts/check.sh` runs lint, tests, and guard in the expected order.
 - The guard implementations live under `scripts/guards/`.
-- Repo-local test runs should refresh the editable package with `uv sync --dev --reinstall-package browserctl` before `pytest`; otherwise daemon compatibility checks can drift after local commits because `setuptools-scm` version metadata lags behind the current checkout.
+- Repo-local test runs should refresh the editable package with `uv sync --dev --reinstall-package browser-control-and-automation-cli` before `pytest`; otherwise daemon compatibility checks can drift after local commits because `setuptools-scm` version metadata lags behind the current checkout.
 - Release builds should use `uv build --no-sources --clear` so stale `dist/` artifacts are not accidentally published alongside the current package.
 - After each code change, run lint and guard as part of the full validation flow.
 - After each code change, run lint, tests, and guard.

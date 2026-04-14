@@ -6,5 +6,5 @@ if ! command -v uv >/dev/null 2>&1; then
   exit 127
 fi
 
-uv sync --dev --reinstall-package browserctl
+uv sync --dev --reinstall-package browser-control-and-automation-cli
 uv run pytest -q

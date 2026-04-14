@@ -25,8 +25,8 @@ REQUIRED_AGENT_PHRASES = [
 REQUIRED_README_PHRASES = [
     "Python 3.10+",
     "uv sync --dev",
-    "uv tool install browserctl",
-    "uvx --from browserctl browser-cli",
+    "uv tool install browser-control-and-automation-cli",
+    "uvx --from browser-control-and-automation-cli browser-cli",
     "browser-cli task validate",
     "browser-cli automation publish",
     "./scripts/lint.sh",

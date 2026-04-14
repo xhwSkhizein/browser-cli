@@ -69,6 +69,6 @@ def test_repository_scripts_require_uv_and_do_not_fallback_to_pip_or_python() ->
 def test_test_and_guard_scripts_execute_through_uv() -> None:
     test_script = (repo_root() / "scripts" / "test.sh").read_text(encoding="utf-8")
     guard_script = (repo_root() / "scripts" / "guard.sh").read_text(encoding="utf-8")
-    assert "uv sync --dev --reinstall-package browserctl" in test_script
+    assert "uv sync --dev --reinstall-package browser-control-and-automation-cli" in test_script
     assert "uv run pytest -q" in test_script
     assert "uv run python scripts/guards/run_all.py" in guard_script

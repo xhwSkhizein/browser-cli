@@ -25,7 +25,7 @@ def test_doctor_command_no_longer_describes_pip_users() -> None:
     doctor_text = _read("src/browser_cli/commands/doctor.py")
 
     assert '"""Install and runtime diagnostics for pip users."""' not in doctor_text
-    assert "browserctl" in doctor_text or "uv sync --dev" in doctor_text
+    assert "browser-control-and-automation-cli" in doctor_text or "uv sync --dev" in doctor_text
 
 
 def test_uninstall_doc_is_linked_from_primary_install_docs() -> None:
@@ -37,6 +37,6 @@ def test_uninstall_doc_is_linked_from_primary_install_docs() -> None:
     assert "browser-cli paths" in uninstall_text
     assert "browser-cli automation stop" in uninstall_text
     assert "browser-cli reload" in uninstall_text
-    assert "uv tool uninstall browserctl" in uninstall_text
+    assert "uv tool uninstall browser-control-and-automation-cli" in uninstall_text
     assert "docs/uninstall.md" in readme_text
     assert "docs/uninstall.md" in uv_doc_text
