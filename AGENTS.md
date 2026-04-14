@@ -189,6 +189,10 @@ the implementation, and where should a change land first.
   inspect `src/browser_cli/daemon/browser_service.py::read_page`, `src/browser_cli/task_runtime/read.py`, and `src/browser_cli/commands/read.py`; fallback metadata is only guaranteed on the read path.
 - If the user mentions extension capability gaps, artifacts, or real Chrome behavior:
   inspect both `src/browser_cli/extension/*` and `browser-cli-extension/src/*`; many bugs live in protocol drift between Python and extension JS.
+  Symptom -> root cause -> where to inspect:
+  `Tab <id> is not debuggable: unknown` during extension-mode `read` or `open-tab`
+  -> extension tried to attach Chrome debugger before the new tab reported a debuggable URL
+  -> inspect `browser-cli-extension/src/background.js::openTab` and `browser-cli-extension/src/debugger.js::ensureAttached`
 - If the user reports popup/runtime observer drift:
   start at `src/browser_cli/daemon/runtime_presentation.py`, then `src/browser_cli/extension/session.py`, then `browser-cli-extension/src/background.js`, `browser-cli-extension/src/popup_view.js`, and `browser-cli-extension/src/popup.js`.
 - If the user reports long-run stability drift across repeated reloads, reconnects, or artifact runs:

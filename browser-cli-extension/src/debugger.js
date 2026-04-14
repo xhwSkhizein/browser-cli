@@ -10,12 +10,36 @@ const INLINE_TEXT_MAX_BYTES = 128 * 1024;
 const INLINE_BINARY_MAX_BYTES = 64 * 1024;
 const MAX_CAPTURE_BODY_BYTES = 8 * 1024 * 1024;
 const STATIC_RESOURCE_TYPES = new Set(['image', 'stylesheet', 'script', 'font', 'media']);
+const DEFAULT_ATTACH_WAIT_TIMEOUT_MS = 1500;
+const DEFAULT_ATTACH_POLL_INTERVAL_MS = 50;
+const DEFAULT_ATTACH_RETRY_COUNT = 2;
+const DEFAULT_ATTACH_RETRY_DELAY_MS = 100;
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 
 function isDebuggableUrl(url = '') {
   return url.startsWith('http://') || url.startsWith('https://') || url.startsWith('file://') || url === 'about:blank';
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForDebuggableTab(
+  tabId,
+  {
+    timeoutMs = DEFAULT_ATTACH_WAIT_TIMEOUT_MS,
+    pollIntervalMs = DEFAULT_ATTACH_POLL_INTERVAL_MS,
+  } = {},
+) {
+  const deadline = Date.now() + Math.max(0, Number(timeoutMs) || 0);
+  let tab = await chrome.tabs.get(tabId);
+  while (!isDebuggableUrl(tab.url || '') && Date.now() < deadline) {
+    await sleep(Math.max(0, Number(pollIntervalMs) || 0));
+    tab = await chrome.tabs.get(tabId);
+  }
+  return tab;
 }
 
 function encodeUtf8(value = '') {
@@ -401,16 +425,54 @@ function finalizeFailedRequest(tabId, requestId, failureReason) {
   );
 }
 
-export async function ensureAttached(tabId) {
-  const tab = await chrome.tabs.get(tabId);
+export async function ensureAttached(
+  tabId,
+  {
+    waitTimeoutMs = DEFAULT_ATTACH_WAIT_TIMEOUT_MS,
+    pollIntervalMs = DEFAULT_ATTACH_POLL_INTERVAL_MS,
+    retryCount = DEFAULT_ATTACH_RETRY_COUNT,
+    retryDelayMs = DEFAULT_ATTACH_RETRY_DELAY_MS,
+  } = {},
+) {
+  const tab = await waitForDebuggableTab(tabId, {
+    timeoutMs: waitTimeoutMs,
+    pollIntervalMs,
+  });
   if (!isDebuggableUrl(tab.url || '')) {
     throw new Error(`Tab ${tabId} is not debuggable: ${tab.url || 'unknown'}`);
   }
   if (attached.has(tabId)) {
     return;
   }
-  await chrome.debugger.attach({ tabId }, '1.3');
-  attached.add(tabId);
+  const attempts = Math.max(1, Number(retryCount) || 0);
+  let attachError = null;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    if (attached.has(tabId)) {
+      return;
+    }
+    try {
+      await chrome.debugger.attach({ tabId }, '1.3');
+      attached.add(tabId);
+      return;
+    } catch (error) {
+      if (attached.has(tabId)) {
+        return;
+      }
+      attachError = error;
+      if (attempt >= attempts) {
+        break;
+      }
+      await sleep(Math.max(0, Number(retryDelayMs) || 0));
+      const refreshed = await waitForDebuggableTab(tabId, {
+        timeoutMs: waitTimeoutMs,
+        pollIntervalMs,
+      });
+      if (!isDebuggableUrl(refreshed.url || '')) {
+        throw new Error(`Tab ${tabId} is not debuggable: ${refreshed.url || 'unknown'}`);
+      }
+    }
+  }
+  throw attachError;
 }
 
 export async function sendCommand(tabId, method, params = {}) {
