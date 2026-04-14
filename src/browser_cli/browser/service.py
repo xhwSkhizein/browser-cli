@@ -103,7 +103,7 @@ class BrowserService:
             from playwright.async_api import async_playwright
         except ImportError as exc:  # pragma: no cover
             raise BrowserUnavailableError(
-                "Playwright is not installed. Run: python3 -m pip install -e ."
+                "Playwright is not installed in this repo environment. Run: uv sync --dev"
             ) from exc
 
         chrome_environment = self._chrome_environment or discover_chrome_environment()

@@ -16,7 +16,7 @@ def test_ci_workflow_is_uv_only() -> None:
 
     assert "astral-sh/setup-uv@" in workflow
     assert "uv sync --locked --dev" in workflow
-    assert 'uv run pytest tests/unit -v --tb=short' in workflow
+    assert "uv run pytest tests/unit -v --tb=short" in workflow
     assert 'uv run pytest tests/integration -v --tb=short -m "not smoke"' in workflow
     assert "python -m pip" not in workflow
     assert "pip install -e ." not in workflow

@@ -249,6 +249,7 @@ public interactive commands.
 - `scripts/guard.sh` owns architecture, product-contract, and doc-sync guards.
 - `scripts/check.sh` runs lint, tests, and guard in the expected order.
 - The guard implementations live under `scripts/guards/`.
+- Repo-local test runs should refresh the editable package with `uv sync --dev --reinstall-package browser-cli` before `pytest`; otherwise daemon compatibility checks can drift after local commits because `setuptools-scm` version metadata lags behind the current checkout.
 - After each code change, run lint and guard as part of the full validation flow.
 - After each code change, run lint, tests, and guard.
 - After dependency metadata changes, run `uv sync --dev` before lint, tests, and guard.

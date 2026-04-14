@@ -1,4 +1,4 @@
-"""Install and runtime diagnostics for pip users."""
+"""Install and runtime diagnostics for Browser CLI environments."""
 
 from __future__ import annotations
 
@@ -115,7 +115,10 @@ def _playwright_check() -> DoctorCheck:
             id="playwright",
             status="fail",
             summary="Playwright Python package is not installed.",
-            next="install the Playwright Python package, then re-run browser-cli doctor",
+            next=(
+                "reinstall browser-cli with uv tool install --reinstall browser-cli, "
+                "or run uv sync --dev in a repository checkout, then re-run browser-cli doctor"
+            ),
         )
     return DoctorCheck(
         id="playwright",

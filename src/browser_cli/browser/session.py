@@ -40,7 +40,7 @@ class BrowserSession:
             from playwright.async_api import async_playwright
         except ImportError as exc:  # pragma: no cover - dependency problem
             raise BrowserUnavailableError(
-                "Playwright is not installed. Run: python3 -m pip install -e ."
+                "Playwright is not installed in this repo environment. Run: uv sync --dev"
             ) from exc
 
         try:
