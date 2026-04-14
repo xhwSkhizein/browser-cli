@@ -85,29 +85,44 @@ def run_automation_command(args: Namespace) -> str:
             "GET", f"/api/automations/{args.automation_id}", start_if_needed=True
         )
         versions = _load_snapshot_versions(args.automation_id)
-        selected = _select_snapshot_version(
-            args.automation_id,
-            versions,
-            version=getattr(args, "version", None),
-        )
         live_automation_data = dict(payload.get("data") or {})
-        selected_automation_data, selected_latest_run = _selected_snapshot_payload(
-            selected, fallback_automation=live_automation_data
+        selected = (
+            _select_snapshot_version(
+                args.automation_id,
+                versions,
+                version=getattr(args, "version", None),
+            )
+            if getattr(args, "version", None) is not None
+            else None
         )
+        snapshot_config = (
+            selected.get("snapshot_automation")
+            if isinstance(selected, dict) and isinstance(selected.get("snapshot_automation"), dict)
+            else None
+        )
+        snapshot_config_error = (
+            str(selected.get("snapshot_config_error") or "")
+            if isinstance(selected, dict) and selected.get("snapshot_config_error")
+            else None
+        )
+        latest_run = live_automation_data.get("latest_run")
+        latest_run_payload = latest_run if isinstance(latest_run, dict) else None
         return render_json_payload(
             {
                 "ok": True,
                 "data": {
-                    "automation": selected_automation_data,
+                    "snapshot_config": snapshot_config,
+                    "snapshot_config_error": snapshot_config_error,
+                    "live_config": live_automation_data,
                     "versions": versions,
                     "selected_version": selected,
-                    "latest_run": selected_latest_run,
+                    "latest_run": latest_run_payload,
                     "summary": _build_inspect_summary(
                         args.automation_id,
-                        selected_automation_data,
+                        live_automation_data,
                         versions,
                         selected,
-                        selected_latest_run,
+                        latest_run_payload,
                     ),
                 },
                 "meta": {"action": "automation-inspect"},
@@ -187,7 +202,7 @@ def _load_snapshot_versions(automation_id: str) -> list[dict[str, object]]:
             continue
         publish_path = entry / "publish.json"
         publish_data = _read_json_file(publish_path)
-        snapshot_manifest = _load_snapshot_manifest(entry / "automation.toml")
+        snapshot_manifest, snapshot_config_error = _load_snapshot_manifest(entry / "automation.toml")
         versions.append(
             {
                 "version": int(entry.name),
@@ -198,6 +213,7 @@ def _load_snapshot_versions(automation_id: str) -> list[dict[str, object]]:
                     if snapshot_manifest is not None
                     else None
                 ),
+                "snapshot_config_error": snapshot_config_error,
                 "snapshot_latest_run": publish_data.get("latest_run")
                 if isinstance(publish_data.get("latest_run"), dict)
                 else None,
@@ -257,27 +273,13 @@ def _build_inspect_summary(
     }
 
 
-def _selected_snapshot_payload(
-    selected: dict[str, object] | None,
-    *,
-    fallback_automation: dict[str, object],
-) -> tuple[dict[str, object], dict[str, object] | None]:
-    if selected is None:
-        latest_run = fallback_automation.get("latest_run")
-        return fallback_automation, latest_run if isinstance(latest_run, dict) else None
-    snapshot_automation = selected.get("snapshot_automation")
-    snapshot_latest_run = selected.get("snapshot_latest_run")
-    if isinstance(snapshot_automation, dict):
-        latest_run = snapshot_latest_run if isinstance(snapshot_latest_run, dict) else None
-        return snapshot_automation, latest_run
-    latest_run = fallback_automation.get("latest_run")
-    return fallback_automation, latest_run if isinstance(latest_run, dict) else None
-
-
-def _load_snapshot_manifest(path: Path) -> AutomationManifest | None:
+def _load_snapshot_manifest(path: Path) -> tuple[AutomationManifest | None, str | None]:
     if not path.exists():
-        return None
-    return load_automation_manifest(path)
+        return None, None
+    try:
+        return load_automation_manifest(path), None
+    except InvalidInputError as exc:
+        return None, str(exc)
 
 
 def _snapshot_manifest_to_automation_payload(manifest: AutomationManifest) -> dict[str, object]:
