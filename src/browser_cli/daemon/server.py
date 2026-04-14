@@ -24,6 +24,7 @@ from .transport import (
 )
 
 logger = logging.getLogger(__name__)
+_STREAM_LIMIT = 32 * 1024 * 1024
 
 
 class BrowserDaemonServer:
@@ -50,6 +51,7 @@ class BrowserDaemonServer:
             self._server = await asyncio.start_unix_server(
                 self._handle_client,
                 path=str(app_paths.socket_path),
+                limit=_STREAM_LIMIT,
             )
             with contextlib.suppress(OSError):
                 os.chmod(app_paths.socket_path, 0o600)

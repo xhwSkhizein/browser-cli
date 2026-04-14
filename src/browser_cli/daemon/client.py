@@ -48,6 +48,7 @@ from .transport import (
 STARTUP_TIMEOUT_SECONDS = 15.0
 STARTUP_PROBE_INTERVAL_SECONDS = 0.1
 TERMINATE_GRACE_SECONDS = 3.0
+_STREAM_LIMIT = 32 * 1024 * 1024
 
 
 def send_command(
@@ -72,7 +73,9 @@ def send_command(
 async def _send_command_async(action: str, args: dict[str, Any]) -> dict[str, Any]:
     app_paths = get_app_paths()
     try:
-        reader, writer = await asyncio.open_unix_connection(str(app_paths.socket_path))
+        reader, writer = await asyncio.open_unix_connection(
+            str(app_paths.socket_path), limit=_STREAM_LIMIT
+        )
     except OSError as exc:
         raise DaemonNotAvailableError(str(exc)) from exc
     request_payload = {
