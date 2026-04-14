@@ -19,6 +19,7 @@ REQUIRED_AGENT_PHRASES = [
     "`scripts/test.sh`",
     "`scripts/guard.sh`",
     "`scripts/check.sh`",
+    "`browser-cli install-skills` installs the packaged Browser CLI skills into `~/.agents/skills` by default and `--target` overrides the destination root.",
 ]
 
 REQUIRED_README_PHRASES = [

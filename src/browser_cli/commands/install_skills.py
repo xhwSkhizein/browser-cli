@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
-import tempfile
+import uuid
 from dataclasses import dataclass
 from importlib import resources
 from importlib.abc import Traversable
@@ -38,7 +39,9 @@ def discover_packaged_skills() -> list[PackagedSkill]:
             raise InvalidInputError(f"Packaged skill is missing from this build: {name}")
         skill_doc = skill_root.joinpath("SKILL.md")
         if not skill_doc.is_file():
-            raise InvalidInputError(f"Packaged skill is incomplete in this build: {name}")
+            raise InvalidInputError(
+                f"Packaged skill is incomplete in this build: {name} is missing SKILL.md"
+            )
         discovered.append(PackagedSkill(name=name, source=skill_root))
     return discovered
 
@@ -82,19 +85,44 @@ def install_skills_from_paths(
 
 
 def _install_one_skill(skill: PackagedSkill, destination: Path) -> None:
-    source = skill.source
+    source = skill.source if isinstance(skill.source, Traversable) else Path(skill.source)
+    staged = destination.with_name(f"{destination.name}.tmp-{uuid.uuid4().hex}")
     try:
-        with resources.as_file(source) as source_dir:
-            if destination.exists():
-                shutil.rmtree(destination)
-            with tempfile.TemporaryDirectory(prefix=f"{skill.name}-") as tmp_dir:
-                staged = Path(tmp_dir) / skill.name
-                shutil.copytree(source_dir, staged)
-                shutil.move(str(staged), destination)
+        _copy_skill_tree(source, staged)
+        backup = _swap_staged_directory(staged, destination)
+        if backup is not None:
+            shutil.rmtree(backup, ignore_errors=True)
     except OSError as exc:
+        if staged.exists():
+            shutil.rmtree(staged, ignore_errors=True)
         raise OperationFailedError(
             f"Could not install skill {skill.name} to {destination}: {exc}"
         ) from exc
+
+
+def _copy_skill_tree(source: Traversable | Path, destination: Path) -> None:
+    destination.mkdir(parents=True, exist_ok=False)
+    for child in source.iterdir():
+        child_destination = destination / child.name
+        if child.is_dir():
+            _copy_skill_tree(child, child_destination)
+            continue
+        with child.open("rb") as handle, child_destination.open("wb") as output:
+            shutil.copyfileobj(handle, output)
+
+
+def _swap_staged_directory(staged: Path, destination: Path) -> Path | None:
+    backup: Path | None = None
+    if destination.exists():
+        backup = destination.with_name(f"{destination.name}.bak-{uuid.uuid4().hex}")
+        os.replace(destination, backup)
+    try:
+        os.replace(staged, destination)
+    except OSError:
+        if backup is not None and backup.exists() and not destination.exists():
+            os.replace(backup, destination)
+        raise
+    return backup
 
 
 def run_install_skills_command(args: argparse.Namespace) -> str:

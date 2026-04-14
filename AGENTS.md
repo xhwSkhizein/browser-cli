@@ -54,6 +54,8 @@ the implementation, and where should a change land first.
   `src/browser_cli/cli/main.py`
 - Install and runtime diagnostics:
   `src/browser_cli/commands/doctor.py`
+- Packaged skill installation and `--target` handling:
+  `src/browser_cli/commands/install_skills.py`
 - Runtime path discovery:
   `src/browser_cli/commands/paths.py`
 - Daemon-backed command catalog, arguments, aliases, and request builders:
@@ -234,6 +236,7 @@ public interactive commands.
 ## Implementation Conventions
 
 - Top-level parser registration lives in `src/browser_cli/cli/main.py`. `read`, `doctor`, `paths`, `task`, `automation`, `status`, and lifecycle `reload` are hand-wired there; the rest come from `get_action_specs()`.
+- `browser-cli install-skills` installs the packaged Browser CLI skills into `~/.agents/skills` by default and `--target` overrides the destination root.
 - Public daemon-backed actions should be added through `ActionSpec`, not by manually bolting ad hoc parsers into `main.py`.
 - The lifecycle command `browser-cli reload` and the page action `browser-cli page-reload` are intentionally different surfaces. Do not collapse them.
 - Public daemon commands return JSON payloads. Preserve `ok/data/meta` shape and machine-readable error codes.

@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from scripts.generate_packaged_skill_docs import expected_packaged_skill_docs
+from scripts.guards.architecture import ALLOWED_DEPENDENCIES
+
 
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
@@ -30,6 +33,7 @@ def test_agents_points_to_browser_cli_delivery_skill() -> None:
     agents_text = _read("AGENTS.md")
 
     assert "skills/browser-cli-delivery/SKILL.md" in agents_text
+    assert ALLOWED_DEPENDENCIES["packaged_skills"] == set()
 
 
 def test_browser_cli_explore_skill_records_feedback_into_task_metadata() -> None:
@@ -64,3 +68,11 @@ def test_browser_cli_delivery_skill_orchestrates_explore_converge_and_optional_a
     assert "automation.toml" in skill_text
     assert "publish" in skill_text
     assert "If validation fails because evidence is missing, go back to explore" in skill_text
+
+
+def test_sync_packaged_skill_docs() -> None:
+    root = _repo_root()
+
+    for skill_name, expected in expected_packaged_skill_docs(root).items():
+        packaged_path = root / "src" / "browser_cli" / "packaged_skills" / skill_name / "SKILL.md"
+        assert packaged_path.read_text(encoding="utf-8") == expected
