@@ -25,7 +25,7 @@
 - Create: `tests/unit/test_daemon_app_validation.py`
 - Test: `tests/unit/test_daemon_app_validation.py`
 
-- [ ] **Step 1: Write the failing regression tests**
+- [x] **Step 1: Write the failing regression tests**
 
 Create `tests/unit/test_daemon_app_validation.py`:
 
@@ -163,7 +163,7 @@ def test_resize_non_positive_values_keep_handler_level_constraint() -> None:
     assert payload["error_message"] == "width and height must be positive integers."
 ```
 
-- [ ] **Step 2: Run the regression tests to verify they fail**
+- [x] **Step 2: Run the regression tests to verify they fail**
 
 Run:
 
@@ -186,7 +186,7 @@ git commit -m "test: add daemon parameter validation regressions"
 - Modify: `src/browser_cli/daemon/app.py`
 - Test: `tests/unit/test_daemon_app_validation.py`
 
-- [ ] **Step 1: Add shared numeric parsing helpers to `BrowserDaemonApp`**
+- [x] **Step 1: Add shared numeric parsing helpers to `BrowserDaemonApp`**
 
 Insert these helpers below `_optional_str()` in `src/browser_cli/daemon/app.py`:
 
@@ -232,7 +232,7 @@ Insert these helpers below `_optional_str()` in `src/browser_cli/daemon/app.py`:
             raise InvalidInputError(f"{key} must be a number.") from exc
 ```
 
-- [ ] **Step 2: Replace all direct numeric request parsing in handlers**
+- [x] **Step 2: Replace all direct numeric request parsing in handlers**
 
 Update these handler fragments in `src/browser_cli/daemon/app.py`:
 
@@ -401,7 +401,7 @@ Also update `resize` and `cookie-set`:
                 expires=self._optional_float(request.args, "expires"),
 ```
 
-- [ ] **Step 3: Run the regression tests to verify they pass**
+- [x] **Step 3: Run the regression tests to verify they pass**
 
 Run:
 
@@ -411,7 +411,7 @@ uv run pytest tests/unit/test_daemon_app_validation.py -v
 
 Expected: PASS
 
-- [ ] **Step 4: Add one focused success-path test for parsed values**
+- [x] **Step 4: Add one focused success-path test for parsed values**
 
 Append to `tests/unit/test_daemon_app_validation.py`:
 
@@ -457,7 +457,7 @@ git commit -m "fix: normalize daemon numeric parameter validation"
 - Modify: `docs/superpowers/plans/2026-04-14-daemon-parameter-validation-implementation-plan.md`
 - Test: `tests/unit/test_daemon_app_validation.py`
 
-- [ ] **Step 1: Run the focused daemon validation suite**
+- [x] **Step 1: Run the focused daemon validation suite**
 
 Run:
 
@@ -467,7 +467,7 @@ uv run pytest tests/unit/test_daemon_app_validation.py -v
 
 Expected: PASS
 
-- [ ] **Step 2: Run repository validation**
+- [x] **Step 2: Run repository validation**
 
 Run:
 
@@ -479,7 +479,7 @@ Run:
 
 Expected: all three scripts exit `0`.
 
-- [ ] **Step 3: Update this plan file to mark the completed steps**
+- [x] **Step 3: Update this plan file to mark the completed steps**
 
 Update the completed steps in this file:
 
