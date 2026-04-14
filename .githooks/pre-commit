@@ -1,0 +1,9 @@
+#!/usr/bin/env sh
+
+branch="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
+
+if [ "$branch" = "main" ]; then
+  echo "Direct commits to main are disabled in this repository."
+  echo "Create a feature branch first, then commit there."
+  exit 1
+fi
