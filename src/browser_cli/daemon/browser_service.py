@@ -352,12 +352,22 @@ class BrowserService:
                 body = str((await self.capture_html(page_id))["html"])
             if not body.strip():
                 raise EmptyContentError()
-            return {
+            payload = {
                 "page_id": page_id,
                 "body": body,
                 "output_mode": output_mode,
                 "url": str(page["url"]),
             }
+            chrome_environment = self._playwright.chrome_environment
+            if chrome_environment is not None:
+                payload["used_fallback_profile"] = chrome_environment.source == "fallback"
+                if chrome_environment.source == "fallback":
+                    payload["fallback_profile_dir"] = str(chrome_environment.user_data_dir)
+                    payload["fallback_reason"] = chrome_environment.fallback_reason
+                if chrome_environment.profile_name:
+                    payload["profile_name"] = chrome_environment.profile_name
+                payload["profile_directory"] = chrome_environment.profile_directory
+            return payload
         finally:
             with contextlib.suppress(Exception):
                 await self.close_tab(page_id)

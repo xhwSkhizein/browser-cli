@@ -143,3 +143,34 @@ def test_task_runtime_read_scroll_bottom_loads_more_content_without_leaking_tabs
         tabs = send_command("tabs", start_if_needed=False)
         assert [tab["page_id"] for tab in tabs["data"]["tabs"]] == [existing_page_id]
         send_command("stop", start_if_needed=False)
+
+
+@pytest.mark.skipif(
+    not _can_launch_playwright_browser(), reason="Playwright browser runtime unavailable"
+)
+def test_task_runtime_read_daemon_path_reports_fallback_metadata(
+    monkeypatch, tmp_path: Path
+) -> None:
+    _configure_runtime(monkeypatch, tmp_path)
+    chrome_environment = ChromeEnvironment(
+        executable_path=None,
+        user_data_dir=tmp_path / "fallback-user-data",
+        profile_directory="Default",
+        source="fallback",
+        fallback_reason="Chrome profile appears to be in use.",
+    )
+    (chrome_environment.user_data_dir / "Default").mkdir(parents=True)
+
+    with run_fixture_server() as base_url:
+        payload = send_command(
+            "read-page",
+            {
+                "url": f"{base_url}/static",
+                "output_mode": "html",
+                "chrome_environment": _serialize_environment(chrome_environment),
+            },
+        )
+        assert payload["data"]["used_fallback_profile"] is True
+        assert payload["data"]["fallback_profile_dir"] == str(chrome_environment.user_data_dir)
+        assert payload["data"]["fallback_reason"] == "Chrome profile appears to be in use."
+        send_command("stop", start_if_needed=False)

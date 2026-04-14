@@ -43,6 +43,8 @@ the implementation, and where should a change land first.
 - `automation.toml` packages and configures a task snapshot; it must not duplicate task logic.
 - `browser-cli task` is the first-class local authoring UX.
 - `browser-cli automation publish` creates immutable snapshots under the Browser CLI home and auto-imports them into the automation service.
+- Published automation snapshot truth lives under `~/.browser-cli/automations/<automation-id>/versions/<version>/automation.toml`; current service state is a separate live view.
+- If source `automation.toml` exists, `browser-cli automation publish` must preserve its supported fields in the published snapshot; generated defaults are allowed only when the source manifest is absent and must be reported explicitly.
 - Do not introduce a public `browser-cli explore` surface or a second browser runtime. Exploration remains an agent activity layered on top of Browser CLI.
 - The extension popup is a human-facing runtime observer and light recovery surface. Agent feedback still flows through command responses and `runtime-status`.
 
@@ -181,6 +183,10 @@ the implementation, and where should a change land first.
   start at `src/browser_cli/automation/service/*`, `src/browser_cli/automation/persistence/*`, `src/browser_cli/automation/scheduler/*`, and `src/browser_cli/automation/api/*`.
 - If the user reports confusion about what publish created or which version is active:
   inspect `src/browser_cli/commands/automation.py`, `src/browser_cli/automation/publisher.py`, `src/browser_cli/automation/api/server.py`, and the snapshot directories under `~/.browser-cli/automations/<automation-id>/versions/`.
+- If the user reports publish/config drift between a version and current service state:
+  inspect the snapshot manifest under `~/.browser-cli/automations/<automation-id>/versions/<version>/automation.toml` first, then compare it with `browser_cli.commands.automation` live inspect payload assembly and `browser_cli.automation.api.server` persisted automation serialization.
+- If the user reports that `browser-cli read` stopped explaining fallback profile use:
+  inspect `src/browser_cli/daemon/browser_service.py::read_page`, `src/browser_cli/task_runtime/read.py`, and `src/browser_cli/commands/read.py`; fallback metadata is only guaranteed on the read path.
 - If the user mentions extension capability gaps, artifacts, or real Chrome behavior:
   inspect both `src/browser_cli/extension/*` and `browser-cli-extension/src/*`; many bugs live in protocol drift between Python and extension JS.
 - If the user reports popup/runtime observer drift:
@@ -235,6 +241,8 @@ public interactive commands.
 - `task.py` contains reusable automation logic. `automation.toml` packages and configures that logic; it should not become a second implementation surface.
 - Runtime automation state belongs to the automation service persistence layer, not `automation.toml`. `automation.toml` remains an import/export and reviewable packaging artifact.
 - Published automations are immutable snapshots. Versioning should append a new snapshot rather than mutating an older one.
+- `browser-cli automation inspect --version <n>` must render snapshot config and live config separately; do not collapse them into one synthesized automation view.
+- `runtime.timeout_seconds` is enforced only by the automation service and applies to the total wall-clock budget for one automation run; timeout failures must not auto-retry.
 - When adapting third-party logic from `third_party/bridgic-browser`, keep provenance clear and the adapted code understandable. Do not add a runtime dependency on the external package just to shortcut implementation.
 
 ## Testing And Validation

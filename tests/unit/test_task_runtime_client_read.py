@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from unittest.mock import patch
 
@@ -10,6 +11,7 @@ from browser_cli.profiles.discovery import ChromeEnvironment
 from browser_cli.task_runtime.client import BrowserCliTaskClient
 from browser_cli.task_runtime.flow import Flow
 from browser_cli.task_runtime.models import FlowContext
+from browser_cli.task_runtime.read import ReadRequest, run_read_request
 
 
 def _chrome_environment(tmp_path: Path) -> ChromeEnvironment:
@@ -87,6 +89,29 @@ def test_client_read_raises_empty_content_error() -> None:
         pytest.raises(EmptyContentError),
     ):
         BrowserCliTaskClient().read("https://example.com")
+
+
+def test_run_read_request_preserves_daemon_fallback_metadata() -> None:
+    payload = {
+        "ok": True,
+        "data": {
+            "body": "<html></html>",
+            "used_fallback_profile": True,
+            "fallback_profile_dir": "/tmp/browser-cli/default-profile",
+            "fallback_reason": "Chrome profile appears to be in use.",
+        },
+    }
+    with (
+        patch("browser_cli.task_runtime.read.probe_socket", return_value=True),
+        patch("browser_cli.task_runtime.read.send_command", return_value=payload),
+    ):
+        result = asyncio.run(
+            run_read_request(ReadRequest(url="https://example.com", output_mode="html"))
+        )
+
+    assert result.used_fallback_profile is True
+    assert result.fallback_profile_dir == "/tmp/browser-cli/default-profile"
+    assert result.fallback_reason == "Chrome profile appears to be in use."
 
 
 def test_flow_read_delegates_to_client(tmp_path: Path) -> None:
