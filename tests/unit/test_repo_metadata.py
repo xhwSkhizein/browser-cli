@@ -43,3 +43,9 @@ def test_repo_includes_packaged_browser_cli_skills_in_wheel_config() -> None:
     package_data = data["tool"]["setuptools"].get("package-data", {})
     assert "browser_cli.packaged_skills" in package_data
     assert package_data["browser_cli.packaged_skills"] == ["*/SKILL.md"]
+
+
+def test_repo_strips_local_version_suffixes_from_setuptools_scm_builds() -> None:
+    data = _load_pyproject()
+
+    assert data["tool"]["setuptools_scm"]["local_scheme"] == "no-local-version"

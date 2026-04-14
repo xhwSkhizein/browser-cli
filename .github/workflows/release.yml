@@ -22,7 +22,7 @@ jobs:
           enable-cache: true
 
       - name: Build package
-        run: uv build --no-sources
+        run: uv build --no-sources --clear
 
       - name: Verify wheel-packaged skills
         run: |

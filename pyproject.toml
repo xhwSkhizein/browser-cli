@@ -38,7 +38,8 @@ include-package-data = true
 where = ["src"]
 
 [tool.setuptools_scm]
-# 版本从 git tag 自动推断
+# 版本从 git tag 自动推断；发布产物不携带本地版本后缀，避免 PyPI 拒收。
+local_scheme = "no-local-version"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
