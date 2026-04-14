@@ -66,6 +66,7 @@ class BrowserService:
         self._context: Any | None = None
         self._pages: dict[str, Any] = {}
         self._page_counter = 0
+        self._reusable_startup_pages: list[Any] = []
         self._snapshot_registry = SnapshotRegistry()
         self._ref_resolver = SemanticRefResolver()
         self._console_messages: dict[str, list[dict[str, Any]]] = {}
@@ -154,8 +155,7 @@ class BrowserService:
             )
             if init_script:
                 await self._context.add_init_script(init_script)
-            for page in list(self._context.pages):
-                await page.close()
+            self._reusable_startup_pages = list(self._context.pages)
         except Exception as exc:
             await self.stop()
             self._raise_launch_error(exc)
@@ -185,6 +185,7 @@ class BrowserService:
         self._dialog_handlers.clear()
         self._video_started.clear()
         self._pending_video_save_paths.clear()
+        self._reusable_startup_pages.clear()
         self._tracing_active = False
         if self._context is not None:
             await self._context.close()
@@ -208,10 +209,8 @@ class BrowserService:
     ) -> dict[str, Any]:
         await self.ensure_started()
         async with self._page_create_lock:
-            page = await self._context.new_page()
-            page_id = page_id or self._next_page_id()
-            self._pages[page_id] = page
-            self._network_observers[page_id] = PlaywrightNetworkObserver(page_id=page_id, page=page)
+            page = await self._acquire_page()
+            page_id = self._register_page(page, page_id=page_id)
             if url:
                 await page.goto(
                     self._normalize_url(url),
@@ -269,9 +268,8 @@ class BrowserService:
         page: Any | None = None
         try:
             async with self._page_create_lock:
-                page = await self._context.new_page()
-                page_id = self._next_page_id()
-                self._pages[page_id] = page
+                page = await self._acquire_page()
+                page_id = self._register_page(page)
             await page.goto(
                 self._normalize_url(url),
                 wait_until="load",
@@ -1282,6 +1280,39 @@ class BrowserService:
         self._page_counter += 1
         return f"page_{self._page_counter:04d}"
 
+    def _is_reusable_startup_page(self, page: Any) -> bool:
+        if page.is_closed():
+            return False
+        return str(getattr(page, "url", "")) in {"", "about:blank"}
+
+    async def _acquire_page(self) -> Any:
+        while self._reusable_startup_pages:
+            page = self._reusable_startup_pages.pop(0)
+            if self._is_reusable_startup_page(page):
+                return page
+        return await self._context.new_page()
+
+    def _register_page(self, page: Any, *, page_id: str | None = None) -> str:
+        resolved_page_id = page_id or self._next_page_id()
+        self._pages[resolved_page_id] = page
+        self._network_observers[resolved_page_id] = PlaywrightNetworkObserver(
+            page_id=resolved_page_id,
+            page=page,
+        )
+        return resolved_page_id
+
+    def _count_open_context_pages(self) -> int:
+        if self._context is None:
+            return 0
+        return sum(1 for page in self._context.pages if not page.is_closed())
+
+    async def _ensure_reusable_page_before_last_close(self, page: Any) -> None:
+        if self._context is None or page.is_closed() or self._count_open_context_pages() > 1:
+            return
+        replacement = await self._context.new_page()
+        if self._is_reusable_startup_page(replacement):
+            self._reusable_startup_pages.append(replacement)
+
     @staticmethod
     async def _capture_html_from_page(page: Any) -> str:
         return await page.evaluate(
@@ -1365,6 +1396,7 @@ class BrowserService:
         has_pending = pending is not sentinel
         video_requested = page_id in self._video_started or has_pending
         self._video_started.discard(page_id)
+        await self._ensure_reusable_page_before_last_close(page)
         await self._remove_page_handlers(page_id)
         await page.close()
         self._pages.pop(page_id, None)
