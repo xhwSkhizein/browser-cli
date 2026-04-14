@@ -14,15 +14,18 @@ dependencies = [
   "tomli>=1.2.0; python_version<'3.11'",
 ]
 
-[project.optional-dependencies]
+[project.scripts]
+browser-cli = "browser_cli.cli.main:main"
+
+[dependency-groups]
 dev = [
   "pytest>=8.0",
   "ruff>=0.4.0",
   "mypy>=1.10.0",
 ]
 
-[project.scripts]
-browser-cli = "browser_cli.cli.main:main"
+[tool.uv]
+default-groups = ["dev"]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
