@@ -12,9 +12,16 @@ from browser_cli.profiles.discovery import ChromeEnvironment
 
 
 class _FakePage:
-    def __init__(self, url: str = "about:blank", *, title: str = "blank") -> None:
+    def __init__(
+        self,
+        url: str = "about:blank",
+        *,
+        title: str = "blank",
+        close_yields: bool = False,
+    ) -> None:
         self.url = url
         self._title = title
+        self._close_yields = close_yields
         self.closed = False
         self.goto_calls: list[str] = []
         self.event_handlers: dict[str, list[Any]] = {}
@@ -23,6 +30,8 @@ class _FakePage:
         return self.closed
 
     async def close(self) -> None:
+        if self._close_yields:
+            await asyncio.sleep(0)
         self.closed = True
 
     async def title(self) -> str:
@@ -55,8 +64,11 @@ class _FakePage:
 
 
 class _FakeContext:
-    def __init__(self, startup_pages: list[_FakePage]) -> None:
+    def __init__(
+        self, startup_pages: list[_FakePage], *, close_yields_on_new_pages: bool = False
+    ) -> None:
         self._pages = list(startup_pages)
+        self._close_yields_on_new_pages = close_yields_on_new_pages
         self.new_page_calls = 0
         self.closed = False
 
@@ -71,7 +83,7 @@ class _FakeContext:
         self.new_page_calls += 1
         if not self.pages:
             raise RuntimeError("Target.createTarget: Failed to open a new tab")
-        page = _FakePage()
+        page = _FakePage(close_yields=self._close_yields_on_new_pages)
         self._pages.append(page)
         return page
 
@@ -195,6 +207,33 @@ def test_repeated_read_page_calls_keep_context_usable(
         assert first["url"] == "https://example.com/one"
         assert second["url"] == "https://example.com/two"
         assert context.new_page_calls == 2
+        await service.stop()
+
+    asyncio.run(_scenario())
+
+
+def test_concurrent_close_tab_keeps_context_usable(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    async def _scenario() -> None:
+        startup_page = _FakePage(close_yields=True)
+        context = _FakeContext([startup_page], close_yields_on_new_pages=True)
+        monkeypatch.setattr(
+            playwright_async_api, "async_playwright", lambda: _FakeAsyncPlaywright(context)
+        )
+        service = BrowserService(chrome_environment=_chrome_environment(tmp_path))
+
+        first = await service.new_tab(url="https://example.com/one")
+        second = await service.new_tab(url="https://example.com/two")
+
+        await asyncio.gather(
+            service.close_tab(first["page_id"]),
+            service.close_tab(second["page_id"]),
+        )
+
+        reopened = await service.new_tab(url="https://example.com/after-close")
+
+        assert reopened["url"] == "https://example.com/after-close"
         await service.stop()
 
     asyncio.run(_scenario())

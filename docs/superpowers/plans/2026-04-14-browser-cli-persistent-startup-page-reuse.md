@@ -10,7 +10,7 @@
 
 ---
 
-### Task 1: Add browser-service regression tests for startup page reuse
+## Task 1: Add browser-service regression tests for startup page reuse
 
 **Files:**
 - Create: `tests/unit/test_browser_service.py`
@@ -227,7 +227,7 @@ git add tests/unit/test_browser_service.py
 git commit -m "test: add startup page reuse regression coverage"
 ```
 
-### Task 2: Implement reusable startup-page acquisition in the browser service
+## Task 2: Implement reusable startup-page acquisition in the browser service
 
 **Files:**
 - Modify: `src/browser_cli/browser/service.py`
@@ -374,7 +374,7 @@ git add src/browser_cli/browser/service.py tests/unit/test_browser_service.py
 git commit -m "fix: reuse startup pages in persistent browser contexts"
 ```
 
-### Task 3: Verify the real-world reproduction and run repository validation
+## Task 3: Verify the real-world reproduction and run repository validation
 
 **Files:**
 - Modify: `src/browser_cli/browser/service.py`

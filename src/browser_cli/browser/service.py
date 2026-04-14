@@ -77,6 +77,8 @@ class BrowserService:
         self._video_started: set[str] = set()
         self._pending_video_save_paths: dict[str, str | None] = {}
         self._start_lock = asyncio.Lock()
+        # Serialize page acquisition with last-page replacement/close so
+        # concurrent closers cannot strand the persistent context with zero pages.
         self._page_create_lock = asyncio.Lock()
 
     @property
@@ -1396,9 +1398,10 @@ class BrowserService:
         has_pending = pending is not sentinel
         video_requested = page_id in self._video_started or has_pending
         self._video_started.discard(page_id)
-        await self._ensure_reusable_page_before_last_close(page)
-        await self._remove_page_handlers(page_id)
-        await page.close()
+        async with self._page_create_lock:
+            await self._ensure_reusable_page_before_last_close(page)
+            await self._remove_page_handlers(page_id)
+            await page.close()
         self._pages.pop(page_id, None)
         self._snapshot_registry.clear_page(page_id)
         result: dict[str, Any] = {"page_id": page_id, "closed": True}
