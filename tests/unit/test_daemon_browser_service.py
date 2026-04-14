@@ -108,6 +108,21 @@ class _FakeDriverBase:
         self.switched_to = page_id
         return await self.get_page_summary(page_id)
 
+    async def wait(
+        self,
+        page_id: str,
+        *,
+        seconds: float | None = None,
+        text: str | None = None,
+        gone: bool = False,
+        exact: bool = False,
+    ) -> dict:
+        _ = seconds
+        _ = text
+        _ = gone
+        _ = exact
+        return {"page_id": page_id, "waited": True}
+
 
 class _FakePlaywrightDriver(_FakeDriverBase):
     def __init__(self, chrome_environment=None, *, headless=None) -> None:
@@ -514,6 +529,39 @@ def test_browser_service_downgrades_at_safe_point_and_reports_state_reset(
             "target": "playwright",
             "reason": "extension-disconnected-waiting-command",
         }
+        await service.stop()
+
+    asyncio.run(_scenario())
+
+
+def test_read_page_falls_back_to_playwright_when_extension_hits_chunk_limit(
+    _patched_browser_service: _FakeExtensionHub,
+) -> None:
+    async def _scenario() -> None:
+        _patched_browser_service.connect()
+        service = browser_service_module.BrowserService(TabRegistry())
+        await service.ensure_started()
+        assert service.active_driver_name == "extension"
+
+        async def _extension_capture_html(page_id: str) -> dict[str, str]:
+            raise RuntimeError("Separator is found, but chunk is longer than limit")
+
+        async def _playwright_capture_html(page_id: str) -> dict[str, str]:
+            return {"page_id": page_id, "html": "<html>ok</html>"}
+
+        service._extension.capture_html = _extension_capture_html  # type: ignore[method-assign]  # noqa: SLF001
+        service._playwright.capture_html = _playwright_capture_html  # type: ignore[method-assign]  # noqa: SLF001
+
+        payload = await service.read_page(url="https://example.com/long-doc", output_mode="html")
+
+        assert payload["body"] == "<html>ok</html>"
+        assert payload["driver_fallback"] == {
+            "from": "extension",
+            "to": "playwright",
+            "reason": "extension-read-fallback",
+            "error": "Separator is found, but chunk is longer than limit",
+        }
+        assert service.active_driver_name == "playwright"
         await service.stop()
 
     asyncio.run(_scenario())

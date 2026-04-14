@@ -199,6 +199,9 @@ the implementation, and where should a change land first.
   `Tab <id> is not debuggable: unknown` during extension-mode `read` or `open-tab`
   -> extension tried to attach Chrome debugger before the new tab reported a debuggable URL
   -> inspect `browser-cli-extension/src/background.js::openTab` and `browser-cli-extension/src/debugger.js::ensureAttached`
+  `read` fails in extension mode with `Separator is found, but chunk is longer than limit` or `chunk exceed the limit`
+  -> extension-side page extraction hit a large-result chunking limit on the current page
+  -> inspect `src/browser_cli/daemon/browser_service.py::read_page`, `src/browser_cli/drivers/_extension/page_actions.py`, and `browser-cli-extension/src/background/page_actions.js`; safe fix is a one-shot read fallback to Playwright rather than changing CLI contracts
 - If the user reports popup/runtime observer drift:
   start at `src/browser_cli/daemon/runtime_presentation.py`, then `src/browser_cli/extension/session.py`, then `browser-cli-extension/src/background.js`, `browser-cli-extension/src/popup_view.js`, and `browser-cli-extension/src/popup.js`.
 - If the user reports long-run stability drift across repeated reloads, reconnects, or artifact runs:

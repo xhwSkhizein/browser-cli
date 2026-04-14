@@ -58,6 +58,12 @@ class BrowserService:
     READ_SCROLL_PAUSE_MS = 450
     READ_SCROLL_MAX_ROUNDS = 8
     READ_SCROLL_STABLE_ROUNDS = 2
+    _READ_EXTENSION_FALLBACK_PATTERNS = (
+        "Separator is found, but chunk is longer than limit",
+        "Separator is not found, and chunk exceed the limit",
+        "chunk is longer than limit",
+        "chunk exceed the limit",
+    )
 
     def __init__(
         self,
@@ -333,6 +339,40 @@ class BrowserService:
     ) -> dict[str, Any]:
         if output_mode not in {"html", "snapshot"}:
             raise InvalidInputError(f"Unsupported read output mode: {output_mode}")
+        try:
+            return await self._read_page_once(
+                url=url,
+                output_mode=output_mode,
+                scroll_bottom=scroll_bottom,
+            )
+        except Exception as exc:
+            if not self._should_retry_read_on_playwright(exc):
+                raise
+            logger.warning(
+                "Extension read failed with chunking error; retrying with playwright: %s",
+                exc,
+            )
+            await self._activate_driver("playwright", reason="extension-read-fallback")
+            payload = await self._read_page_once(
+                url=url,
+                output_mode=output_mode,
+                scroll_bottom=scroll_bottom,
+            )
+            payload["driver_fallback"] = {
+                "from": "extension",
+                "to": "playwright",
+                "reason": "extension-read-fallback",
+                "error": str(exc),
+            }
+            return payload
+
+    async def _read_page_once(
+        self,
+        *,
+        url: str,
+        output_mode: str,
+        scroll_bottom: bool,
+    ) -> dict[str, Any]:
         page = await self.new_tab(
             url=url, wait_until="load", timeout_seconds=self.READ_NAVIGATION_TIMEOUT_SECONDS
         )
@@ -371,6 +411,12 @@ class BrowserService:
         finally:
             with contextlib.suppress(Exception):
                 await self.close_tab(page_id)
+
+    def _should_retry_read_on_playwright(self, exc: Exception) -> bool:
+        if self._driver_name != "extension":
+            return False
+        message = str(exc)
+        return any(pattern in message for pattern in self._READ_EXTENSION_FALLBACK_PATTERNS)
 
     async def close_tab(self, page_id: str) -> dict[str, Any]:
         self._snapshot_registry.clear_page(page_id)
