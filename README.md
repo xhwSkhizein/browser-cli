@@ -86,6 +86,35 @@ browser-cli --help
 Installed users should start with [`docs/installed-with-uv.md`](docs/installed-with-uv.md).
 For removal and local cleanup guidance, see [`docs/uninstall.md`](docs/uninstall.md).
 
+## Install Browser CLI Skills
+
+Browser CLI ships with three packaged skills that can be installed into an
+agent skills directory:
+
+- `browser-cli-converge`
+- `browser-cli-delivery`
+- `browser-cli-explore`
+
+Install them into the default skills root:
+
+```bash
+browser-cli install-skills
+```
+
+By default, Browser CLI writes the packaged skills into `~/.agents/skills`.
+Use `--dry-run` to preview the install and `--target` to override the
+destination:
+
+```bash
+browser-cli install-skills --dry-run
+browser-cli install-skills --target ~/.codex/skills
+```
+
+You can rerun the command safely. Existing packaged Browser CLI skills at the
+target path are replaced with the packaged versions from the installed wheel.
+For a longer installed-user walkthrough, see
+[`docs/install-skills.md`](docs/install-skills.md).
+
 ## Development
 
 Clone the repository and sync the managed development environment:
