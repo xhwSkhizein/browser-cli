@@ -225,9 +225,9 @@ def run(flow: Flow, inputs: dict) -> dict:
 
 仓库里有几个很适合照着读的例子：
 
-- [interactive_reveal_capture/task.py](/home/hongv/workspace/browser-cli/tasks/interactive_reveal_capture/task.py)
-- [lazy_scroll_capture/task.py](/home/hongv/workspace/browser-cli/tasks/lazy_scroll_capture/task.py)
-- [douyin_video_download/task.py](/home/hongv/workspace/browser-cli/tasks/douyin_video_download/task.py)
+- [interactive_reveal_capture/task.py](../tasks/interactive_reveal_capture/task.py)
+- [lazy_scroll_capture/task.py](../tasks/lazy_scroll_capture/task.py)
+- [douyin_video_download/task.py](../tasks/douyin_video_download/task.py)
 
 第一个例子教你点按钮。第二个例子教你滚动到底。第三个例子开始接真实站点，也开始处理 cookies、接口请求和下载文件。
 
