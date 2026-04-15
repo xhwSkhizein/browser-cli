@@ -8,10 +8,11 @@ The first-day path should be:
 1. Install Browser CLI with uv.
 2. Run `browser-cli doctor`.
 3. Run `browser-cli paths`.
-4. Try `browser-cli read https://example.com`.
-5. Create a task, then run `browser-cli task validate <task-dir>`.
-6. Run `browser-cli task run <task-dir>`.
-7. Publish with `browser-cli automation publish <task-dir>`.
+4. Optionally run `browser-cli install-skills`.
+5. Try `browser-cli read https://example.com`.
+6. Create a task, then run `browser-cli task validate <task-dir>`.
+7. Run `browser-cli task run <task-dir>`.
+8. Publish with `browser-cli automation publish <task-dir>`.
 
 ## Recommended Starting Point
 
@@ -44,6 +45,40 @@ with:
 ```bash
 uv tool dir --bin
 ```
+
+## Install Browser CLI Skills
+
+Use `install-skills` when you want Browser CLI to copy its packaged skills into
+your agent skills directory.
+
+Install the packaged skills into the default target:
+
+```bash
+browser-cli install-skills
+```
+
+By default, the command writes to `~/.agents/skills`. Preview the result
+without writing files:
+
+```bash
+browser-cli install-skills --dry-run
+```
+
+Choose a different destination root with `--target`:
+
+```bash
+browser-cli install-skills --target ~/.codex/skills
+```
+
+Browser CLI currently installs exactly three packaged skills:
+
+- `browser-cli-converge`
+- `browser-cli-delivery`
+- `browser-cli-explore`
+
+If the target already contains those skill directories, Browser CLI replaces
+them with the packaged versions from the installed distribution. For a longer
+walkthrough, see [`docs/install-skills.md`](docs/install-skills.md).
 
 ## First Read
 
