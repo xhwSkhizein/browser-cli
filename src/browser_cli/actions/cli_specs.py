@@ -55,7 +55,7 @@ def get_action_specs() -> list[ActionSpec]:
         ),
         ActionSpec(
             "snapshot",
-            "Capture a bridgic-style snapshot for ref-driven exploration.",
+            "Capture an accessibility-style snapshot for ref-driven exploration.",
             "Return the accessibility-style snapshot tree for ref-driven exploration on the active tab. Use -i/-F to keep captures smaller.",
             _add_snapshot_arguments,
             _default_request,
