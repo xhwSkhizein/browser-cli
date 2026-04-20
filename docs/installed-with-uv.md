@@ -11,10 +11,10 @@ The first-day path should be:
 4. Optionally run `browser-cli install-skills`.
 5. Try `browser-cli read https://example.com`.
 6. Run `browser-cli task examples` to see the shipped reference tasks.
-7. Run `browser-cli task template --output <task-dir>` to scaffold a local task bundle.
-8. Run `browser-cli task validate <task-dir>`.
-9. Run `browser-cli task run <task-dir>`.
-10. Publish with `browser-cli automation publish <task-dir>`.
+7. Scaffold a local task bundle with `browser-cli task template --output <task-dir>`.
+8. Validate it with `browser-cli task validate <task-dir>`.
+9. Execute it with `browser-cli task run <task-dir>`.
+10. Publish it with `browser-cli automation publish <task-dir>`.
 
 ## Recommended Starting Point
 

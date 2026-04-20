@@ -69,13 +69,13 @@ Create `docs/uninstall.md`:
 Add a docs link in `README.md`:
 
 ```markdown
-- Uninstall and cleanup guidance: [`../../uninstall.md`](../../uninstall.md)
+- Uninstall and cleanup guidance: [`docs/uninstall.md`](docs/uninstall.md)
 ```
 
 Add a pointer in `docs/installed-with-uv.md`:
 
 ```markdown
-To remove Browser CLI later, see [`../../uninstall.md`](../../uninstall.md).
+To remove Browser CLI later, see [`uninstall.md`](uninstall.md).
 ```
 
 - [ ] **Step 4: Run the test to verify it still fails for missing content**
