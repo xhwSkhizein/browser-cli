@@ -30,7 +30,7 @@ reliable browser control from the command line.
 │  ├─ verify-*: assertions                                             │
 │  └─ ... 60+ commands total                                           │
 ├──────────────────────────────────────────────────────────────────────┤
-│  Dual Backend: Playwright (default) ◄──► Chrome Extension (opt)      │
+│  Dual Backend: Managed Profile (Playwright) ◄──► Chrome Extension    │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -43,7 +43,7 @@ reliable browser control from the command line.
 
 ## Features
 
-- **Dual Backend Architecture**: managed profile mode by default, extension mode when real Chrome is available
+- **Dual Backend Architecture**: managed profile mode by default, extension mode when real Chrome is connected and healthy
 - **Semantic Ref System**: stable refs that survive many DOM re-renders
 - **Agent Isolation**: `X_AGENT_ID` isolates visible tabs while sharing browser storage
 - **JSON-First API**: daemon-backed commands return structured JSON
@@ -201,6 +201,13 @@ tasks/
     automation.toml
 ```
 
+Discover the shipped examples or scaffold a new task bundle:
+
+```bash
+browser-cli task examples
+browser-cli task template --output tasks/my_task
+```
+
 Validate and run a task directly:
 
 ```bash
@@ -295,8 +302,13 @@ Exit codes:
 
 - Repo navigation and subsystem ownership: [`AGENTS.md`](AGENTS.md)
 - Installed-user guide: [`docs/installed-with-uv.md`](docs/installed-with-uv.md)
+- Installed skill walkthrough: [`docs/install-skills.md`](docs/install-skills.md)
 - Uninstall and cleanup guide: [`docs/uninstall.md`](docs/uninstall.md)
-- Explore-to-task skill: [`skills/browser-cli-explore-delivery/SKILL.md`](skills/browser-cli-explore-delivery/SKILL.md)
+- Task and automation examples: [`docs/examples/task-and-automation.md`](docs/examples/task-and-automation.md)
+- Packaged skills:
+  [`skills/browser-cli-delivery/SKILL.md`](skills/browser-cli-delivery/SKILL.md),
+  [`skills/browser-cli-explore/SKILL.md`](skills/browser-cli-explore/SKILL.md),
+  [`skills/browser-cli-converge/SKILL.md`](skills/browser-cli-converge/SKILL.md)
 - Smoke checklist: [`docs/smoke-checklist.md`](docs/smoke-checklist.md)
 
 ## Testing
@@ -323,6 +335,13 @@ Run the full local validation flow:
 
 ```bash
 ./scripts/check.sh
+```
+
+If local version metadata looks stale after code changes, refresh the editable
+install before the validation flow:
+
+```bash
+uv sync --dev --reinstall-package browser-control-and-automation-cli
 ```
 
 Fast Python 3.10 compatibility check:

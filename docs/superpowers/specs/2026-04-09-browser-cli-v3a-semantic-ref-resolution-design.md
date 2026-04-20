@@ -41,9 +41,9 @@ a new end-user command family.
 ## Problem Statement
 
 Current Browser CLI ref behavior is centered on
-[`snapshot.py`](/Users/hongv/workspace/m-projects/browser-cli/src/browser_cli/browser/snapshot.py)
+[`snapshot.py`](../../../src/browser_cli/browser/snapshot.py)
 and
-[`service.py`](/Users/hongv/workspace/m-projects/browser-cli/src/browser_cli/browser/service.py):
+[`service.py`](../../../src/browser_cli/browser/service.py):
 
 - snapshot generation walks the DOM directly in page JavaScript
 - refs are written to `data-browser-cli-ref`
@@ -261,7 +261,7 @@ runtime locators.
 ### 5. Action-Layer Integration
 
 All ref-based actions in
-[`service.py`](/Users/hongv/workspace/m-projects/browser-cli/src/browser_cli/browser/service.py)
+[`service.py`](../../../src/browser_cli/browser/service.py)
 must stop querying `data-browser-cli-ref` directly.
 
 Instead they should call a shared resolver path used by:

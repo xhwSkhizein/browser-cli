@@ -21,8 +21,8 @@ project:
 - maintainers use `uv sync` and `uv run`
 - CI uses uv-managed Python and uv-managed dependency execution
 - release uses `uv build` and `uv publish`
-- end users install with `uv tool install browser-cli` or run with
-  `uvx browser-cli`
+- end users install with `uv tool install browser-control-and-automation-cli`
+  or run with `uvx --from browser-control-and-automation-cli browser-cli`
 
 The migration intentionally does not change Browser CLI product architecture or
 replace the current `setuptools` build backend.
@@ -158,8 +158,8 @@ This becomes the only supported maintainer path documented in the repository.
 
 End users use:
 
-- `uv tool install browser-cli`
-- `uvx browser-cli ...`
+- `uv tool install browser-control-and-automation-cli`
+- `uvx --from browser-control-and-automation-cli browser-cli ...`
 
 Git-based installs remain available, but are expressed through uv, for example
 `uv tool install git+https://...`.
@@ -245,7 +245,8 @@ The migration should not collapse all install guidance into one sentence.
 Two distinct guidance paths must exist:
 
 - repository maintainers: `uv sync --dev`, then `uv run ...`
-- end users: `uv tool install browser-cli` or `uvx browser-cli`
+- end users: `uv tool install browser-control-and-automation-cli` or
+  `uvx --from browser-control-and-automation-cli browser-cli`
 
 This separation avoids misdirecting an installed user toward repository setup,
 or a contributor toward tool installation.
@@ -417,8 +418,9 @@ The migration is complete only when all of the following are true:
 
 1. A new contributor can clone the repository, run `uv sync --dev`, and then
    run repository checks entirely through uv.
-2. An end user can install Browser CLI with `uv tool install browser-cli` and
-   run `browser-cli` directly without prefixing every command with uv.
+2. An end user can install Browser CLI with
+   `uv tool install browser-control-and-automation-cli` and run `browser-cli`
+   directly without prefixing every command with uv.
 3. README and installed-user documentation present uv as the primary path.
 4. CI and release workflows no longer depend on `pip` as the primary execution
    path.

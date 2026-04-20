@@ -10,9 +10,11 @@ The first-day path should be:
 3. Run `browser-cli paths`.
 4. Optionally run `browser-cli install-skills`.
 5. Try `browser-cli read https://example.com`.
-6. Create a task, then run `browser-cli task validate <task-dir>`.
-7. Run `browser-cli task run <task-dir>`.
-8. Publish with `browser-cli automation publish <task-dir>`.
+6. Run `browser-cli task examples` to see the shipped reference tasks.
+7. Scaffold a local task bundle with `browser-cli task template --output <task-dir>`.
+8. Validate it with `browser-cli task validate <task-dir>`.
+9. Execute it with `browser-cli task run <task-dir>`.
+10. Publish it with `browser-cli automation publish <task-dir>`.
 
 ## Recommended Starting Point
 
@@ -78,7 +80,7 @@ Browser CLI currently installs exactly three packaged skills:
 
 If the target already contains those skill directories, Browser CLI replaces
 them with the packaged versions from the installed distribution. For a longer
-walkthrough, see [`docs/install-skills.md`](docs/install-skills.md).
+walkthrough, see [`install-skills.md`](install-skills.md).
 
 ## First Read
 
@@ -124,6 +126,22 @@ my_task/
   automation.toml
 ```
 
+Discover the shipped examples:
+
+```bash
+browser-cli task examples
+```
+
+Scaffold a new task bundle:
+
+```bash
+browser-cli task template --output my_task
+```
+
+`task template` writes `task.py`, `task.meta.json`, and `automation.toml`
+together so the local source and publish-time config start from one coherent
+bundle.
+
 Validate and run a task locally:
 
 ```bash
@@ -150,4 +168,5 @@ than editing snapshot files directly.
 ## Remove Browser CLI
 
 To remove Browser CLI later, including Browser CLI home data and local cleanup
-steps for maintainers, see [`docs/uninstall.md`](docs/uninstall.md).
+steps for maintainers, see [`uninstall.md`](uninstall.md). In the repository
+tree, that guide lives at `docs/uninstall.md`.

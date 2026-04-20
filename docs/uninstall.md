@@ -31,8 +31,9 @@ Before deleting Browser CLI home, consider backing up these paths from
 - `automation_db_path`
 - optionally `artifacts_dir`
 
-Deleting Browser CLI home removes local task source, published automation
-snapshots, automation persistence, runtime logs, and artifacts.
+Deleting Browser CLI home removes any task source stored under the Browser CLI
+home `tasks/` directory, published automation snapshots, automation
+persistence, runtime logs, and artifacts.
 
 ## Stop Runtime Processes
 
