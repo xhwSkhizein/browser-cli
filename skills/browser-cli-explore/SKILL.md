@@ -29,6 +29,7 @@ Do not use this skill when:
 
 - browser-cli is the primary browser execution path
 - choose the task mode before broad exploration
+- choose the smallest reliable Browser CLI signal before escalating to larger captures
 - capture only observations that change the next decision
 - update `task.meta.json` as a rolling feedback sink
 - treat these metadata sections as required destinations for durable knowledge:
@@ -48,6 +49,15 @@ Do not use this skill when:
 4. Capture durable findings into `task.meta.json`
 5. Stop when the success path, waits, refs, and failure lessons are clear enough
    for `task.py`
+
+## Signal Selection
+
+- Start with persistent exploration primitives: `open`, focused `snapshot`, `click`, `wait`, `verify-*`, and compact `eval`/`eval-on`.
+- Prefer `eval` when the task needs compact structured data. Return the smallest JSON payload that answers the next decision.
+- Use `snapshot` when the task needs semantic refs. Start with interactive and viewport-scoped capture when possible, then widen only if evidence is missing.
+- Use `html` when the rendered DOM itself is the artifact or a DOM-specific diagnostic is required.
+- Treat `read` as a one-shot content-first capture. It is useful for single-pass HTML or snapshot output, not as the default loop for interactive exploration.
+- If full-page snapshot or HTML capture is large or unstable, step back and switch to compact in-page extraction instead of pushing more page text through the agent.
 
 ## Metadata Capture Rules
 
@@ -72,6 +82,7 @@ This skill is complete when:
 ## Common Mistakes
 
 - exploring with direct Playwright instead of Browser CLI
+- starting exploration with full-page HTML when refs or compact eval would answer the question
 - jumping straight from browsing to `task.py`
 - keeping the useful lessons only in chat
 - recording logs instead of reusable metadata

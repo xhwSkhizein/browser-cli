@@ -29,8 +29,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     read_parser = subparsers.add_parser(
         "read",
-        help="Read a rendered page as HTML or snapshot text.",
-        description="Open a page, wait for render completion, and capture rendered output.",
+        help="One-shot page capture as HTML or snapshot text.",
+        description="One-shot content-first capture. For interactive exploration, prefer open/snapshot/eval.",
     )
     read_parser.add_argument("url", help="Target page URL.")
     read_parser.add_argument(

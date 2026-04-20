@@ -31,6 +31,7 @@ Do not use this skill when:
 - this is the main user-facing skill
 - call `browser-cli-explore` when evidence is missing
 - call `browser-cli-converge` when the success path is validated
+- treat `browser-cli read` as a one-shot content-first capture, not the default interactive exploration loop
 - default completion is `task.py + task.meta.json`
 - `automation.toml` and publish are optional and require user choice
 - If validation fails because evidence is missing, go back to explore
@@ -39,7 +40,7 @@ Do not use this skill when:
 ## Phase Order
 
 1. Preflight: confirm Browser CLI, Python environment, login/profile, and site assumptions
-2. Explore: call `browser-cli-explore` to validate the task mode and capture feedback
+2. Explore: call `browser-cli-explore` to choose the smallest reliable Browser CLI signal, validate the task mode, and capture feedback
 3. Converge: call `browser-cli-converge` to encode the stable path in `task.py`
 4. Validate: run task validation and decide whether to fix code or return to explore
 5. Optional automation: ask whether to create `automation.toml`
@@ -57,5 +58,6 @@ This skill is complete when:
 
 - skipping metadata capture
 - converging before the success path is real
+- treating `read` output as the default exploration primitive instead of letting `browser-cli-explore` choose the smallest reliable signal
 - generating automation packaging too early
 - treating one successful page run as enough evidence
