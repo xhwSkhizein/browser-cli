@@ -43,7 +43,7 @@ def test_uninstall_doc_is_linked_from_primary_install_docs() -> None:
     assert "browser-cli paths" in uninstall_text
     assert "browser-cli automation stop" in uninstall_text
     assert "browser-cli reload" in uninstall_text
-    assert "uv tool uninstall browser-cli" in uninstall_text
+    assert "uv tool uninstall browser-control-and-automation-cli" in uninstall_text
     assert "docs/uninstall.md" in readme_text
     assert "docs/uninstall.md" in uv_doc_text
 ```
@@ -69,13 +69,13 @@ Create `docs/uninstall.md`:
 Add a docs link in `README.md`:
 
 ```markdown
-- Uninstall and cleanup guidance: [`docs/uninstall.md`](docs/uninstall.md)
+- Uninstall and cleanup guidance: [`../../uninstall.md`](../../uninstall.md)
 ```
 
 Add a pointer in `docs/installed-with-uv.md`:
 
 ```markdown
-To remove Browser CLI later, see [`docs/uninstall.md`](docs/uninstall.md).
+To remove Browser CLI later, see [`../../uninstall.md`](../../uninstall.md).
 ```
 
 - [ ] **Step 4: Run the test to verify it still fails for missing content**
@@ -139,8 +139,9 @@ Before deleting Browser CLI home, consider backing up these paths from
 - `automation_db_path`
 - optionally `artifacts_dir`
 
-Deleting Browser CLI home removes local task source, published automation
-snapshots, automation persistence, runtime logs, and artifacts.
+Deleting Browser CLI home removes any task source stored under the Browser CLI
+home `tasks/` directory, published automation snapshots, automation
+persistence, runtime logs, and artifacts.
 
 ## Stop Runtime Processes
 
@@ -192,7 +193,7 @@ Removing Browser CLI home deletes:
 If you also installed Browser CLI as a uv tool, remove it separately:
 
 ```bash
-uv tool uninstall browser-cli
+uv tool uninstall browser-control-and-automation-cli
 ```
 
 This does not remove:
@@ -249,9 +250,9 @@ Update the Documentation section in `README.md`:
 ```markdown
 ## Documentation
 
-- Repo navigation and subsystem ownership: [`AGENTS.md`](AGENTS.md)
-- Installed-user guide: [`docs/installed-with-uv.md`](docs/installed-with-uv.md)
-- Uninstall and cleanup guide: [`docs/uninstall.md`](docs/uninstall.md)
+- Repo navigation and subsystem ownership: [`../../../AGENTS.md`](../../../AGENTS.md)
+- Installed-user guide: [`../../installed-with-uv.md`](../../installed-with-uv.md)
+- Uninstall and cleanup guide: [`../../uninstall.md`](../../uninstall.md)
 ```
 
 - [x] **Step 2: Add the uninstall pointer to the uv install guide**
@@ -262,7 +263,7 @@ Append to `docs/installed-with-uv.md`:
 ## Remove Browser CLI
 
 To remove Browser CLI later, including Browser CLI home data and local cleanup
-steps for maintainers, see [`docs/uninstall.md`](docs/uninstall.md).
+steps for maintainers, see [`../../uninstall.md`](../../uninstall.md).
 ```
 
 - [x] **Step 3: Run the focused repo text-contract test again**

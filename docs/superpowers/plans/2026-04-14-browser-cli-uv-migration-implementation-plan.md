@@ -555,8 +555,8 @@ REQUIRED_AGENT_PHRASES = [
 REQUIRED_README_PHRASES = [
     "Python 3.10+",
     "uv sync --dev",
-    "uv tool install browser-cli",
-    "uvx browser-cli",
+    "uv tool install browser-control-and-automation-cli",
+    "uvx --from browser-control-and-automation-cli browser-cli",
     "browser-cli task validate",
     "browser-cli automation publish",
     "./scripts/lint.sh",
@@ -584,7 +584,7 @@ Requirements:
 ### Install As A Tool
 
 ```bash
-uv tool install browser-cli
+uv tool install browser-control-and-automation-cli
 browser-cli doctor
 browser-cli paths
 browser-cli read https://example.com
@@ -593,7 +593,7 @@ browser-cli read https://example.com
 ### Run Without Installing
 
 ```bash
-uvx browser-cli read https://example.com
+uvx --from browser-control-and-automation-cli browser-cli read https://example.com
 ```
 
 ### Install From Git
@@ -625,7 +625,7 @@ This guide is for users who install Browser CLI as a tool with uv.
 ## Install
 
 ```bash
-uv tool install browser-cli
+uv tool install browser-control-and-automation-cli
 browser-cli doctor
 browser-cli paths
 ```
@@ -641,7 +641,7 @@ browser-cli read https://example.com --scroll-bottom
 ## One-Off Execution
 
 ```bash
-uvx browser-cli read https://example.com
+uvx --from browser-control-and-automation-cli browser-cli read https://example.com
 ```
 
 ## Install From Git
@@ -660,17 +660,17 @@ Browser CLI now documents uv as the primary install path.
 If you previously used pip, move to one of these flows:
 
 ```bash
-uv tool install browser-cli
+uv tool install browser-control-and-automation-cli
 browser-cli --help
 ```
 
 or:
 
 ```bash
-uvx browser-cli --help
+uvx --from browser-control-and-automation-cli browser-cli --help
 ```
 
-The current installed-user guide lives at [`docs/installed-with-uv.md`](docs/installed-with-uv.md).
+The current installed-user guide lives at [`../../installed-with-uv.md`](../../installed-with-uv.md).
 ```
 
 - [ ] **Step 5: Record the uv-only repository workflow in `AGENTS.md`**
@@ -746,7 +746,7 @@ def test_doctor_command_no_longer_describes_pip_users() -> None:
     doctor_text = _read("src/browser_cli/commands/doctor.py")
 
     assert '"""Install and runtime diagnostics for pip users."""' not in doctor_text
-    assert "uv tool install browser-cli" in doctor_text or "uv sync --dev" in doctor_text
+    assert "uv tool install browser-control-and-automation-cli" in doctor_text or "uv sync --dev" in doctor_text
 ```
 
 - [ ] **Step 2: Run the source-text contract tests to verify they fail**

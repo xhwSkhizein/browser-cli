@@ -15,6 +15,19 @@ The repository also includes a real-site task example that remains task-first:
 That task is useful for direct `browser-cli task run ...` validation, but it
 does not yet serve as the canonical automation publish example.
 
+If you are using an installed Browser CLI environment rather than this repo
+checkout, start by listing the shipped examples:
+
+```bash
+browser-cli task examples
+```
+
+To bootstrap your own task bundle from the canonical template:
+
+```bash
+browser-cli task template --output tasks/my_task
+```
+
 ## Direct Task Runtime Pattern
 
 Use the thin Python runtime inside `task.py`:

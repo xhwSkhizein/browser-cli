@@ -20,7 +20,7 @@ The goal is not only to "add missing methods". The goal is to make parity measur
 
 ## Current Findings
 
-The current gap analysis in [extension-driver-gaps.md](/Users/hongv/workspace/m-projects/browser-cli/docs/extension-driver-gaps.md) is directionally correct, but not fully accurate against the current codebase.
+The current gap analysis in [extension-driver-gaps.md](../../extension-driver-gaps.md) is directionally correct, but not fully accurate against the current codebase.
 
 ### Accurate findings
 

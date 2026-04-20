@@ -5,7 +5,8 @@ Use this checklist before calling Browser CLI done on a real workstation.
 ## Environment
 
 - Stable Google Chrome is installed.
-- Browser CLI managed profile root exists at `~/.browser-cli/default-profile`.
+- Browser CLI managed profile root is `~/.browser-cli/default-profile` and is
+  created on first managed-profile startup if it does not already exist.
 - If testing extension mode, the unpacked extension from `browser-cli-extension/` is loaded in Chrome developer mode.
 
 ## Basic Checks

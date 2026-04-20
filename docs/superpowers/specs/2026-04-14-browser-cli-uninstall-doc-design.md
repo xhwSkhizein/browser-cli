@@ -170,8 +170,9 @@ Explicitly list high-value paths:
 - `automation_db_path`
 - optionally `artifacts_dir`
 
-Explain that deleting Browser CLI home removes local task sources, published
-automation snapshots, and automation persistence.
+Explain that deleting Browser CLI home removes any task sources stored under
+the Browser CLI home `tasks/` directory, plus published automation snapshots
+and automation persistence.
 
 ### 4. Stop Runtime Processes
 
@@ -217,7 +218,7 @@ The doc must explain that removing Browser CLI home deletes:
 Include:
 
 ```bash
-uv tool uninstall browser-cli
+uv tool uninstall browser-control-and-automation-cli
 ```
 
 Explain that this only removes the installed CLI tool and does not remove:
@@ -243,7 +244,8 @@ The uninstall doc must explicitly warn about these four cases:
 1. Deleting Browser CLI home deletes high-value local task and automation data.
 2. `browser-cli reload` is runtime cleanup, not uninstall.
 3. `BROWSER_CLI_HOME` changes the deletion target.
-4. `uv tool uninstall browser-cli` does not remove Browser CLI home or the repo
+4. `uv tool uninstall browser-control-and-automation-cli` does not remove
+   Browser CLI home or the repo
    checkout.
 
 ## Related Documentation Changes
