@@ -5,6 +5,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/xhwSkhizein/browser-cli#">Repo</a> •
   <a href="#features">Features</a> •
   <a href="#installation">Installation</a> •
   <a href="#quick-start">Quick Start</a> •
