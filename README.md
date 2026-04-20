@@ -112,6 +112,9 @@ browser-cli install-skills --target ~/.codex/skills
 
 You can rerun the command safely. Existing packaged Browser CLI skills at the
 target path are replaced with the packaged versions from the installed wheel.
+After you upgrade Browser CLI, rerun `browser-cli install-skills` to refresh
+the copied skill files. If you use a custom skills root, rerun the command with
+the same `--target` path.
 For a longer installed-user walkthrough, see
 [`docs/install-skills.md`](docs/install-skills.md).
 
