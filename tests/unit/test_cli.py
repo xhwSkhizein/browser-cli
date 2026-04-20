@@ -26,8 +26,20 @@ def test_read_help(capsys) -> None:
     exit_code = main(["read", "--help"])
     captured = capsys.readouterr()
     assert exit_code == 0
+    assert "One-shot content-first capture" in captured.out
+    assert "interactive exploration" in captured.out
     assert "--snapshot" in captured.out
     assert "--scroll-bottom" in captured.out
+
+
+def test_snapshot_help_mentions_smaller_capture_options(capsys) -> None:
+    exit_code = main(["snapshot", "--help"])
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "ref-driven exploration" in captured.out
+    assert "Use -i/-F to keep captures smaller" in captured.out
+    assert "--interactive" in captured.out
+    assert "--no-full-page" in captured.out
 
 
 def test_click_help(capsys) -> None:

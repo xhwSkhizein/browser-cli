@@ -41,6 +41,9 @@ def test_browser_cli_explore_skill_records_feedback_into_task_metadata() -> None
 
     assert "task.meta.json" in skill_text
     assert "browser-cli is the primary browser execution path" in skill_text
+    assert "Signal Selection" in skill_text
+    assert "Treat `read` as a one-shot content-first capture" in skill_text
+    assert "Prefer `eval` when the task needs compact structured data" in skill_text
     assert "environment" in skill_text
     assert "success_path" in skill_text
     assert "recovery_hints" in skill_text
@@ -64,6 +67,7 @@ def test_browser_cli_delivery_skill_orchestrates_explore_converge_and_optional_a
 
     assert "browser-cli-explore" in skill_text
     assert "browser-cli-converge" in skill_text
+    assert "one-shot content-first capture" in skill_text
     assert "task.py + task.meta.json" in skill_text
     assert "automation.toml" in skill_text
     assert "publish" in skill_text

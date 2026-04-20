@@ -49,14 +49,14 @@ def get_action_specs() -> list[ActionSpec]:
         ActionSpec(
             "html",
             "Capture rendered DOM HTML.",
-            "Return rendered DOM HTML for the active tab.",
+            "Return rendered DOM HTML for the active tab. Best for export or DOM diagnostics.",
             _no_arguments,
             _default_request,
         ),
         ActionSpec(
             "snapshot",
-            "Capture a bridgic-style snapshot.",
-            "Return the accessibility-style snapshot tree for the active tab.",
+            "Capture an accessibility-style snapshot for ref-driven exploration.",
+            "Return the accessibility-style snapshot tree for ref-driven exploration on the active tab. Use -i/-F to keep captures smaller.",
             _add_snapshot_arguments,
             _default_request,
         ),
