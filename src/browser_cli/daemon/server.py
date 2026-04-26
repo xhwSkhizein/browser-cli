@@ -11,6 +11,7 @@ import signal
 import time
 
 from browser_cli import __version__
+from browser_cli.browser.models import default_headless
 from browser_cli.constants import get_app_paths
 
 from .app import BrowserDaemonApp
@@ -65,6 +66,10 @@ class BrowserDaemonServer:
                     "started_at": time.time(),
                     "package_version": __version__,
                     "runtime_version": DAEMON_RUNTIME_VERSION,
+                    "extension_host": app_paths.extension_host,
+                    "extension_port": app_paths.extension_port,
+                    "extension_ws_url": app_paths.extension_ws_url,
+                    "headless": default_headless(),
                 }
             )
             logger.info("Browser CLI daemon listening on %s", app_paths.socket_path)
