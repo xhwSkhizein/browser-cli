@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 from argparse import Namespace
 
+from browser_cli.daemon.client import send_command
 from browser_cli.errors import InvalidInputError
 from browser_cli.outputs.json import render_json_payload
 from browser_cli.outputs.render import render_output
@@ -53,5 +54,19 @@ def run_read_command(args: Namespace) -> str:
 
 
 def _run_read_async(args: Namespace) -> str:
-    _ = args
-    raise InvalidInputError("read --async requires the async read run registry task.")
+    if not getattr(args, "json", False):
+        raise InvalidInputError("read --async requires --json")
+    output_mode = "snapshot" if args.snapshot else "html"
+    response = send_command(
+        "run-start-read",
+        {
+            "url": normalize_url(args.url),
+            "output_mode": output_mode,
+            "scroll_bottom": bool(args.scroll_bottom),
+        },
+        start_if_needed=True,
+    )
+    data = dict(response.get("data") or {})
+    if data.get("run_id"):
+        data["poll"] = f"browser-cli run-status {data['run_id']} --json"
+    return render_json_payload({"ok": True, "data": data, "meta": {"action": "read-async"}})

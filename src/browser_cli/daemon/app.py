@@ -34,6 +34,10 @@ class BrowserDaemonApp:
         self._state = state or DaemonState()
         self._handlers: dict[str, Handler] = {
             "runtime-status": self._handle_runtime_status,
+            "run-start-read": self._handle_run_start_read,
+            "run-status": self._handle_run_status,
+            "run-logs": self._handle_run_logs,
+            "run-cancel": self._handle_run_cancel,
             "open": self._handle_open,
             "search": self._handle_search,
             "tabs": self._handle_tabs,
@@ -125,7 +129,15 @@ class BrowserDaemonApp:
         command_started = False
         try:
             self._maybe_configure_browser_environment(request.args)
-            if request.action not in {"runtime-status", "stop", "workspace-rebuild-binding"}:
+            if request.action not in {
+                "runtime-status",
+                "stop",
+                "workspace-rebuild-binding",
+                "run-start-read",
+                "run-status",
+                "run-logs",
+                "run-cancel",
+            }:
                 await self._state.browser_service.begin_command(request.action)
                 command_started = True
             data = await handler(request)
@@ -207,6 +219,28 @@ class BrowserDaemonApp:
                 "Browser CLI extension is missing required capabilities." + suffix
             )
         return await self._state.browser_service.rebuild_workspace_binding()
+
+    async def _handle_run_start_read(self, request: DaemonRequest) -> dict[str, Any]:
+        url = self._require_str(request.args, "url")
+        return self._state.run_registry.start_read(
+            {
+                "url": url,
+                "output_mode": str(request.args.get("output_mode") or "html"),
+                "scroll_bottom": bool(request.args.get("scroll_bottom")),
+            }
+        )
+
+    async def _handle_run_status(self, request: DaemonRequest) -> dict[str, Any]:
+        return self._state.run_registry.status(self._require_str(request.args, "run_id"))
+
+    async def _handle_run_logs(self, request: DaemonRequest) -> dict[str, Any]:
+        return self._state.run_registry.logs(
+            self._require_str(request.args, "run_id"),
+            tail=int(request.args.get("tail") or 200),
+        )
+
+    async def _handle_run_cancel(self, request: DaemonRequest) -> dict[str, Any]:
+        return self._state.run_registry.cancel(self._require_str(request.args, "run_id"))
 
     async def _handle_open(self, request: DaemonRequest) -> dict[str, Any]:
         url = self._require_str(request.args, "url")

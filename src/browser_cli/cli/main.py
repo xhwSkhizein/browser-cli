@@ -17,6 +17,11 @@ from browser_cli.commands.paths import run_paths_command
 from browser_cli.commands.read import run_read_command
 from browser_cli.commands.reload import run_reload_command
 from browser_cli.commands.recovery import run_recover_command, run_workspace_command
+from browser_cli.commands.runs import (
+    run_run_cancel_command,
+    run_run_logs_command,
+    run_run_status_command,
+)
 from browser_cli.commands.status import run_status_command
 from browser_cli.commands.task import run_task_command
 from browser_cli.errors import BrowserCliError
@@ -278,6 +283,32 @@ def build_parser() -> argparse.ArgumentParser:
         help="Return machine-readable recovery result.",
     )
     recover_parser.set_defaults(handler=run_recover_command)
+
+    run_status_parser = subparsers.add_parser(
+        "run-status",
+        help="Show daemon async run status.",
+        description="Poll a daemon-side async command run.",
+    )
+    run_status_parser.add_argument("run_id")
+    run_status_parser.add_argument("--json", action="store_true", help="Return JSON status.")
+    run_status_parser.set_defaults(handler=run_run_status_command)
+
+    run_logs_parser = subparsers.add_parser(
+        "run-logs",
+        help="Show daemon async run event logs.",
+        description="Show bounded event logs for a daemon-side async command run.",
+    )
+    run_logs_parser.add_argument("run_id")
+    run_logs_parser.add_argument("--tail", type=int, default=200)
+    run_logs_parser.set_defaults(handler=run_run_logs_command)
+
+    run_cancel_parser = subparsers.add_parser(
+        "run-cancel",
+        help="Cancel a daemon async run.",
+        description="Request cancellation for a daemon-side async command run.",
+    )
+    run_cancel_parser.add_argument("run_id")
+    run_cancel_parser.set_defaults(handler=run_run_cancel_command)
 
     skills_parser = subparsers.add_parser(
         "install-skills",

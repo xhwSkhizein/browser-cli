@@ -412,6 +412,13 @@ class BrowserService:
             }
             return payload
 
+    async def read_page_from_args(self, args: dict[str, Any]) -> dict[str, Any]:
+        return await self.read_page(
+            url=str(args.get("url") or ""),
+            output_mode=str(args.get("output_mode") or "html"),
+            scroll_bottom=bool(args.get("scroll_bottom")),
+        )
+
     async def _read_page_once(
         self,
         *,

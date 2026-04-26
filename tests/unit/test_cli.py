@@ -246,6 +246,48 @@ def test_recover_help_mentions_json(capsys) -> None:
     assert "recover" in captured.out.lower()
 
 
+def test_run_status_help_mentions_json(capsys) -> None:
+    exit_code = main(["run-status", "--help"])
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "--json" in captured.out
+
+
+def test_run_logs_help_mentions_tail(capsys) -> None:
+    exit_code = main(["run-logs", "--help"])
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "--tail" in captured.out
+
+
+def test_run_cancel_help(capsys) -> None:
+    exit_code = main(["run-cancel", "--help"])
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "run_id" in captured.out
+
+
+def test_read_async_json_returns_run_id(capsys) -> None:
+    with patch(
+        "browser_cli.commands.read.send_command",
+        return_value={
+            "ok": True,
+            "data": {"run_id": "run_000001", "status": "queued", "command": "read"},
+        },
+    ) as send_command:
+        exit_code = main(["read", "example.com", "--async", "--json"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    payload = json.loads(captured.out)
+    assert payload["data"]["poll"] == "browser-cli run-status run_000001 --json"
+    send_command.assert_called_once_with(
+        "run-start-read",
+        {"url": "https://example.com", "output_mode": "html", "scroll_bottom": False},
+        start_if_needed=True,
+    )
+
+
 def test_install_skills_help_mentions_target(capsys) -> None:
     exit_code = main(["install-skills", "--help"])
     captured = capsys.readouterr()
