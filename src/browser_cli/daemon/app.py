@@ -12,6 +12,8 @@ from browser_cli import error_codes
 from browser_cli.constants import DEFAULT_PUBLIC_AGENT_ID
 from browser_cli.errors import (
     BrowserCliError,
+    ExtensionCapabilityIncompleteError,
+    ExtensionUnavailableError,
     InvalidInputError,
     NoActiveTabError,
     OperationFailedError,
@@ -32,6 +34,10 @@ class BrowserDaemonApp:
         self._state = state or DaemonState()
         self._handlers: dict[str, Handler] = {
             "runtime-status": self._handle_runtime_status,
+            "run-start-read": self._handle_run_start_read,
+            "run-status": self._handle_run_status,
+            "run-logs": self._handle_run_logs,
+            "run-cancel": self._handle_run_cancel,
             "open": self._handle_open,
             "search": self._handle_search,
             "tabs": self._handle_tabs,
@@ -40,6 +46,7 @@ class BrowserDaemonApp:
             "close-tab": self._handle_close_tab,
             "close": self._handle_close,
             "stop": self._handle_stop,
+            "workspace-rebuild-binding": self._handle_workspace_rebuild_binding,
             "info": self._handle_info,
             "read-page": self._handle_read_page,
             "html": self._handle_html,
@@ -122,7 +129,15 @@ class BrowserDaemonApp:
         command_started = False
         try:
             self._maybe_configure_browser_environment(request.args)
-            if request.action not in {"runtime-status", "stop"}:
+            if request.action not in {
+                "runtime-status",
+                "stop",
+                "workspace-rebuild-binding",
+                "run-start-read",
+                "run-status",
+                "run-logs",
+                "run-cancel",
+            }:
                 await self._state.browser_service.begin_command(request.action)
                 command_started = True
             data = await handler(request)
@@ -146,7 +161,7 @@ class BrowserDaemonApp:
         except BrowserCliError as exc:
             if command_started:
                 runtime_meta = await self._state.browser_service.end_command()
-            return self._error_response(exc, request=request)
+            return self._error_response(exc, request=request, runtime_meta=runtime_meta)
         except Exception as exc:  # pragma: no cover - last-resort daemon guard
             if command_started:
                 runtime_meta = await self._state.browser_service.end_command()
@@ -159,15 +174,24 @@ class BrowserDaemonApp:
                 request=request,
             )
 
-    def _error_response(self, exc: BrowserCliError, *, request: DaemonRequest) -> DaemonResponse:
+    def _error_response(
+        self,
+        exc: BrowserCliError,
+        *,
+        request: DaemonRequest,
+        runtime_meta: dict[str, Any] | None = None,
+    ) -> DaemonResponse:
+        meta = {
+            "action": request.action,
+            "agent_id": request.agent_id,
+            "driver": self._state.browser_service.active_driver_name,
+        }
+        if runtime_meta:
+            meta.update(runtime_meta)
         return DaemonResponse.failure(
             error_code=exc.error_code,
             error_message=exc.message,
-            meta={
-                "action": request.action,
-                "agent_id": request.agent_id,
-                "driver": self._state.browser_service.active_driver_name,
-            },
+            meta=meta,
         )
 
     async def _handle_stop(self, request: DaemonRequest) -> dict[str, Any]:
@@ -182,6 +206,41 @@ class BrowserDaemonApp:
             **raw_status,
             "presentation": build_runtime_presentation(raw_status),
         }
+
+    async def _handle_workspace_rebuild_binding(self, request: DaemonRequest) -> dict[str, Any]:
+        status = await self._state.browser_service.runtime_status(warmup=True)
+        extension = dict(status.get("extension") or {})
+        if not bool(extension.get("connected")):
+            raise ExtensionUnavailableError("Browser CLI extension is not connected.")
+        if not bool(extension.get("capability_complete")):
+            missing = ", ".join(str(item) for item in extension.get("missing_capabilities") or [])
+            suffix = f" Missing capabilities: {missing}." if missing else ""
+            raise ExtensionCapabilityIncompleteError(
+                "Browser CLI extension is missing required capabilities." + suffix
+            )
+        return await self._state.browser_service.rebuild_workspace_binding()
+
+    async def _handle_run_start_read(self, request: DaemonRequest) -> dict[str, Any]:
+        url = self._require_str(request.args, "url")
+        return self._state.run_registry.start_read(
+            {
+                "url": url,
+                "output_mode": str(request.args.get("output_mode") or "html"),
+                "scroll_bottom": bool(request.args.get("scroll_bottom")),
+            }
+        )
+
+    async def _handle_run_status(self, request: DaemonRequest) -> dict[str, Any]:
+        return self._state.run_registry.status(self._require_str(request.args, "run_id"))
+
+    async def _handle_run_logs(self, request: DaemonRequest) -> dict[str, Any]:
+        return self._state.run_registry.logs(
+            self._require_str(request.args, "run_id"),
+            tail=int(request.args.get("tail") or 200),
+        )
+
+    async def _handle_run_cancel(self, request: DaemonRequest) -> dict[str, Any]:
+        return self._state.run_registry.cancel(self._require_str(request.args, "run_id"))
 
     async def _handle_open(self, request: DaemonRequest) -> dict[str, Any]:
         url = self._require_str(request.args, "url")

@@ -16,6 +16,7 @@ from browser_cli.constants import get_app_paths
 from browser_cli.daemon.client import run_info_is_compatible, send_command
 from browser_cli.daemon.transport import DAEMON_RUNTIME_VERSION, probe_socket, read_run_info
 from browser_cli.errors import BrowserCliError
+from browser_cli.outputs.json import render_json_payload
 
 
 @dataclass(slots=True)
@@ -33,8 +34,13 @@ class StatusReport:
     live_error: str | None = None
 
 
-def run_status_command(_args: Namespace) -> str:
-    return render_status_report(collect_status_report())
+def run_status_command(args: Namespace) -> str:
+    report = collect_status_report()
+    if getattr(args, "json", False):
+        return render_json_payload(
+            {"ok": True, "data": status_report_to_json_data(report), "meta": {"action": "status"}}
+        )
+    return render_status_report(report)
 
 
 def collect_status_report(*, warmup: bool = False) -> StatusReport:
@@ -224,6 +230,74 @@ def render_status_report(report: StatusReport) -> str:
         lines.append(f"- {item}")
     lines.extend(["", f"Available actions: {available_actions}"])
     return "\n".join(lines) + "\n"
+
+
+def status_report_to_json_data(report: StatusReport) -> dict[str, Any]:
+    app_paths = get_app_paths()
+    workspace_binding = _workspace_binding_state(report)
+    available_actions = list(report.presentation.get("available_actions") or [])
+    return {
+        "status": report.overall_status,
+        "daemon": {
+            "state": report.daemon["state"],
+            "pid": report.daemon["pid"],
+            "socket_reachable": bool(report.daemon["socket_reachable"]),
+        },
+        "backend": {
+            "active_driver": report.backend["active_driver"],
+            "extension_connected": bool(report.backend["extension_connected"]),
+            "extension_capability_complete": bool(report.backend["extension_capability_complete"]),
+            "extension_listener": {
+                "host": app_paths.extension_host,
+                "port": app_paths.extension_port,
+                "ws_url": app_paths.extension_ws_url,
+            },
+        },
+        "browser": {
+            "started": bool(report.backend["browser_started"]),
+            "workspace_binding": workspace_binding,
+        },
+        "recovery": {
+            "recommended_action": _recommended_action(
+                report=report,
+                workspace_binding=workspace_binding,
+                available_actions=available_actions,
+            ),
+            "available_actions": available_actions or ["refresh-status"],
+        },
+    }
+
+
+def _workspace_binding_state(report: StatusReport) -> str:
+    presentation_workspace = dict(report.presentation.get("workspace_state") or {})
+    binding = str(presentation_workspace.get("binding_state") or "").strip()
+    if binding in {"tracked", "stale", "absent"}:
+        return binding
+    return "unknown"
+
+
+def _recommended_action(
+    *,
+    report: StatusReport,
+    workspace_binding: str,
+    available_actions: list[str],
+) -> str:
+    if report.daemon_state in {"stale", "incompatible"} or report.overall_status == "broken":
+        return "reload"
+    if (
+        report.backend["active_driver"] == "extension"
+        and report.backend["extension_connected"]
+        and report.backend["extension_capability_complete"]
+        and workspace_binding in {"stale", "absent"}
+        and "rebuild-workspace-binding" in available_actions
+    ):
+        return "rebuild-workspace-binding"
+    if report.backend["active_driver"] == "extension" and (
+        not report.backend["extension_connected"]
+        or not report.backend["extension_capability_complete"]
+    ):
+        return "reconnect-extension"
+    return "none"
 
 
 def _classify_daemon_state(

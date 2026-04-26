@@ -23,13 +23,18 @@ the implementation, and where should a change land first.
 - Repository local Python selection is pinned through `.python-version`.
 - Published package name is `browser-control-and-automation-cli`; the installed CLI command remains `browser-cli`.
 - Published distributions must not include PEP 440 local version identifiers; `setuptools-scm` local suffixes are stripped so PyPI accepts non-tagged builds.
-- `read` stays intentionally small: one URL positional plus `--snapshot` and `--scroll-bottom`.
+- `read` stays intentionally small: one URL positional plus `--snapshot`, `--scroll-bottom`, `--json`, and `--async`; async read creates daemon-memory runs for polling.
 - Managed profile mode is the default browser backend.
 - Managed profile mode uses Browser CLI's dedicated Chrome data root at `~/.browser-cli/default-profile`.
 - Extension mode is the preferred real-Chrome backend when the Browser CLI extension is connected and healthy.
 - `browser-cli status` is the first-line lifecycle diagnosis command.
+- `browser-cli status --json` is the stable agent-facing runtime status surface.
 - `browser-cli reload` is the runtime reset command; page reload remains public as `browser-cli page-reload`.
+- `browser-cli workspace rebuild --json` is the precise non-interactive extension workspace binding repair command.
+- `browser-cli recover --json` is the broader agent recovery command and may reload before rebuilding workspace binding.
+- `browser-cli read --async --json` creates a daemon-memory read run; `run-status`, `run-logs`, and `run-cancel` operate on that run id until daemon restart.
 - `runtime-status` includes a daemon-owned `presentation` snapshot; `browser-cli status` and the extension popup must render that shared state rather than inventing their own classifier.
+- Extension listener endpoint is configured by `BROWSER_CLI_EXTENSION_HOST` and `BROWSER_CLI_EXTENSION_PORT` and is reported by status/run-info/doctor.
 - `v1` targets stable Google Chrome first and should not silently swap browser families.
 - `v2` uses one daemon-managed browser instance.
 - `v2` command output is JSON-first.
@@ -71,6 +76,10 @@ the implementation, and where should a change land first.
 - `browser_cli.task_runtime` owns the public Python read contract and routes one-shot read through the daemon-managed browser lifecycle.
 - Runtime diagnosis and user-facing lifecycle guidance:
   `src/browser_cli/commands/status.py`
+- Agent-facing runtime recovery commands:
+  `src/browser_cli/commands/recovery.py`
+- Daemon async run polling commands:
+  `src/browser_cli/commands/runs.py`
 - Shared daemon runtime presentation classifier:
   `src/browser_cli/daemon/runtime_presentation.py`
 - Runtime reset flow:
@@ -90,6 +99,8 @@ the implementation, and where should a change land first.
   `src/browser_cli/daemon/app.py`
 - Shared daemon state:
   `src/browser_cli/daemon/state.py`
+- Daemon-memory async command run registry:
+  `src/browser_cli/daemon/run_registry.py`
 - Browser lifecycle, driver selection, safe-point rebinding, read-page flow, and ref-aware command routing:
   `src/browser_cli/daemon/browser_service.py`
 
@@ -175,8 +186,16 @@ the implementation, and where should a change land first.
 - If the user reports daemon startup, stale socket, or reload issues:
   inspect `src/browser_cli/daemon/client.py`, `src/browser_cli/daemon/transport.py`, `src/browser_cli/commands/status.py`, and `src/browser_cli/commands/reload.py`.
   If startup fails while waiting for an extension session, inspect `src/browser_cli/daemon/browser_service.py::ensure_started`; extension handshake wait is a best-effort preference signal and must fall back to Playwright instead of aborting daemon startup.
+- If the user reports that agent automation cannot decide whether Browser CLI is healthy:
+  inspect `src/browser_cli/commands/status.py`, `src/browser_cli/daemon/runtime_presentation.py`, and `src/browser_cli/commands/recovery.py`; `status --json` should remain a stable projection of daemon-owned presentation.
+- If the user reports stale or absent extension workspace binding:
+  inspect `src/browser_cli/commands/recovery.py`, `src/browser_cli/daemon/app.py::_handle_workspace_rebuild_binding`, and `src/browser_cli/daemon/browser_service.py::rebuild_workspace_binding`; safe repair is `browser-cli workspace rebuild --json` or `browser-cli recover --json`.
+- If the user reports async read polling issues:
+  inspect `src/browser_cli/daemon/run_registry.py`, `src/browser_cli/commands/runs.py`, and `src/browser_cli/commands/read.py`; first-version run ids are daemon-memory only and do not survive daemon restart.
 - If the user wants a first-run environment check or path discovery for installed users:
   inspect `src/browser_cli/commands/doctor.py`, `src/browser_cli/commands/paths.py`, `src/browser_cli/constants.py`, and `src/browser_cli/profiles/discovery.py`.
+- If the user reports container/headless or extension listener port problems:
+  inspect `src/browser_cli/commands/doctor.py`, `src/browser_cli/daemon/server.py`, `src/browser_cli/extension/session.py`, and `src/browser_cli/constants.py`.
 - If the user reports a driver mismatch or extension/Playwright inconsistency:
   start at `src/browser_cli/drivers/base.py`, then compare `playwright_driver.py`, `extension_driver.py`, and `daemon/browser_service.py`.
 - If the user reports broken refs, stale snapshots, or element targeting failures:

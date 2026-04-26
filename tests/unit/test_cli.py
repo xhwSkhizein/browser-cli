@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import json
 from unittest.mock import patch
 
 from browser_cli.cli.main import main
-from browser_cli.errors import ProfileUnavailableError
+from browser_cli.errors import ChromeExecutableNotFoundError, ProfileUnavailableError
 from browser_cli.task_runtime.read import ReadResult
 
 
@@ -30,6 +31,8 @@ def test_read_help(capsys) -> None:
     assert "interactive exploration" in captured.out
     assert "--snapshot" in captured.out
     assert "--scroll-bottom" in captured.out
+    assert "--json" in captured.out
+    assert "--async" in captured.out
 
 
 def test_snapshot_help_mentions_smaller_capture_options(capsys) -> None:
@@ -54,6 +57,7 @@ def test_status_help(capsys) -> None:
     captured = capsys.readouterr()
     assert exit_code == 0
     assert "runtime state" in captured.out
+    assert "--json" in captured.out
 
 
 def test_doctor_help_mentions_json(capsys) -> None:
@@ -127,6 +131,26 @@ def test_runtime_error_maps_to_stderr_and_exit_code(capsys) -> None:
     )
 
 
+def test_json_mode_error_renders_json_to_stdout(capsys) -> None:
+    with patch(
+        "browser_cli.cli.main.run_doctor_command",
+        side_effect=ChromeExecutableNotFoundError("Chrome missing"),
+    ):
+        exit_code = main(["doctor", "--json"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 69
+    assert captured.err == ""
+    payload = json.loads(captured.out)
+    assert payload == {
+        "ok": False,
+        "error_code": "CHROME_EXECUTABLE_NOT_FOUND",
+        "message": "Chrome missing",
+        "meta": {"action": "doctor"},
+        "next_action": "install stable Google Chrome and re-run browser-cli doctor --json",
+    }
+
+
 def test_read_command_normalizes_url_before_client_read(capsys) -> None:
     with patch(
         "browser_cli.commands.read.BrowserCliTaskClient.read",
@@ -162,6 +186,35 @@ def test_fallback_profile_reports_to_stderr(capsys) -> None:
     assert "using fallback profile" in captured.err
 
 
+def test_read_json_wraps_body_and_fallback_metadata(capsys) -> None:
+    with patch(
+        "browser_cli.commands.read.BrowserCliTaskClient.read",
+        return_value=ReadResult(
+            body="snapshot body",
+            used_fallback_profile=True,
+            fallback_profile_dir="/tmp/profile",
+            fallback_reason="locked",
+        ),
+    ):
+        exit_code = main(["read", "https://example.com", "--snapshot", "--json"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    payload = json.loads(captured.out)
+    assert payload == {
+        "ok": True,
+        "data": {
+            "body": "snapshot body",
+            "output_mode": "snapshot",
+            "used_fallback_profile": True,
+            "fallback_profile_dir": "/tmp/profile",
+            "fallback_reason": "locked",
+        },
+        "meta": {"action": "read"},
+    }
+    assert captured.err == ""
+
+
 def test_status_command_renders_report(capsys) -> None:
     with patch("browser_cli.cli.main.run_status_command", return_value="Status: healthy\n"):
         exit_code = main(["status"])
@@ -176,6 +229,78 @@ def test_reload_command_renders_summary(capsys) -> None:
     captured = capsys.readouterr()
     assert exit_code == 0
     assert captured.out == "Reload: complete\n"
+
+
+def test_workspace_rebuild_help_mentions_json(capsys) -> None:
+    exit_code = main(["workspace", "rebuild", "--help"])
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "--json" in captured.out
+    assert "workspace binding" in captured.out.lower()
+
+
+def test_recover_help_mentions_json(capsys) -> None:
+    exit_code = main(["recover", "--help"])
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "--json" in captured.out
+    assert "recover" in captured.out.lower()
+
+
+def test_run_status_help_mentions_json(capsys) -> None:
+    exit_code = main(["run-status", "--help"])
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "--json" in captured.out
+
+
+def test_run_logs_help_mentions_tail(capsys) -> None:
+    exit_code = main(["run-logs", "--help"])
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "--tail" in captured.out
+    assert "--json" in captured.out
+
+
+def test_run_cancel_help(capsys) -> None:
+    exit_code = main(["run-cancel", "--help"])
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "run_id" in captured.out
+    assert "--json" in captured.out
+
+
+def test_run_status_text_output(capsys) -> None:
+    with patch(
+        "browser_cli.commands.runs.send_command",
+        return_value={"ok": True, "data": {"run_id": "run_000001", "status": "running"}},
+    ):
+        exit_code = main(["run-status", "run_000001"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert captured.out == "Run: run_000001\nStatus: running\n"
+
+
+def test_read_async_json_returns_run_id(capsys) -> None:
+    with patch(
+        "browser_cli.commands.read.send_command",
+        return_value={
+            "ok": True,
+            "data": {"run_id": "run_000001", "status": "queued", "command": "read"},
+        },
+    ) as send_command:
+        exit_code = main(["read", "example.com", "--async", "--json"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    payload = json.loads(captured.out)
+    assert payload["data"]["poll"] == "browser-cli run-status run_000001 --json"
+    send_command.assert_called_once_with(
+        "run-start-read",
+        {"url": "https://example.com", "output_mode": "html", "scroll_bottom": False},
+        start_if_needed=True,
+    )
 
 
 def test_install_skills_help_mentions_target(capsys) -> None:

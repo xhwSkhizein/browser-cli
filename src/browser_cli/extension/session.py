@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import contextlib
+import errno
 import inspect
 import json
 import logging
@@ -21,7 +22,7 @@ from websockets.protocol import State
 from websockets.server import ServerConnection
 
 from browser_cli.constants import get_app_paths
-from browser_cli.errors import OperationFailedError
+from browser_cli.errors import ExtensionPortInUseError, OperationFailedError
 
 from .protocol import (
     ExtensionArtifactBegin,
@@ -200,14 +201,22 @@ class ExtensionHub:
             if self._started:
                 return
             app_paths = get_app_paths()
-            self._server = await websockets.serve(
-                self._handle_websocket,
-                host=app_paths.extension_host,
-                port=app_paths.extension_port,
-                ping_interval=None,
-                ping_timeout=None,
-                process_request=self._process_request,
-            )
+            try:
+                self._server = await websockets.serve(
+                    self._handle_websocket,
+                    host=app_paths.extension_host,
+                    port=app_paths.extension_port,
+                    ping_interval=None,
+                    ping_timeout=None,
+                    process_request=self._process_request,
+                )
+            except OSError as exc:
+                if exc.errno == errno.EADDRINUSE:
+                    raise ExtensionPortInUseError(
+                        "Extension listener port is in use: "
+                        f"{app_paths.extension_host}:{app_paths.extension_port}"
+                    ) from exc
+                raise OperationFailedError(f"Extension listener failed to start: {exc}") from exc
             self._started = True
             logger.info(
                 "Extension WebSocket listener started on ws://%s:%s%s",
