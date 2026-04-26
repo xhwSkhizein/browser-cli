@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from collections.abc import Sequence
 
@@ -15,8 +16,8 @@ from browser_cli.commands.doctor import run_doctor_command
 from browser_cli.commands.install_skills import run_install_skills_command
 from browser_cli.commands.paths import run_paths_command
 from browser_cli.commands.read import run_read_command
-from browser_cli.commands.reload import run_reload_command
 from browser_cli.commands.recovery import run_recover_command, run_workspace_command
+from browser_cli.commands.reload import run_reload_command
 from browser_cli.commands.runs import (
     run_run_cancel_command,
     run_run_logs_command,
@@ -25,7 +26,6 @@ from browser_cli.commands.runs import (
 from browser_cli.commands.status import run_status_command
 from browser_cli.commands.task import run_task_command
 from browser_cli.errors import BrowserCliError
-from browser_cli.outputs.json import render_json_error
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -360,7 +360,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     except BrowserCliError as exc:
         hint = next_hint_for_error(exc)
         if getattr(args, "json", False):
-            sys.stdout.write(render_json_error(exc, next_action=hint))
+            sys.stdout.write(_render_cli_json_error(exc, next_action=hint))
             return exc.exit_code
         sys.stderr.write(f"Error: {exc}\n")
         if hint:
@@ -376,6 +376,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     if result:
         sys.stdout.write(result)
     return exit_codes.SUCCESS
+
+
+def _render_cli_json_error(exc: BrowserCliError, *, next_action: str | None = None) -> str:
+    payload: dict[str, object] = {
+        "ok": False,
+        "error_code": exc.error_code,
+        "message": exc.message,
+    }
+    if next_action:
+        payload["next_action"] = next_action
+    return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
 
 
 if __name__ == "__main__":  # pragma: no cover

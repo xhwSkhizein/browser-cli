@@ -82,7 +82,7 @@ def run(_root: Path) -> list[Finding]:
 def _check_read_contract(parser: argparse.ArgumentParser) -> list[Finding]:
     findings: list[Finding] = []
     option_strings = _custom_option_strings(parser)
-    expected = {"--snapshot", "--scroll-bottom"}
+    expected = {"--async", "--json", "--snapshot", "--scroll-bottom"}
     if option_strings != expected:
         findings.append(
             Finding(

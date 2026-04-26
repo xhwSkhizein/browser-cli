@@ -246,9 +246,7 @@ def status_report_to_json_data(report: StatusReport) -> dict[str, Any]:
         "backend": {
             "active_driver": report.backend["active_driver"],
             "extension_connected": bool(report.backend["extension_connected"]),
-            "extension_capability_complete": bool(
-                report.backend["extension_capability_complete"]
-            ),
+            "extension_capability_complete": bool(report.backend["extension_capability_complete"]),
             "extension_listener": {
                 "host": app_paths.extension_host,
                 "port": app_paths.extension_port,
@@ -294,12 +292,9 @@ def _recommended_action(
         and "rebuild-workspace-binding" in available_actions
     ):
         return "rebuild-workspace-binding"
-    if (
-        report.backend["active_driver"] == "extension"
-        and (
-            not report.backend["extension_connected"]
-            or not report.backend["extension_capability_complete"]
-        )
+    if report.backend["active_driver"] == "extension" and (
+        not report.backend["extension_connected"]
+        or not report.backend["extension_capability_complete"]
     ):
         return "reconnect-extension"
     return "none"

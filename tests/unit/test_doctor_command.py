@@ -39,7 +39,9 @@ def test_doctor_json_reports_environment(monkeypatch, tmp_path: Path) -> None:
         "browser_cli.commands.doctor._chrome_candidates",
         lambda: [{"path": "/usr/bin/google-chrome", "exists": False}],
     )
-    monkeypatch.setattr("browser_cli.commands.doctor._is_container", lambda: (True, ["/.dockerenv"]))
+    monkeypatch.setattr(
+        "browser_cli.commands.doctor._is_container", lambda: (True, ["/.dockerenv"])
+    )
     monkeypatch.setattr(
         "browser_cli.commands.doctor._can_bind_extension_port", lambda host, port: (True, None)
     )

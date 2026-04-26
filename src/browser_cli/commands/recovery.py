@@ -5,7 +5,7 @@ from __future__ import annotations
 from argparse import Namespace
 from typing import Any
 
-from browser_cli.cli.error_hints import next_hint_for_error
+from browser_cli import error_codes
 from browser_cli.commands.status import collect_status_report, status_report_to_json_data
 from browser_cli.daemon.client import ensure_daemon_running, send_command, wait_for_daemon_stop
 from browser_cli.errors import (
@@ -25,7 +25,7 @@ def run_workspace_command(args: Namespace) -> str:
     try:
         return _run_workspace_rebuild_json()
     except BrowserCliError as exc:
-        return render_json_error(exc, next_action=next_hint_for_error(exc))
+        return render_json_error(exc, next_action=_next_action_for_error(exc))
 
 
 def run_recover_command(args: Namespace) -> str:
@@ -34,7 +34,7 @@ def run_recover_command(args: Namespace) -> str:
     try:
         return render_json_payload({"ok": True, "data": _recover(), "meta": {"action": "recover"}})
     except BrowserCliError as exc:
-        return render_json_error(exc, next_action=next_hint_for_error(exc))
+        return render_json_error(exc, next_action=_next_action_for_error(exc))
 
 
 def collect_stable_status_data() -> dict[str, Any]:
@@ -98,3 +98,11 @@ def _result_payload(
         "after_status": after,
         "recovered": after.get("recovery", {}).get("recommended_action") == "none",
     }
+
+
+def _next_action_for_error(exc: BrowserCliError) -> str | None:
+    if exc.error_code == error_codes.EXTENSION_UNAVAILABLE:
+        return "connect or reload the Browser CLI extension"
+    if exc.error_code == error_codes.EXTENSION_CAPABILITY_INCOMPLETE:
+        return "reload the Browser CLI extension and run browser-cli recover --json"
+    return None

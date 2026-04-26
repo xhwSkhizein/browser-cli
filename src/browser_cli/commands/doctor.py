@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import importlib.util
 import contextlib
+import importlib.util
 import os
 import shutil
 import socket
@@ -13,18 +13,18 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from browser_cli import error_codes
 from browser_cli.automation.service.client import (
     _probe_automation_service,
     read_automation_service_run_info,
 )
-from browser_cli import error_codes
-from browser_cli.browser.models import HEADLESS_ENV, default_headless
 from browser_cli.constants import AppPaths, get_app_paths
 from browser_cli.daemon.client import run_info_is_compatible, send_command
 from browser_cli.daemon.transport import probe_socket, read_run_info
 from browser_cli.outputs.json import render_json_payload
 
 LOCK_FILES = ("SingletonLock", "SingletonCookie", "SingletonSocket")
+HEADLESS_ENV = "BROWSER_CLI_HEADLESS"
 
 
 @dataclass(slots=True, frozen=True)
@@ -336,7 +336,7 @@ def _environment_payload(app_paths: AppPaths) -> dict[str, Any]:
         "in_container": in_container,
         "container_markers": markers,
         "headless_env": os.environ.get(HEADLESS_ENV),
-        "headless_effective": default_headless(),
+        "headless_effective": _default_headless(),
         "extension_host": app_paths.extension_host,
         "extension_port": app_paths.extension_port,
     }
@@ -372,6 +372,13 @@ def _headless_check(environment: dict[str, Any]) -> DoctorCheck:
         summary="Headless configuration is explicit or not required.",
         details=f"effective={environment['headless_effective']}",
     )
+
+
+def _default_headless() -> bool:
+    raw = os.environ.get(HEADLESS_ENV, "").strip().lower()
+    if not raw:
+        return False
+    return raw in {"1", "true", "yes", "on"}
 
 
 def _container_check(environment: dict[str, Any]) -> DoctorCheck:
