@@ -54,6 +54,7 @@ def test_status_help(capsys) -> None:
     captured = capsys.readouterr()
     assert exit_code == 0
     assert "runtime state" in captured.out
+    assert "--json" in captured.out
 
 
 def test_doctor_help_mentions_json(capsys) -> None:

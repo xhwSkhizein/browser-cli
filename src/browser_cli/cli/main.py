@@ -220,6 +220,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Show daemon, backend, and workspace runtime status.",
         description="Inspect Browser CLI runtime state and print operational guidance.",
     )
+    status_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Return stable machine-readable runtime status.",
+    )
     status_parser.set_defaults(handler=run_status_command)
 
     reload_parser = subparsers.add_parser(
