@@ -20,8 +20,13 @@ class BrowserCliError(Exception):
 
 
 class BrowserUnavailableError(BrowserCliError):
-    def __init__(self, message: str) -> None:
-        super().__init__(message, exit_codes.BROWSER_UNAVAILABLE, error_codes.BROWSER_UNAVAILABLE)
+    def __init__(
+        self,
+        message: str,
+        *,
+        error_code: str = error_codes.BROWSER_UNAVAILABLE,
+    ) -> None:
+        super().__init__(message, exit_codes.BROWSER_UNAVAILABLE, error_code)
 
 
 class ProfileUnavailableError(BrowserCliError):
@@ -136,22 +141,12 @@ class ExtensionPortInUseError(OperationFailedError):
 
 class ChromeExecutableNotFoundError(BrowserUnavailableError):
     def __init__(self, message: str = "Stable Google Chrome was not found.") -> None:
-        BrowserCliError.__init__(
-            self,
-            message,
-            exit_codes.BROWSER_UNAVAILABLE,
-            error_codes.CHROME_EXECUTABLE_NOT_FOUND,
-        )
+        super().__init__(message, error_code=error_codes.CHROME_EXECUTABLE_NOT_FOUND)
 
 
 class HeadlessRuntimeUnavailableError(BrowserUnavailableError):
     def __init__(self, message: str = "Headless browser runtime is unavailable.") -> None:
-        BrowserCliError.__init__(
-            self,
-            message,
-            exit_codes.BROWSER_UNAVAILABLE,
-            error_codes.HEADLESS_RUNTIME_UNAVAILABLE,
-        )
+        super().__init__(message, error_code=error_codes.HEADLESS_RUNTIME_UNAVAILABLE)
 
 
 class AutomationServiceNotAvailableError(BrowserCliError):

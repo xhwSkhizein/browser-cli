@@ -290,6 +290,32 @@ def test_browser_service_preflight_failure_is_reported(
     asyncio.run(_scenario())
 
 
+def test_browser_service_preflight_unexpected_failure_is_non_fatal(
+    _patched_browser_service: _FakeExtensionHub,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def _scenario() -> None:
+        _patched_browser_service.connect()
+
+        async def _fail_workspace_status(self) -> dict[str, object]:
+            raise RuntimeError("transport hiccup")
+
+        monkeypatch.setattr(_FakeExtensionDriver, "workspace_status", _fail_workspace_status)
+        tabs = TabRegistry()
+        service = browser_service_module.BrowserService(tabs)
+
+        await service.begin_command("info")
+        meta = await service.end_command()
+
+        assert meta["preflight"]["attempted"] is False
+        assert meta["preflight"]["ok"] is False
+        assert meta["preflight"]["message"] == "transport hiccup"
+        assert service.active_driver_name == "extension"
+        await service.stop()
+
+    asyncio.run(_scenario())
+
+
 def test_browser_service_upgrades_at_safe_point_and_reports_state_reset(
     _patched_browser_service: _FakeExtensionHub,
 ) -> None:

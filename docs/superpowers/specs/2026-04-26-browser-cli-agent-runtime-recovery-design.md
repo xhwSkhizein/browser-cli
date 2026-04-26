@@ -2,7 +2,7 @@
 
 Date: 2026-04-26
 Status: Drafted for review
-Repo: `/home/hongv/workspace/browser-cli`
+Repo: `https://github.com/xhwSkhizein/browser-cli`
 
 ## Summary
 

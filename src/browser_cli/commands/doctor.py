@@ -60,7 +60,7 @@ def collect_doctor_report() -> dict[str, Any]:
         _extension_check(daemon_payload),
         _headless_check(environment),
         _container_check(environment),
-        _extension_port_check(app_paths),
+        _extension_port_check(app_paths, daemon_payload),
     ]
     overall_status = "pass"
     if any(item.status == "fail" for item in checks):
@@ -322,9 +322,10 @@ def _chrome_candidates_check() -> DoctorCheck:
     details = ", ".join(
         f"{item['path']}={'yes' if item['exists'] else 'no'}" for item in candidates
     )
+    found = any(bool(item["exists"]) for item in candidates)
     return DoctorCheck(
         id="chrome_candidates",
-        status="pass" if candidates else "warn",
+        status="pass" if found else "warn",
         summary="Chrome candidate paths were inspected.",
         details=details or "no candidates for this platform",
     )
@@ -395,6 +396,7 @@ def _container_check(environment: dict[str, Any]) -> DoctorCheck:
 def _can_bind_extension_port(host: str, port: int) -> tuple[bool, str | None]:
     probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
+        probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         probe.bind((host, port))
     except OSError as exc:
         return False, str(exc)
@@ -403,9 +405,19 @@ def _can_bind_extension_port(host: str, port: int) -> tuple[bool, str | None]:
     return True, None
 
 
-def _extension_port_check(app_paths: AppPaths) -> DoctorCheck:
-    ok, reason = _can_bind_extension_port(app_paths.extension_host, app_paths.extension_port)
+def _extension_port_check(
+    app_paths: AppPaths, daemon_payload: dict[str, Any] | None
+) -> DoctorCheck:
+    extension = dict((daemon_payload or {}).get("extension") or {})
     endpoint = f"{app_paths.extension_host}:{app_paths.extension_port}"
+    if bool(extension.get("connected")):
+        return DoctorCheck(
+            id="extension_port",
+            status="pass",
+            summary="Extension listener is already serving a connected extension.",
+            details=endpoint,
+        )
+    ok, reason = _can_bind_extension_port(app_paths.extension_host, app_paths.extension_port)
     if ok:
         return DoctorCheck(
             id="extension_port",

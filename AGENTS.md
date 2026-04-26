@@ -23,7 +23,7 @@ the implementation, and where should a change land first.
 - Repository local Python selection is pinned through `.python-version`.
 - Published package name is `browser-control-and-automation-cli`; the installed CLI command remains `browser-cli`.
 - Published distributions must not include PEP 440 local version identifiers; `setuptools-scm` local suffixes are stripped so PyPI accepts non-tagged builds.
-- `read` stays intentionally small: one URL positional plus `--snapshot` and `--scroll-bottom`.
+- `read` stays intentionally small: one URL positional plus `--snapshot`, `--scroll-bottom`, `--json`, and `--async`; async read creates daemon-memory runs for polling.
 - Managed profile mode is the default browser backend.
 - Managed profile mode uses Browser CLI's dedicated Chrome data root at `~/.browser-cli/default-profile`.
 - Extension mode is the preferred real-Chrome backend when the Browser CLI extension is connected and healthy.

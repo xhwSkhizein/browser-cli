@@ -7,10 +7,26 @@ from pathlib import Path
 
 from browser_cli.actions import get_action_specs
 from browser_cli.cli.main import build_parser
+from browser_cli.constants import EXTENSION_HOST_ENV, EXTENSION_PORT_ENV
 from browser_cli.extension.protocol import REQUIRED_EXTENSION_CAPABILITIES
 from scripts.guards.common import Finding
 
 REQUIRED_ACTIONS = {"html", "stop"}
+REQUIRED_TOP_LEVEL_COMMANDS = {
+    "doctor": "CONTRACT018",
+    "paths": "CONTRACT019",
+    "read": "CONTRACT002",
+    "recover": "CONTRACT020",
+    "reload": "CONTRACT011",
+    "status": "CONTRACT010",
+    "task": "CONTRACT003",
+    "automation": "CONTRACT016",
+}
+REQUIRED_ASYNC_RUN_COMMANDS = {"run-cancel", "run-logs", "run-status"}
+REQUIRED_EXTENSION_ENV_VARS = {
+    "BROWSER_CLI_EXTENSION_HOST": EXTENSION_HOST_ENV,
+    "BROWSER_CLI_EXTENSION_PORT": EXTENSION_PORT_ENV,
+}
 DISALLOWED_COMMANDS = {"explore", "session"}
 REQUIRED_EXTENSION_TRACE_VIDEO = {
     "trace-start",
@@ -36,24 +52,9 @@ def run(_root: Path) -> list[Finding]:
                 )
             )
 
-    if "read" not in top_level_commands:
-        findings.append(Finding("error", "CONTRACT002", "Top-level 'read' command is required."))
-    if "doctor" not in top_level_commands:
-        findings.append(Finding("error", "CONTRACT018", "Top-level 'doctor' command is required."))
-    if "paths" not in top_level_commands:
-        findings.append(Finding("error", "CONTRACT019", "Top-level 'paths' command is required."))
-    if "task" not in top_level_commands:
-        findings.append(Finding("error", "CONTRACT003", "Top-level 'task' command is required."))
-    if "automation" not in top_level_commands:
-        findings.append(
-            Finding("error", "CONTRACT016", "Top-level 'automation' command is required.")
-        )
-    if "status" not in top_level_commands:
-        findings.append(Finding("error", "CONTRACT010", "Top-level 'status' command is required."))
-    if "reload" not in top_level_commands:
-        findings.append(
-            Finding("error", "CONTRACT011", "Top-level lifecycle 'reload' command is required.")
-        )
+    for command, code in sorted(REQUIRED_TOP_LEVEL_COMMANDS.items()):
+        if command not in top_level_commands:
+            findings.append(Finding("error", code, f"Top-level '{command}' command is required."))
     if "page-reload" not in top_level_commands:
         findings.append(
             Finding(
@@ -62,9 +63,28 @@ def run(_root: Path) -> list[Finding]:
                 "Top-level 'page-reload' command is required to preserve page reload behavior.",
             )
         )
+    for command in sorted(REQUIRED_ASYNC_RUN_COMMANDS):
+        if command not in top_level_commands:
+            findings.append(
+                Finding(
+                    "error",
+                    "CONTRACT021",
+                    f"Top-level async run command '{command}' is required.",
+                )
+            )
 
     if "read" in top_level_commands:
         findings.extend(_check_read_contract(top_level_commands["read"]))
+    if "workspace" in top_level_commands:
+        findings.extend(_check_workspace_contract(top_level_commands["workspace"]))
+    else:
+        findings.append(
+            Finding(
+                "error",
+                "CONTRACT022",
+                "Top-level 'workspace' command is required for workspace rebuild recovery.",
+            )
+        )
     if "task" in top_level_commands:
         findings.extend(_check_task_contract(top_level_commands["task"]))
     if "automation" in top_level_commands:
@@ -76,6 +96,7 @@ def run(_root: Path) -> list[Finding]:
 
     findings.extend(_check_action_specs())
     findings.extend(_check_extension_required_capabilities())
+    findings.extend(_check_extension_env_vars())
     return findings
 
 
@@ -89,6 +110,14 @@ def _check_read_contract(parser: argparse.ArgumentParser) -> list[Finding]:
                 "error",
                 "CONTRACT004",
                 f"'read' optional flags changed unexpectedly. Expected {sorted(expected)}, found {sorted(option_strings)}.",
+            )
+        )
+    if "--async" not in option_strings:
+        findings.append(
+            Finding(
+                "error",
+                "CONTRACT023",
+                "'read' must expose --async for daemon-memory polling.",
             )
         )
     positional = [
@@ -105,6 +134,19 @@ def _check_read_contract(parser: argparse.ArgumentParser) -> list[Finding]:
             )
         )
     return findings
+
+
+def _check_workspace_contract(parser: argparse.ArgumentParser) -> list[Finding]:
+    subcommands = _subcommand_parsers(parser)
+    if "rebuild" in subcommands:
+        return []
+    return [
+        Finding(
+            "error",
+            "CONTRACT024",
+            "'workspace' must expose a 'rebuild' subcommand for binding recovery.",
+        )
+    ]
 
 
 def _check_task_contract(parser: argparse.ArgumentParser) -> list[Finding]:
@@ -225,6 +267,20 @@ def _check_extension_required_capabilities() -> list[Finding]:
                 + ", ".join(sorted(missing)),
             )
         )
+    return findings
+
+
+def _check_extension_env_vars() -> list[Finding]:
+    findings: list[Finding] = []
+    for expected, actual in sorted(REQUIRED_EXTENSION_ENV_VARS.items()):
+        if actual != expected:
+            findings.append(
+                Finding(
+                    "error",
+                    "CONTRACT025",
+                    f"Extension env var contract changed unexpectedly. Expected {expected}, found {actual}.",
+                )
+            )
     return findings
 
 

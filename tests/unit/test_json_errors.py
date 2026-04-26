@@ -22,6 +22,23 @@ def test_render_json_error_uses_next_action() -> None:
     }
 
 
+def test_render_json_error_can_include_action_meta() -> None:
+    payload = json.loads(
+        render_json_error(
+            WorkspaceBindingLostError("Workspace binding was lost."),
+            action="workspace-rebuild",
+            next_action="browser-cli workspace rebuild --json",
+        )
+    )
+    assert payload == {
+        "ok": False,
+        "error_code": "WORKSPACE_BINDING_LOST",
+        "message": "Workspace binding was lost.",
+        "meta": {"action": "workspace-rebuild"},
+        "next_action": "browser-cli workspace rebuild --json",
+    }
+
+
 def test_new_recovery_error_codes_are_stable() -> None:
     assert error_codes.WORKSPACE_BINDING_LOST == "WORKSPACE_BINDING_LOST"
     assert error_codes.EXTENSION_PORT_IN_USE == "EXTENSION_PORT_IN_USE"

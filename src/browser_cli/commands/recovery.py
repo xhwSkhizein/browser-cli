@@ -101,8 +101,12 @@ def _result_payload(
 
 
 def _next_action_for_error(exc: BrowserCliError) -> str | None:
+    if exc.error_code == error_codes.WORKSPACE_BINDING_LOST:
+        return "run browser-cli workspace rebuild --json"
     if exc.error_code == error_codes.EXTENSION_UNAVAILABLE:
         return "connect or reload the Browser CLI extension"
     if exc.error_code == error_codes.EXTENSION_CAPABILITY_INCOMPLETE:
         return "reload the Browser CLI extension and run browser-cli recover --json"
+    if exc.error_code == error_codes.EXTENSION_PORT_IN_USE:
+        return "set BROWSER_CLI_EXTENSION_PORT to a free port or stop the process using it"
     return None

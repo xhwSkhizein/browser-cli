@@ -150,19 +150,19 @@ class BrowserService:
         return meta
 
     async def _maybe_preflight_workspace_binding(self) -> dict[str, Any] | None:
-        if self._driver_name != "extension" or self._command_depth != 0:
-            return None
-        session = self._extension_hub.session
-        if session is None or not session.hello.has_required_capabilities():
-            return None
-        tabs = await self._tab_runtime_status()
-        if int(tabs.get("busy_count") or 0) > 0:
-            return None
-        workspace_state = await self._extension.workspace_status()
-        binding_state = str(workspace_state.get("binding_state") or "absent")
-        if binding_state not in {"stale", "absent"}:
-            return None
         try:
+            if self._driver_name != "extension" or self._command_depth != 0:
+                return None
+            session = self._extension_hub.session
+            if session is None or not session.hello.has_required_capabilities():
+                return None
+            tabs = await self._tab_runtime_status()
+            if int(tabs.get("busy_count") or 0) > 0:
+                return None
+            workspace_state = await self._extension.workspace_status()
+            binding_state = str(workspace_state.get("binding_state") or "absent")
+            if binding_state not in {"stale", "absent"}:
+                return None
             await self.rebuild_workspace_binding()
             return {
                 "attempted": True,
@@ -178,6 +178,16 @@ class BrowserService:
                 "ok": False,
                 "error_code": exc.error_code or error_codes.WORKSPACE_BINDING_LOST,
                 "message": exc.message,
+                "next_action": "browser-cli recover --json",
+            }
+        except Exception as exc:
+            logger.warning("Workspace binding preflight failed unexpectedly", exc_info=True)
+            return {
+                "attempted": False,
+                "action": "rebuild-workspace-binding",
+                "ok": False,
+                "error_code": error_codes.WORKSPACE_BINDING_LOST,
+                "message": str(exc),
                 "next_action": "browser-cli recover --json",
             }
 

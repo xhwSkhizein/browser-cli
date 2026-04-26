@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from collections.abc import Sequence
 
@@ -26,6 +25,7 @@ from browser_cli.commands.runs import (
 from browser_cli.commands.status import run_status_command
 from browser_cli.commands.task import run_task_command
 from browser_cli.errors import BrowserCliError
+from browser_cli.outputs.json import render_json_error
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -300,6 +300,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run_logs_parser.add_argument("run_id")
     run_logs_parser.add_argument("--tail", type=int, default=200)
+    run_logs_parser.add_argument("--json", action="store_true", help="Return JSON logs.")
     run_logs_parser.set_defaults(handler=run_run_logs_command)
 
     run_cancel_parser = subparsers.add_parser(
@@ -308,6 +309,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Request cancellation for a daemon-side async command run.",
     )
     run_cancel_parser.add_argument("run_id")
+    run_cancel_parser.add_argument("--json", action="store_true", help="Return JSON result.")
     run_cancel_parser.set_defaults(handler=run_run_cancel_command)
 
     skills_parser = subparsers.add_parser(
@@ -360,7 +362,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     except BrowserCliError as exc:
         hint = next_hint_for_error(exc)
         if getattr(args, "json", False):
-            sys.stdout.write(_render_cli_json_error(exc, next_action=hint))
+            sys.stdout.write(
+                render_json_error(
+                    exc,
+                    action=str(getattr(args, "command", "") or "") or None,
+                    next_action=hint,
+                )
+            )
             return exc.exit_code
         sys.stderr.write(f"Error: {exc}\n")
         if hint:
@@ -376,17 +384,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     if result:
         sys.stdout.write(result)
     return exit_codes.SUCCESS
-
-
-def _render_cli_json_error(exc: BrowserCliError, *, next_action: str | None = None) -> str:
-    payload: dict[str, object] = {
-        "ok": False,
-        "error_code": exc.error_code,
-        "message": exc.message,
-    }
-    if next_action:
-        payload["next_action"] = next_action
-    return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
 
 
 if __name__ == "__main__":  # pragma: no cover

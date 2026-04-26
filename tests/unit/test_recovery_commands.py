@@ -4,7 +4,12 @@ import json
 from argparse import Namespace
 from unittest.mock import patch
 
-from browser_cli.commands.recovery import run_recover_command, run_workspace_command
+from browser_cli.commands.recovery import (
+    _next_action_for_error,
+    run_recover_command,
+    run_workspace_command,
+)
+from browser_cli.errors import ExtensionPortInUseError, WorkspaceBindingLostError
 
 
 def _status_data(binding: str, recommended: str = "none") -> dict[str, object]:
@@ -96,3 +101,14 @@ def test_workspace_rebuild_json_failure_returns_structured_error() -> None:
         "message": "Browser CLI extension is not connected.",
         "next_action": "connect or reload the Browser CLI extension",
     }
+
+
+def test_recovery_next_action_covers_binding_and_port_errors() -> None:
+    assert (
+        _next_action_for_error(WorkspaceBindingLostError("lost"))
+        == "run browser-cli workspace rebuild --json"
+    )
+    assert (
+        _next_action_for_error(ExtensionPortInUseError("busy"))
+        == "set BROWSER_CLI_EXTENSION_PORT to a free port or stop the process using it"
+    )

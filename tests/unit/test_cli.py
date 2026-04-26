@@ -146,6 +146,7 @@ def test_json_mode_error_renders_json_to_stdout(capsys) -> None:
         "ok": False,
         "error_code": "CHROME_EXECUTABLE_NOT_FOUND",
         "message": "Chrome missing",
+        "meta": {"action": "doctor"},
         "next_action": "install stable Google Chrome and re-run browser-cli doctor --json",
     }
 
@@ -258,6 +259,7 @@ def test_run_logs_help_mentions_tail(capsys) -> None:
     captured = capsys.readouterr()
     assert exit_code == 0
     assert "--tail" in captured.out
+    assert "--json" in captured.out
 
 
 def test_run_cancel_help(capsys) -> None:
@@ -265,6 +267,19 @@ def test_run_cancel_help(capsys) -> None:
     captured = capsys.readouterr()
     assert exit_code == 0
     assert "run_id" in captured.out
+    assert "--json" in captured.out
+
+
+def test_run_status_text_output(capsys) -> None:
+    with patch(
+        "browser_cli.commands.runs.send_command",
+        return_value={"ok": True, "data": {"run_id": "run_000001", "status": "running"}},
+    ):
+        exit_code = main(["run-status", "run_000001"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert captured.out == "Run: run_000001\nStatus: running\n"
 
 
 def test_read_async_json_returns_run_id(capsys) -> None:

@@ -33,6 +33,36 @@ def test_run_registry_completes_successful_read() -> None:
     asyncio.run(_run())
 
 
+def test_run_registry_brackets_read_with_begin_and_end() -> None:
+    async def _run() -> None:
+        calls: list[str] = []
+
+        async def _begin(command: str) -> None:
+            calls.append(f"begin:{command}")
+
+        async def _end() -> dict[str, object]:
+            calls.append("end")
+            return {"driver": "extension"}
+
+        async def _read(args: dict[str, object]) -> dict[str, object]:
+            _ = args
+            calls.append("read")
+            return {"body": "ok"}
+
+        registry = CommandRunRegistry(
+            read_handler=_read,
+            begin_handler=_begin,
+            end_handler=_end,
+        )
+        run_id = str(registry.start_read({"url": "https://example.com"})["run_id"])
+        await registry.wait_for_idle()
+
+        assert calls == ["begin:read-async", "read", "end"]
+        assert registry.status(run_id)["meta"] == {"driver": "extension"}
+
+    asyncio.run(_run())
+
+
 def test_run_registry_cancel_marks_run() -> None:
     async def _run() -> None:
         started_event = asyncio.Event()
@@ -50,6 +80,44 @@ def test_run_registry_cancel_marks_run() -> None:
         assert cancel["cancel_requested"] is True
         await registry.wait_for_idle()
         assert registry.status(run_id)["status"] == "canceled"
+        assert registry._tasks[run_id].cancelled() is True  # noqa: SLF001
+
+    asyncio.run(_run())
+
+
+def test_run_registry_logs_non_positive_tail_is_empty() -> None:
+    async def _run() -> None:
+        async def _read(args: dict[str, object]) -> dict[str, object]:
+            _ = args
+            return {"body": "ok"}
+
+        registry = CommandRunRegistry(read_handler=_read)
+        run_id = str(registry.start_read({"url": "https://example.com"})["run_id"])
+        await registry.wait_for_idle()
+
+        assert registry.logs(run_id, tail=0)["events"] == []
+        assert registry.logs(run_id, tail=-1)["events"] == []
+        assert len(registry.logs(run_id, tail=1)["events"]) == 1
+
+    asyncio.run(_run())
+
+
+def test_run_registry_evicts_old_completed_runs() -> None:
+    async def _run() -> None:
+        async def _read(args: dict[str, object]) -> dict[str, object]:
+            return {"body": str(args["url"])}
+
+        registry = CommandRunRegistry(read_handler=_read, max_completed_runs=2)
+        first = str(registry.start_read({"url": "first"})["run_id"])
+        await registry.wait_for_idle()
+        second = str(registry.start_read({"url": "second"})["run_id"])
+        await registry.wait_for_idle()
+        third = str(registry.start_read({"url": "third"})["run_id"])
+        await registry.wait_for_idle()
+
+        assert registry.status(first)["status"] == "not_found"
+        assert registry.status(second)["status"] == "succeeded"
+        assert registry.status(third)["status"] == "succeeded"
 
     asyncio.run(_run())
 
