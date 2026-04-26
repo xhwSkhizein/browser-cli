@@ -31,6 +31,8 @@ def test_read_help(capsys) -> None:
     assert "interactive exploration" in captured.out
     assert "--snapshot" in captured.out
     assert "--scroll-bottom" in captured.out
+    assert "--json" in captured.out
+    assert "--async" in captured.out
 
 
 def test_snapshot_help_mentions_smaller_capture_options(capsys) -> None:
@@ -181,6 +183,35 @@ def test_fallback_profile_reports_to_stderr(capsys) -> None:
     assert exit_code == 0
     assert captured.out == "ok"
     assert "using fallback profile" in captured.err
+
+
+def test_read_json_wraps_body_and_fallback_metadata(capsys) -> None:
+    with patch(
+        "browser_cli.commands.read.BrowserCliTaskClient.read",
+        return_value=ReadResult(
+            body="snapshot body",
+            used_fallback_profile=True,
+            fallback_profile_dir="/tmp/profile",
+            fallback_reason="locked",
+        ),
+    ):
+        exit_code = main(["read", "https://example.com", "--snapshot", "--json"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    payload = json.loads(captured.out)
+    assert payload == {
+        "ok": True,
+        "data": {
+            "body": "snapshot body",
+            "output_mode": "snapshot",
+            "used_fallback_profile": True,
+            "fallback_profile_dir": "/tmp/profile",
+            "fallback_reason": "locked",
+        },
+        "meta": {"action": "read"},
+    }
+    assert captured.err == ""
 
 
 def test_status_command_renders_report(capsys) -> None:

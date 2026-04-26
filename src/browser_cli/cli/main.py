@@ -45,6 +45,17 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Scroll to the bottom before capture to trigger lazy-loaded content.",
     )
+    read_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Return machine-readable read result.",
+    )
+    read_parser.add_argument(
+        "--async",
+        dest="async_run",
+        action="store_true",
+        help="Start an async daemon read run and return a run id.",
+    )
     read_parser.set_defaults(handler=run_read_command)
 
     doctor_parser = subparsers.add_parser(
