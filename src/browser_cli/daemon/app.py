@@ -149,7 +149,7 @@ class BrowserDaemonApp:
         except BrowserCliError as exc:
             if command_started:
                 runtime_meta = await self._state.browser_service.end_command()
-            return self._error_response(exc, request=request)
+            return self._error_response(exc, request=request, runtime_meta=runtime_meta)
         except Exception as exc:  # pragma: no cover - last-resort daemon guard
             if command_started:
                 runtime_meta = await self._state.browser_service.end_command()
@@ -162,15 +162,24 @@ class BrowserDaemonApp:
                 request=request,
             )
 
-    def _error_response(self, exc: BrowserCliError, *, request: DaemonRequest) -> DaemonResponse:
+    def _error_response(
+        self,
+        exc: BrowserCliError,
+        *,
+        request: DaemonRequest,
+        runtime_meta: dict[str, Any] | None = None,
+    ) -> DaemonResponse:
+        meta = {
+            "action": request.action,
+            "agent_id": request.agent_id,
+            "driver": self._state.browser_service.active_driver_name,
+        }
+        if runtime_meta:
+            meta.update(runtime_meta)
         return DaemonResponse.failure(
             error_code=exc.error_code,
             error_message=exc.message,
-            meta={
-                "action": request.action,
-                "agent_id": request.agent_id,
-                "driver": self._state.browser_service.active_driver_name,
-            },
+            meta=meta,
         )
 
     async def _handle_stop(self, request: DaemonRequest) -> dict[str, Any]:
