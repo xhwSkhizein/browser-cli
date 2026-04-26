@@ -19,6 +19,7 @@ from browser_cli.commands.reload import run_reload_command
 from browser_cli.commands.status import run_status_command
 from browser_cli.commands.task import run_task_command
 from browser_cli.errors import BrowserCliError
+from browser_cli.outputs.json import render_json_error
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -282,8 +283,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         result = args.handler(args)
     except BrowserCliError as exc:
-        sys.stderr.write(f"Error: {exc}\n")
         hint = next_hint_for_error(exc)
+        if getattr(args, "json", False):
+            sys.stdout.write(render_json_error(exc, next_action=hint))
+            return exc.exit_code
+        sys.stderr.write(f"Error: {exc}\n")
         if hint:
             sys.stderr.write(f"Next: {hint}\n")
         return exc.exit_code

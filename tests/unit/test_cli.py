@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import json
 from unittest.mock import patch
 
 from browser_cli.cli.main import main
-from browser_cli.errors import ProfileUnavailableError
+from browser_cli.errors import ChromeExecutableNotFoundError, ProfileUnavailableError
 from browser_cli.task_runtime.read import ReadResult
 
 
@@ -126,6 +127,25 @@ def test_runtime_error_maps_to_stderr_and_exit_code(capsys) -> None:
     assert (
         "Next: close Browser CLI-owned Chrome windows or inspect browser-cli status" in captured.err
     )
+
+
+def test_json_mode_error_renders_json_to_stdout(capsys) -> None:
+    with patch(
+        "browser_cli.cli.main.run_doctor_command",
+        side_effect=ChromeExecutableNotFoundError("Chrome missing"),
+    ):
+        exit_code = main(["doctor", "--json"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 69
+    assert captured.err == ""
+    payload = json.loads(captured.out)
+    assert payload == {
+        "ok": False,
+        "error_code": "CHROME_EXECUTABLE_NOT_FOUND",
+        "message": "Chrome missing",
+        "next_action": "install stable Google Chrome and re-run browser-cli doctor --json",
+    }
 
 
 def test_read_command_normalizes_url_before_client_read(capsys) -> None:
