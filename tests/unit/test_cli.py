@@ -199,6 +199,22 @@ def test_reload_command_renders_summary(capsys) -> None:
     assert captured.out == "Reload: complete\n"
 
 
+def test_workspace_rebuild_help_mentions_json(capsys) -> None:
+    exit_code = main(["workspace", "rebuild", "--help"])
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "--json" in captured.out
+    assert "workspace binding" in captured.out.lower()
+
+
+def test_recover_help_mentions_json(capsys) -> None:
+    exit_code = main(["recover", "--help"])
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "--json" in captured.out
+    assert "recover" in captured.out.lower()
+
+
 def test_install_skills_help_mentions_target(capsys) -> None:
     exit_code = main(["install-skills", "--help"])
     captured = capsys.readouterr()

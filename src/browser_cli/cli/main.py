@@ -16,6 +16,7 @@ from browser_cli.commands.install_skills import run_install_skills_command
 from browser_cli.commands.paths import run_paths_command
 from browser_cli.commands.read import run_read_command
 from browser_cli.commands.reload import run_reload_command
+from browser_cli.commands.recovery import run_recover_command, run_workspace_command
 from browser_cli.commands.status import run_status_command
 from browser_cli.commands.task import run_task_command
 from browser_cli.errors import BrowserCliError
@@ -234,6 +235,38 @@ def build_parser() -> argparse.ArgumentParser:
         description="Clear Browser CLI runtime state, restart the daemon, and print the refreshed status.",
     )
     reload_parser.set_defaults(handler=run_reload_command)
+
+    workspace_parser = subparsers.add_parser(
+        "workspace",
+        help="Inspect or repair Browser CLI workspace state.",
+        description="Operate on Browser CLI-owned extension workspace binding.",
+    )
+    workspace_subparsers = workspace_parser.add_subparsers(
+        dest="workspace_subcommand", metavar="WORKSPACE_COMMAND"
+    )
+    workspace_rebuild_parser = workspace_subparsers.add_parser(
+        "rebuild",
+        help="Rebuild extension workspace binding.",
+        description="Rebuild Browser CLI-owned workspace binding through the daemon.",
+    )
+    workspace_rebuild_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Return machine-readable recovery result.",
+    )
+    workspace_rebuild_parser.set_defaults(handler=run_workspace_command)
+
+    recover_parser = subparsers.add_parser(
+        "recover",
+        help="Recover Browser CLI runtime state.",
+        description="Run agent-friendly daemon and workspace recovery.",
+    )
+    recover_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Return machine-readable recovery result.",
+    )
+    recover_parser.set_defaults(handler=run_recover_command)
 
     skills_parser = subparsers.add_parser(
         "install-skills",

@@ -12,6 +12,8 @@ from browser_cli import error_codes
 from browser_cli.constants import DEFAULT_PUBLIC_AGENT_ID
 from browser_cli.errors import (
     BrowserCliError,
+    ExtensionCapabilityIncompleteError,
+    ExtensionUnavailableError,
     InvalidInputError,
     NoActiveTabError,
     OperationFailedError,
@@ -40,6 +42,7 @@ class BrowserDaemonApp:
             "close-tab": self._handle_close_tab,
             "close": self._handle_close,
             "stop": self._handle_stop,
+            "workspace-rebuild-binding": self._handle_workspace_rebuild_binding,
             "info": self._handle_info,
             "read-page": self._handle_read_page,
             "html": self._handle_html,
@@ -122,7 +125,7 @@ class BrowserDaemonApp:
         command_started = False
         try:
             self._maybe_configure_browser_environment(request.args)
-            if request.action not in {"runtime-status", "stop"}:
+            if request.action not in {"runtime-status", "stop", "workspace-rebuild-binding"}:
                 await self._state.browser_service.begin_command(request.action)
                 command_started = True
             data = await handler(request)
@@ -182,6 +185,19 @@ class BrowserDaemonApp:
             **raw_status,
             "presentation": build_runtime_presentation(raw_status),
         }
+
+    async def _handle_workspace_rebuild_binding(self, request: DaemonRequest) -> dict[str, Any]:
+        status = await self._state.browser_service.runtime_status(warmup=True)
+        extension = dict(status.get("extension") or {})
+        if not bool(extension.get("connected")):
+            raise ExtensionUnavailableError("Browser CLI extension is not connected.")
+        if not bool(extension.get("capability_complete")):
+            missing = ", ".join(str(item) for item in extension.get("missing_capabilities") or [])
+            suffix = f" Missing capabilities: {missing}." if missing else ""
+            raise ExtensionCapabilityIncompleteError(
+                "Browser CLI extension is missing required capabilities." + suffix
+            )
+        return await self._state.browser_service.rebuild_workspace_binding()
 
     async def _handle_open(self, request: DaemonRequest) -> dict[str, Any]:
         url = self._require_str(request.args, "url")
