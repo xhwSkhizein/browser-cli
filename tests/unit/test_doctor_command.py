@@ -28,6 +28,89 @@ def test_doctor_json_payload_reports_checks(monkeypatch, tmp_path) -> None:
     assert payload["data"]["checks"][0]["id"] == "chrome"
 
 
+def test_doctor_json_reports_environment(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    monkeypatch.setenv("BROWSER_CLI_HOME", str(home))
+    monkeypatch.setenv("BROWSER_CLI_HEADLESS", "1")
+    monkeypatch.setenv("BROWSER_CLI_EXTENSION_HOST", "127.0.0.1")
+    monkeypatch.setenv("BROWSER_CLI_EXTENSION_PORT", "19825")
+    monkeypatch.setattr("browser_cli.commands.doctor._daemon_runtime_payload", lambda: None)
+    monkeypatch.setattr(
+        "browser_cli.commands.doctor._chrome_candidates",
+        lambda: [{"path": "/usr/bin/google-chrome", "exists": False}],
+    )
+    monkeypatch.setattr(
+        "browser_cli.commands.doctor._is_container", lambda: (True, ["/.dockerenv"])
+    )
+    monkeypatch.setattr(
+        "browser_cli.commands.doctor._can_bind_extension_port", lambda host, port: (True, None)
+    )
+
+    payload = json.loads(run_doctor_command(Namespace(json=True)))
+
+    assert payload["data"]["environment"] == {
+        "in_container": True,
+        "container_markers": ["/.dockerenv"],
+        "headless_env": "1",
+        "headless_effective": True,
+        "extension_host": "127.0.0.1",
+        "extension_port": 19825,
+    }
+    assert any(check["id"] == "extension_port" for check in payload["data"]["checks"])
+    assert any(check["id"] == "headless" for check in payload["data"]["checks"])
+
+
+def test_doctor_extension_port_reports_bind_failure(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("BROWSER_CLI_HOME", str(tmp_path / "home"))
+    monkeypatch.setattr("browser_cli.commands.doctor._daemon_runtime_payload", lambda: None)
+    monkeypatch.setattr("browser_cli.commands.doctor._is_container", lambda: (False, []))
+    monkeypatch.setattr(
+        "browser_cli.commands.doctor._can_bind_extension_port",
+        lambda host, port: (False, "Address already in use"),
+    )
+    report = collect_doctor_report()
+    check = next(item for item in report["checks"] if item["id"] == "extension_port")
+    assert check["status"] == "warn"
+    assert check["error_code"] == "EXTENSION_PORT_IN_USE"
+    assert "BROWSER_CLI_EXTENSION_PORT" in check["next"]
+
+
+def test_doctor_extension_port_skips_bind_probe_when_extension_connected(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("BROWSER_CLI_HOME", str(tmp_path / "home"))
+    monkeypatch.setattr(
+        "browser_cli.commands.doctor._daemon_runtime_payload",
+        lambda: {"extension": {"connected": True}},
+    )
+
+    def _fail_if_called(host: str, port: int):
+        _ = host
+        _ = port
+        raise AssertionError("bind probe should not run for a connected extension")
+
+    monkeypatch.setattr("browser_cli.commands.doctor._can_bind_extension_port", _fail_if_called)
+
+    report = collect_doctor_report()
+    check = next(item for item in report["checks"] if item["id"] == "extension_port")
+    assert check["status"] == "pass"
+    assert "connected extension" in check["summary"]
+
+
+def test_doctor_chrome_candidates_warns_when_no_candidate_exists(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("BROWSER_CLI_HOME", str(tmp_path / "home"))
+    monkeypatch.setattr("browser_cli.commands.doctor._daemon_runtime_payload", lambda: None)
+    monkeypatch.setattr(
+        "browser_cli.commands.doctor._chrome_candidates",
+        lambda: [{"path": "/missing/chrome", "exists": False}],
+    )
+    report = collect_doctor_report()
+    check = next(item for item in report["checks"] if item["id"] == "chrome_candidates")
+    assert check["status"] == "warn"
+
+
 def test_doctor_text_output_includes_next_hint(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("BROWSER_CLI_HOME", str(tmp_path / "home"))
     monkeypatch.setattr(

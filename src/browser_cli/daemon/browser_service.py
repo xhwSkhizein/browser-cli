@@ -8,11 +8,13 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
+from browser_cli import error_codes
 from browser_cli.daemon.runtime_presentation import build_runtime_presentation
 from browser_cli.drivers.base import BrowserDriver
 from browser_cli.drivers.extension_driver import ExtensionDriver
 from browser_cli.drivers.playwright_driver import PlaywrightDriver
 from browser_cli.errors import (
+    BrowserCliError,
     EmptyContentError,
     InvalidInputError,
     NoSnapshotContextError,
@@ -111,6 +113,7 @@ class BrowserService:
 
     async def begin_command(self, action: str) -> None:
         await self.ensure_started()
+        preflight = await self._maybe_preflight_workspace_binding()
         self._stability.commands_started += 1
         self._stability.active_command = action
         if self._driver_name == "extension":
@@ -125,6 +128,17 @@ class BrowserService:
         await self._maybe_apply_pending_rebind()
         self._command_depth += 1
         self._last_runtime_meta = {"driver": self.active_driver_name, "command": action}
+        if preflight is not None:
+            self._last_runtime_meta["preflight"] = preflight
+            if preflight.get("ok"):
+                self._last_runtime_meta.update(
+                    {
+                        "driver_changed_from": "extension",
+                        "driver_changed_to": "extension",
+                        "driver_reason": "workspace-binding-rebuilt",
+                        "state_reset": True,
+                    }
+                )
 
     async def end_command(self) -> dict[str, Any]:
         self._command_depth = max(0, self._command_depth - 1)
@@ -134,6 +148,48 @@ class BrowserService:
         meta = dict(self._last_runtime_meta)
         self._last_runtime_meta = {}
         return meta
+
+    async def _maybe_preflight_workspace_binding(self) -> dict[str, Any] | None:
+        try:
+            if self._driver_name != "extension" or self._command_depth != 0:
+                return None
+            session = self._extension_hub.session
+            if session is None or not session.hello.has_required_capabilities():
+                return None
+            tabs = await self._tab_runtime_status()
+            if int(tabs.get("busy_count") or 0) > 0:
+                return None
+            workspace_state = await self._extension.workspace_status()
+            binding_state = str(workspace_state.get("binding_state") or "absent")
+            if binding_state not in {"stale", "absent"}:
+                return None
+            await self.rebuild_workspace_binding()
+            return {
+                "attempted": True,
+                "action": "rebuild-workspace-binding",
+                "ok": True,
+                "before_workspace_binding": binding_state,
+                "next_action": None,
+            }
+        except BrowserCliError as exc:
+            return {
+                "attempted": True,
+                "action": "rebuild-workspace-binding",
+                "ok": False,
+                "error_code": exc.error_code or error_codes.WORKSPACE_BINDING_LOST,
+                "message": exc.message,
+                "next_action": "browser-cli recover --json",
+            }
+        except Exception as exc:
+            logger.warning("Workspace binding preflight failed unexpectedly", exc_info=True)
+            return {
+                "attempted": False,
+                "action": "rebuild-workspace-binding",
+                "ok": False,
+                "error_code": error_codes.WORKSPACE_BINDING_LOST,
+                "message": str(exc),
+                "next_action": "browser-cli recover --json",
+            }
 
     @property
     def active_driver_name(self) -> str:
@@ -365,6 +421,13 @@ class BrowserService:
                 "error": str(exc),
             }
             return payload
+
+    async def read_page_from_args(self, args: dict[str, Any]) -> dict[str, Any]:
+        return await self.read_page(
+            url=str(args.get("url") or ""),
+            output_mode=str(args.get("output_mode") or "html"),
+            scroll_bottom=bool(args.get("scroll_bottom")),
+        )
 
     async def _read_page_once(
         self,

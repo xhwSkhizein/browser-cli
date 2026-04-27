@@ -244,6 +244,78 @@ def test_browser_service_prefers_extension_when_available(
     asyncio.run(_scenario())
 
 
+def test_browser_service_preflight_rebuilds_stale_workspace_binding(
+    _patched_browser_service: _FakeExtensionHub,
+) -> None:
+    async def _scenario() -> None:
+        _patched_browser_service.connect()
+        tabs = TabRegistry()
+        service = browser_service_module.BrowserService(tabs)
+
+        await service.begin_command("info")
+        meta = await service.end_command()
+
+        assert meta["preflight"]["attempted"] is True
+        assert meta["preflight"]["ok"] is True
+        assert meta["driver_reason"] == "workspace-binding-rebuilt"
+        assert meta["state_reset"] is True
+        await service.stop()
+
+    asyncio.run(_scenario())
+
+
+def test_browser_service_preflight_failure_is_reported(
+    _patched_browser_service: _FakeExtensionHub,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def _scenario() -> None:
+        _patched_browser_service.connect()
+
+        async def _fail_rebuild(self) -> dict[str, object]:
+            raise browser_service_module.OperationFailedError("rebuild failed")
+
+        monkeypatch.setattr(_FakeExtensionDriver, "rebuild_workspace_binding", _fail_rebuild)
+        tabs = TabRegistry()
+        service = browser_service_module.BrowserService(tabs)
+
+        await service.begin_command("info")
+        meta = await service.end_command()
+
+        assert meta["preflight"]["attempted"] is True
+        assert meta["preflight"]["ok"] is False
+        assert meta["preflight"]["message"] == "rebuild failed"
+        assert meta["preflight"]["next_action"] == "browser-cli recover --json"
+        await service.stop()
+
+    asyncio.run(_scenario())
+
+
+def test_browser_service_preflight_unexpected_failure_is_non_fatal(
+    _patched_browser_service: _FakeExtensionHub,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def _scenario() -> None:
+        _patched_browser_service.connect()
+
+        async def _fail_workspace_status(self) -> dict[str, object]:
+            raise RuntimeError("transport hiccup")
+
+        monkeypatch.setattr(_FakeExtensionDriver, "workspace_status", _fail_workspace_status)
+        tabs = TabRegistry()
+        service = browser_service_module.BrowserService(tabs)
+
+        await service.begin_command("info")
+        meta = await service.end_command()
+
+        assert meta["preflight"]["attempted"] is False
+        assert meta["preflight"]["ok"] is False
+        assert meta["preflight"]["message"] == "transport hiccup"
+        assert service.active_driver_name == "extension"
+        await service.stop()
+
+    asyncio.run(_scenario())
+
+
 def test_browser_service_upgrades_at_safe_point_and_reports_state_reset(
     _patched_browser_service: _FakeExtensionHub,
 ) -> None:
@@ -369,7 +441,7 @@ def test_browser_service_runtime_status_tracks_stability_metrics(
             "command_depth": 0,
             "commands_started": 3,
             "driver_switches": 2,
-            "workspace_rebuilds": 1,
+            "workspace_rebuilds": 2,
             "extension_disconnects": 1,
             "cleanup_failures": 0,
             "last_cleanup_error": None,

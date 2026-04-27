@@ -15,10 +15,17 @@ from browser_cli.commands.doctor import run_doctor_command
 from browser_cli.commands.install_skills import run_install_skills_command
 from browser_cli.commands.paths import run_paths_command
 from browser_cli.commands.read import run_read_command
+from browser_cli.commands.recovery import run_recover_command, run_workspace_command
 from browser_cli.commands.reload import run_reload_command
+from browser_cli.commands.runs import (
+    run_run_cancel_command,
+    run_run_logs_command,
+    run_run_status_command,
+)
 from browser_cli.commands.status import run_status_command
 from browser_cli.commands.task import run_task_command
 from browser_cli.errors import BrowserCliError
+from browser_cli.outputs.json import render_json_error
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -42,6 +49,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--scroll-bottom",
         action="store_true",
         help="Scroll to the bottom before capture to trigger lazy-loaded content.",
+    )
+    read_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Return machine-readable read result.",
+    )
+    read_parser.add_argument(
+        "--async",
+        dest="async_run",
+        action="store_true",
+        help="Start an async daemon read run and return a run id.",
     )
     read_parser.set_defaults(handler=run_read_command)
 
@@ -220,6 +238,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Show daemon, backend, and workspace runtime status.",
         description="Inspect Browser CLI runtime state and print operational guidance.",
     )
+    status_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Return stable machine-readable runtime status.",
+    )
     status_parser.set_defaults(handler=run_status_command)
 
     reload_parser = subparsers.add_parser(
@@ -228,6 +251,66 @@ def build_parser() -> argparse.ArgumentParser:
         description="Clear Browser CLI runtime state, restart the daemon, and print the refreshed status.",
     )
     reload_parser.set_defaults(handler=run_reload_command)
+
+    workspace_parser = subparsers.add_parser(
+        "workspace",
+        help="Inspect or repair Browser CLI workspace state.",
+        description="Operate on Browser CLI-owned extension workspace binding.",
+    )
+    workspace_subparsers = workspace_parser.add_subparsers(
+        dest="workspace_subcommand", metavar="WORKSPACE_COMMAND"
+    )
+    workspace_rebuild_parser = workspace_subparsers.add_parser(
+        "rebuild",
+        help="Rebuild extension workspace binding.",
+        description="Rebuild Browser CLI-owned workspace binding through the daemon.",
+    )
+    workspace_rebuild_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Return machine-readable recovery result.",
+    )
+    workspace_rebuild_parser.set_defaults(handler=run_workspace_command)
+
+    recover_parser = subparsers.add_parser(
+        "recover",
+        help="Recover Browser CLI runtime state.",
+        description="Run agent-friendly daemon and workspace recovery.",
+    )
+    recover_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Return machine-readable recovery result.",
+    )
+    recover_parser.set_defaults(handler=run_recover_command)
+
+    run_status_parser = subparsers.add_parser(
+        "run-status",
+        help="Show daemon async run status.",
+        description="Poll a daemon-side async command run.",
+    )
+    run_status_parser.add_argument("run_id")
+    run_status_parser.add_argument("--json", action="store_true", help="Return JSON status.")
+    run_status_parser.set_defaults(handler=run_run_status_command)
+
+    run_logs_parser = subparsers.add_parser(
+        "run-logs",
+        help="Show daemon async run event logs.",
+        description="Show bounded event logs for a daemon-side async command run.",
+    )
+    run_logs_parser.add_argument("run_id")
+    run_logs_parser.add_argument("--tail", type=int, default=200)
+    run_logs_parser.add_argument("--json", action="store_true", help="Return JSON logs.")
+    run_logs_parser.set_defaults(handler=run_run_logs_command)
+
+    run_cancel_parser = subparsers.add_parser(
+        "run-cancel",
+        help="Cancel a daemon async run.",
+        description="Request cancellation for a daemon-side async command run.",
+    )
+    run_cancel_parser.add_argument("run_id")
+    run_cancel_parser.add_argument("--json", action="store_true", help="Return JSON result.")
+    run_cancel_parser.set_defaults(handler=run_run_cancel_command)
 
     skills_parser = subparsers.add_parser(
         "install-skills",
@@ -277,8 +360,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         result = args.handler(args)
     except BrowserCliError as exc:
-        sys.stderr.write(f"Error: {exc}\n")
         hint = next_hint_for_error(exc)
+        if getattr(args, "json", False):
+            sys.stdout.write(
+                render_json_error(
+                    exc,
+                    action=str(getattr(args, "command", "") or "") or None,
+                    next_action=hint,
+                )
+            )
+            return exc.exit_code
+        sys.stderr.write(f"Error: {exc}\n")
         if hint:
             sys.stderr.write(f"Next: {hint}\n")
         return exc.exit_code

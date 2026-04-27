@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from argparse import Namespace
 from pathlib import Path
 from unittest.mock import patch
@@ -23,6 +24,10 @@ def _fake_paths(tmp_path: Path):
         extension_host = "127.0.0.1"
         extension_port = 19825
         extension_ws_path = "/ext"
+
+        @property
+        def extension_ws_url(self) -> str:
+            return f"ws://{self.extension_host}:{self.extension_port}{self.extension_ws_path}"
 
     return _Paths()
 
@@ -52,6 +57,82 @@ def test_collect_status_report_when_stale_runtime(tmp_path: Path) -> None:
 
     assert report.overall_status == "broken"
     assert report.daemon_state == "stale"
+
+
+def test_status_json_returns_stable_agent_schema(tmp_path: Path) -> None:
+    run_info = {
+        "pid": 4083,
+        "package_version": __version__,
+        "runtime_version": "2026-04-10-dual-driver-extension-v1",
+    }
+    runtime_status = {
+        "browser_started": True,
+        "active_driver": "extension",
+        "profile_source": "extension",
+        "profile_dir": None,
+        "profile_directory": None,
+        "extension": {
+            "connected": True,
+            "capability_complete": True,
+            "missing_capabilities": [],
+        },
+        "pending_rebind": None,
+        "workspace_window_state": {
+            "window_id": 91,
+            "tab_count": 1,
+            "managed_tab_count": 1,
+            "binding_state": "stale",
+        },
+        "tabs": {"count": 1, "busy_count": 0, "records": [], "active_by_agent": {}},
+        "presentation": {
+            "overall_state": "degraded",
+            "summary_reason": "Workspace binding is stale while extension mode is active.",
+            "available_actions": [
+                "refresh-status",
+                "reconnect-extension",
+                "rebuild-workspace-binding",
+            ],
+            "workspace_state": {"binding_state": "stale", "busy_tab_count": 0},
+        },
+    }
+    with (
+        patch("browser_cli.commands.status.get_app_paths", return_value=_fake_paths(tmp_path)),
+        patch("browser_cli.commands.status.read_run_info", return_value=run_info),
+        patch("browser_cli.commands.status.probe_socket", return_value=True),
+        patch(
+            "browser_cli.commands.status.send_command",
+            return_value={"ok": True, "data": runtime_status},
+        ),
+    ):
+        payload = json.loads(run_status_command(Namespace(json=True)))
+
+    assert payload == {
+        "ok": True,
+        "data": {
+            "status": "degraded",
+            "daemon": {"state": "running", "pid": 4083, "socket_reachable": True},
+            "backend": {
+                "active_driver": "extension",
+                "extension_connected": True,
+                "extension_capability_complete": True,
+                "extension_listener": {
+                    "host": "127.0.0.1",
+                    "port": 19825,
+                    "ws_url": "ws://127.0.0.1:19825/ext",
+                },
+            },
+            "browser": {"started": True, "workspace_binding": "stale"},
+            "recovery": {
+                "recommended_action": "rebuild-workspace-binding",
+                "available_actions": [
+                    "refresh-status",
+                    "reconnect-extension",
+                    "rebuild-workspace-binding",
+                ],
+            },
+        },
+        "meta": {"action": "status"},
+    }
 
 
 def test_collect_status_report_when_managed_backend_is_degraded(tmp_path: Path) -> None:

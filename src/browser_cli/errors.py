@@ -20,8 +20,13 @@ class BrowserCliError(Exception):
 
 
 class BrowserUnavailableError(BrowserCliError):
-    def __init__(self, message: str) -> None:
-        super().__init__(message, exit_codes.BROWSER_UNAVAILABLE, error_codes.BROWSER_UNAVAILABLE)
+    def __init__(
+        self,
+        message: str,
+        *,
+        error_code: str = error_codes.BROWSER_UNAVAILABLE,
+    ) -> None:
+        super().__init__(message, exit_codes.BROWSER_UNAVAILABLE, error_code)
 
 
 class ProfileUnavailableError(BrowserCliError):
@@ -109,6 +114,39 @@ class AmbiguousRefError(BrowserCliError):
 class OperationFailedError(BrowserCliError):
     def __init__(self, message: str, *, error_code: str = error_codes.OPERATION_FAILED) -> None:
         super().__init__(message, exit_codes.TEMPORARY_FAILURE, error_code)
+
+
+class WorkspaceBindingLostError(OperationFailedError):
+    def __init__(self, message: str = "Workspace binding was lost.") -> None:
+        super().__init__(message, error_code=error_codes.WORKSPACE_BINDING_LOST)
+
+
+class ExtensionUnavailableError(OperationFailedError):
+    def __init__(self, message: str = "Browser CLI extension is not connected.") -> None:
+        super().__init__(message, error_code=error_codes.EXTENSION_UNAVAILABLE)
+
+
+class ExtensionCapabilityIncompleteError(OperationFailedError):
+    def __init__(
+        self,
+        message: str = "Browser CLI extension is connected but missing required capabilities.",
+    ) -> None:
+        super().__init__(message, error_code=error_codes.EXTENSION_CAPABILITY_INCOMPLETE)
+
+
+class ExtensionPortInUseError(OperationFailedError):
+    def __init__(self, message: str = "Browser CLI extension listener port is in use.") -> None:
+        super().__init__(message, error_code=error_codes.EXTENSION_PORT_IN_USE)
+
+
+class ChromeExecutableNotFoundError(BrowserUnavailableError):
+    def __init__(self, message: str = "Stable Google Chrome was not found.") -> None:
+        super().__init__(message, error_code=error_codes.CHROME_EXECUTABLE_NOT_FOUND)
+
+
+class HeadlessRuntimeUnavailableError(BrowserUnavailableError):
+    def __init__(self, message: str = "Headless browser runtime is unavailable.") -> None:
+        super().__init__(message, error_code=error_codes.HEADLESS_RUNTIME_UNAVAILABLE)
 
 
 class AutomationServiceNotAvailableError(BrowserCliError):
