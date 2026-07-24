@@ -11,6 +11,40 @@ from browser_cli.automation.service.runtime import AutomationServiceRuntime
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
+def _force_task_execution_timeout(monkeypatch) -> None:
+    """Keep pre-task stages off the wall-clock budget so CI load cannot flake them.
+
+    The timeout contract under test is task execution itself: early stages get a
+    stable allowance, then task_execution receives a tight remaining budget that
+    the slow task worker is guaranteed to exceed.
+    """
+
+    def _remaining(_deadline: float | None, *, stage: str) -> float | None:
+        if stage == "task_execution":
+            return 0.05
+        return 30.0
+
+    monkeypatch.setattr(
+        AutomationServiceRuntime,
+        "_remaining_timeout",
+        staticmethod(_remaining),
+    )
+
+
+def _write_slow_task(task_dir: Path) -> None:
+    task_dir.mkdir()
+    (task_dir / "task.py").write_text(
+        "import time\ndef run(flow, inputs):\n    time.sleep(0.3)\n    return {'ok': True}\n",
+        encoding="utf-8",
+    )
+    (task_dir / "task.meta.json").write_text(
+        '{"task":{"id":"demo","name":"Demo","goal":"Run"},'
+        '"environment":{},"success_path":{},"recovery_hints":{},'
+        '"failures":[],"knowledge":{}}',
+        encoding="utf-8",
+    )
+
+
 def test_normalize_interval_schedule() -> None:
     kind, payload, timezone_name = normalize_schedule(
         "interval",
@@ -147,15 +181,7 @@ def test_douyin_automation_manifest_exists() -> None:
 
 def test_automation_service_marks_run_failed_on_timeout(tmp_path: Path, monkeypatch) -> None:
     task_dir = tmp_path / "task"
-    task_dir.mkdir()
-    (task_dir / "task.py").write_text(
-        "import time\ndef run(flow, inputs):\n    time.sleep(0.3)\n    return {'ok': True}\n",
-        encoding="utf-8",
-    )
-    (task_dir / "task.meta.json").write_text(
-        '{"task":{"id":"demo","name":"Demo","goal":"Run"},"environment":{},"success_path":{},"recovery_hints":{},"failures":[],"knowledge":{}}',
-        encoding="utf-8",
-    )
+    _write_slow_task(task_dir)
     store = AutomationStore(tmp_path / "automations.db")
     store.upsert_automation(
         PersistedAutomationDefinition(
@@ -164,7 +190,8 @@ def test_automation_service_marks_run_failed_on_timeout(tmp_path: Path, monkeypa
             task_path=task_dir / "task.py",
             task_meta_path=task_dir / "task.meta.json",
             output_dir=tmp_path / "out",
-            timeout_seconds=0.05,
+            # Generous overall budget; the test pins the task-stage remainder below.
+            timeout_seconds=30.0,
         )
     )
     run = store.create_run("demo", trigger_type="manual")
@@ -176,6 +203,7 @@ def test_automation_service_marks_run_failed_on_timeout(tmp_path: Path, monkeypa
             return {}
 
     monkeypatch.setattr("browser_cli.automation.service.runtime.BrowserCliTaskClient", _FakeClient)
+    _force_task_execution_timeout(monkeypatch)
 
     runtime._execute_run(run.run_id)
     updated = store.get_run(run.run_id)
@@ -192,15 +220,7 @@ def test_automation_service_marks_run_failed_on_timeout(tmp_path: Path, monkeypa
 
 def test_automation_service_does_not_retry_timeout_failure(tmp_path: Path, monkeypatch) -> None:
     task_dir = tmp_path / "task"
-    task_dir.mkdir()
-    (task_dir / "task.py").write_text(
-        "import time\ndef run(flow, inputs):\n    time.sleep(0.3)\n    return {'ok': True}\n",
-        encoding="utf-8",
-    )
-    (task_dir / "task.meta.json").write_text(
-        '{"task":{"id":"demo","name":"Demo","goal":"Run"},"environment":{},"success_path":{},"recovery_hints":{},"failures":[],"knowledge":{}}',
-        encoding="utf-8",
-    )
+    _write_slow_task(task_dir)
     store = AutomationStore(tmp_path / "automations.db")
     store.upsert_automation(
         PersistedAutomationDefinition(
@@ -209,7 +229,7 @@ def test_automation_service_does_not_retry_timeout_failure(tmp_path: Path, monke
             task_path=task_dir / "task.py",
             task_meta_path=task_dir / "task.meta.json",
             output_dir=tmp_path / "out",
-            timeout_seconds=0.05,
+            timeout_seconds=30.0,
             retry_attempts=3,
         )
     )
@@ -222,6 +242,7 @@ def test_automation_service_does_not_retry_timeout_failure(tmp_path: Path, monke
             return {}
 
     monkeypatch.setattr("browser_cli.automation.service.runtime.BrowserCliTaskClient", _FakeClient)
+    _force_task_execution_timeout(monkeypatch)
 
     runtime._execute_run(run.run_id)
     runs = store.list_runs("demo", limit=10)
