@@ -59,6 +59,27 @@ class _ArtifactBuffer:
 
 
 @dataclass(slots=True)
+class _ResponseChunkBuffer:
+    chunks: dict[int, str] = field(default_factory=dict)
+
+    def append(self, index: int, chunk: str) -> None:
+        self.chunks[index] = chunk
+
+    def assemble(self) -> str:
+        if not self.chunks:
+            return ""
+        indexes = sorted(self.chunks)
+        expected = list(range(indexes[-1] + 1))
+        if indexes != expected:
+            missing = [index for index in expected if index not in self.chunks]
+            raise OperationFailedError(
+                f"Extension response chunks are incomplete; missing indexes: {missing}",
+                error_code="EXTENSION_RESPONSE_CHUNK_INCOMPLETE",
+            )
+        return "".join(self.chunks[index] for index in indexes)
+
+
+@dataclass(slots=True)
 class ExtensionSession:
     websocket: ServerConnection
     hello: ExtensionHello
@@ -66,6 +87,7 @@ class ExtensionSession:
     _artifact_events: dict[str, asyncio.Event] = field(init=False, repr=False)
     _artifact_buffers: dict[tuple[str, str], _ArtifactBuffer] = field(init=False, repr=False)
     _completed_artifacts: dict[str, list[dict[str, Any]]] = field(init=False, repr=False)
+    _response_buffers: dict[str, _ResponseChunkBuffer] = field(init=False, repr=False)
     _lock: asyncio.Lock = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -73,6 +95,7 @@ class ExtensionSession:
         self._artifact_events = {}
         self._artifact_buffers = {}
         self._completed_artifacts = {}
+        self._response_buffers = {}
         self._lock = asyncio.Lock()
 
     @property
@@ -123,6 +146,45 @@ class ExtensionSession:
             return
         future.set_result(response)
 
+    def append_response_chunk(self, payload: dict[str, Any]) -> None:
+        request_id = str(payload.get("id") or "")
+        if not request_id:
+            return
+        future = self._pending.get(request_id)
+        if future is None or future.done():
+            self._response_buffers.pop(request_id, None)
+            return
+        buffer = self._response_buffers.setdefault(request_id, _ResponseChunkBuffer())
+        buffer.append(int(payload.get("index") or 0), str(payload.get("chunk") or ""))
+        if not bool(payload.get("final")):
+            return
+        try:
+            assembled = buffer.assemble()
+            message = json.loads(assembled)
+            if not isinstance(message, dict):
+                raise OperationFailedError(
+                    "Extension chunked response is not a JSON object.",
+                    error_code="EXTENSION_RESPONSE_CHUNK_INVALID",
+                )
+            response = ExtensionResponse.from_message(message)
+        except OperationFailedError as exc:
+            self._response_buffers.pop(request_id, None)
+            if not future.done():
+                future.set_exception(exc)
+            return
+        except (json.JSONDecodeError, TypeError, ValueError) as exc:
+            self._response_buffers.pop(request_id, None)
+            if not future.done():
+                future.set_exception(
+                    OperationFailedError(
+                        f"Extension chunked response is invalid: {exc}",
+                        error_code="EXTENSION_RESPONSE_CHUNK_INVALID",
+                    )
+                )
+            return
+        self._response_buffers.pop(request_id, None)
+        self.resolve_response(response)
+
     def fail_all(self, message: str) -> None:
         for future in list(self._pending.values()):
             if not future.done():
@@ -132,6 +194,7 @@ class ExtensionSession:
         self._pending.clear()
         self._artifact_buffers.clear()
         self._completed_artifacts.clear()
+        self._response_buffers.clear()
         for event in list(self._artifact_events.values()):
             event.set()
         self._artifact_events.clear()
@@ -302,6 +365,8 @@ class ExtensionHub:
                 message_type = str(payload.get("type") or "")
                 if message_type == "response":
                     session.resolve_response(ExtensionResponse.from_message(dict(payload)))
+                elif message_type == "response-chunk":
+                    session.append_response_chunk(dict(payload))
                 elif message_type == "artifact-begin":
                     session.begin_artifact(ExtensionArtifactBegin.from_message(dict(payload)))
                 elif message_type == "artifact-chunk":

@@ -491,3 +491,136 @@ def test_extension_session_disconnect_does_not_poison_next_artifact_request(
         await hub.stop()
 
     asyncio.run(_scenario())
+
+
+def test_extension_session_reassembles_chunked_responses(monkeypatch, tmp_path: Path) -> None:
+    async def _scenario() -> None:
+        monkeypatch.setenv(APP_HOME_ENV, str(tmp_path / ".browser-cli-runtime"))
+        monkeypatch.setenv(EXTENSION_PORT_ENV, str(_unused_port()))
+
+        hub = ExtensionHub()
+        await hub.ensure_started()
+        app_paths = get_app_paths()
+
+        async with websockets.connect(app_paths.extension_ws_url) as websocket:
+            await websocket.send(
+                json.dumps(
+                    {
+                        "type": "hello",
+                        "protocol_version": PROTOCOL_VERSION,
+                        "extension_version": "0.1.0-test",
+                        "browser_name": "Chrome",
+                        "browser_version": "146",
+                        "capabilities": sorted(REQUIRED_EXTENSION_CAPABILITIES),
+                        "workspace_window_state": {"connected": True},
+                        "extension_instance_id": "ext-test",
+                    }
+                )
+            )
+            session = await hub.wait_for_session(timeout_seconds=1.0)
+            assert session is not None
+
+            request_task = asyncio.create_task(session.send_request("capture-html", {}))
+            raw_request = json.loads(await websocket.recv())
+            request_id = raw_request["id"]
+            html = "A" * 3000
+            encoded = json.dumps(
+                {
+                    "type": "response",
+                    "id": request_id,
+                    "ok": True,
+                    "data": {"html": html},
+                }
+            )
+            await websocket.send(
+                json.dumps(
+                    {
+                        "type": "response-chunk",
+                        "id": request_id,
+                        "index": 0,
+                        "final": False,
+                        "chunk": encoded[:1200],
+                    }
+                )
+            )
+            await websocket.send(
+                json.dumps(
+                    {
+                        "type": "response-chunk",
+                        "id": request_id,
+                        "index": 1,
+                        "final": False,
+                        "chunk": encoded[1200:2400],
+                    }
+                )
+            )
+            await websocket.send(
+                json.dumps(
+                    {
+                        "type": "response-chunk",
+                        "id": request_id,
+                        "index": 2,
+                        "final": True,
+                        "chunk": encoded[2400:],
+                    }
+                )
+            )
+            response = await request_task
+            assert response["html"] == html
+            assert session._response_buffers == {}
+
+        await hub.stop()
+
+    asyncio.run(_scenario())
+
+
+def test_extension_session_rejects_incomplete_chunked_responses(
+    monkeypatch, tmp_path: Path
+) -> None:
+    async def _scenario() -> None:
+        monkeypatch.setenv(APP_HOME_ENV, str(tmp_path / ".browser-cli-runtime"))
+        monkeypatch.setenv(EXTENSION_PORT_ENV, str(_unused_port()))
+
+        hub = ExtensionHub()
+        await hub.ensure_started()
+        app_paths = get_app_paths()
+
+        async with websockets.connect(app_paths.extension_ws_url) as websocket:
+            await websocket.send(
+                json.dumps(
+                    {
+                        "type": "hello",
+                        "protocol_version": PROTOCOL_VERSION,
+                        "extension_version": "0.1.0-test",
+                        "browser_name": "Chrome",
+                        "browser_version": "146",
+                        "capabilities": sorted(REQUIRED_EXTENSION_CAPABILITIES),
+                        "workspace_window_state": {"connected": True},
+                        "extension_instance_id": "ext-test",
+                    }
+                )
+            )
+            session = await hub.wait_for_session(timeout_seconds=1.0)
+            assert session is not None
+
+            request_task = asyncio.create_task(session.send_request("capture-html", {}))
+            raw_request = json.loads(await websocket.recv())
+            request_id = raw_request["id"]
+            await websocket.send(
+                json.dumps(
+                    {
+                        "type": "response-chunk",
+                        "id": request_id,
+                        "index": 1,
+                        "final": True,
+                        "chunk": '{"type":"response","id":"x","ok":true,"data":{}}',
+                    }
+                )
+            )
+            with pytest.raises(OperationFailedError, match="incomplete"):
+                await request_task
+            assert session._response_buffers == {}
+
+        await hub.stop()
+
+    asyncio.run(_scenario())

@@ -639,6 +639,35 @@ def test_read_page_falls_back_to_playwright_when_extension_hits_chunk_limit(
     asyncio.run(_scenario())
 
 
+def test_read_page_falls_back_to_playwright_when_extension_disconnects_mid_read(
+    _patched_browser_service: _FakeExtensionHub,
+) -> None:
+    async def _scenario() -> None:
+        _patched_browser_service.connect()
+        service = browser_service_module.BrowserService(TabRegistry())
+        await service.ensure_started()
+        assert service.active_driver_name == "extension"
+
+        async def _extension_capture_html(page_id: str) -> dict[str, str]:
+            raise RuntimeError("Extension disconnected.")
+
+        async def _playwright_capture_html(page_id: str) -> dict[str, str]:
+            return {"page_id": page_id, "html": "<html>ok</html>"}
+
+        service._extension.capture_html = _extension_capture_html  # type: ignore[method-assign]  # noqa: SLF001
+        service._playwright.capture_html = _playwright_capture_html  # type: ignore[method-assign]  # noqa: SLF001
+
+        payload = await service.read_page(url="https://example.com/large-doc", output_mode="html")
+
+        assert payload["body"] == "<html>ok</html>"
+        assert payload["driver_fallback"]["reason"] == "extension-read-fallback"
+        assert "Extension disconnected" in payload["driver_fallback"]["error"]
+        assert service.active_driver_name == "playwright"
+        await service.stop()
+
+    asyncio.run(_scenario())
+
+
 def test_browser_service_downgrade_survives_previous_driver_stop_failure(
     _patched_browser_service: _FakeExtensionHub,
     monkeypatch: pytest.MonkeyPatch,

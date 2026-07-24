@@ -65,6 +65,9 @@ class BrowserService:
         "Separator is not found, and chunk exceed the limit",
         "chunk is longer than limit",
         "chunk exceed the limit",
+        "Extension disconnected",
+        "message too big",
+        "exceeds limit of",
     )
 
     def __init__(
