@@ -639,8 +639,17 @@ def test_read_page_falls_back_to_playwright_when_extension_hits_chunk_limit(
     asyncio.run(_scenario())
 
 
+@pytest.mark.parametrize(
+    "extension_error",
+    [
+        "Extension disconnected.",
+        "message too big",
+        "exceeds limit of",
+    ],
+)
 def test_read_page_falls_back_to_playwright_when_extension_disconnects_mid_read(
     _patched_browser_service: _FakeExtensionHub,
+    extension_error: str,
 ) -> None:
     async def _scenario() -> None:
         _patched_browser_service.connect()
@@ -649,7 +658,7 @@ def test_read_page_falls_back_to_playwright_when_extension_disconnects_mid_read(
         assert service.active_driver_name == "extension"
 
         async def _extension_capture_html(page_id: str) -> dict[str, str]:
-            raise RuntimeError("Extension disconnected.")
+            raise RuntimeError(extension_error)
 
         async def _playwright_capture_html(page_id: str) -> dict[str, str]:
             return {"page_id": page_id, "html": "<html>ok</html>"}
@@ -661,7 +670,7 @@ def test_read_page_falls_back_to_playwright_when_extension_disconnects_mid_read(
 
         assert payload["body"] == "<html>ok</html>"
         assert payload["driver_fallback"]["reason"] == "extension-read-fallback"
-        assert "Extension disconnected" in payload["driver_fallback"]["error"]
+        assert payload["driver_fallback"]["error"] == extension_error
         assert service.active_driver_name == "playwright"
         await service.stop()
 

@@ -11,7 +11,11 @@ import websockets
 
 from browser_cli.constants import APP_HOME_ENV, EXTENSION_PORT_ENV, get_app_paths
 from browser_cli.errors import OperationFailedError
-from browser_cli.extension.protocol import PROTOCOL_VERSION, REQUIRED_EXTENSION_CAPABILITIES
+from browser_cli.extension.protocol import (
+    MAX_RESPONSE_CHUNK_INDEX,
+    PROTOCOL_VERSION,
+    REQUIRED_EXTENSION_CAPABILITIES,
+)
 from browser_cli.extension.session import ExtensionHub
 
 
@@ -619,6 +623,128 @@ def test_extension_session_rejects_incomplete_chunked_responses(
             )
             with pytest.raises(OperationFailedError, match="incomplete"):
                 await request_task
+            assert session._response_buffers == {}
+
+        await hub.stop()
+
+    asyncio.run(_scenario())
+
+
+def test_extension_session_rejects_mismatched_chunked_response_id(
+    monkeypatch, tmp_path: Path
+) -> None:
+    async def _scenario() -> None:
+        monkeypatch.setenv(APP_HOME_ENV, str(tmp_path / ".browser-cli-runtime"))
+        monkeypatch.setenv(EXTENSION_PORT_ENV, str(_unused_port()))
+
+        hub = ExtensionHub()
+        await hub.ensure_started()
+        app_paths = get_app_paths()
+
+        async with websockets.connect(app_paths.extension_ws_url) as websocket:
+            await websocket.send(
+                json.dumps(
+                    {
+                        "type": "hello",
+                        "protocol_version": PROTOCOL_VERSION,
+                        "extension_version": "0.1.0-test",
+                        "browser_name": "Chrome",
+                        "browser_version": "146",
+                        "capabilities": sorted(REQUIRED_EXTENSION_CAPABILITIES),
+                        "workspace_window_state": {"connected": True},
+                        "extension_instance_id": "ext-test",
+                    }
+                )
+            )
+            session = await hub.wait_for_session(timeout_seconds=1.0)
+            assert session is not None
+
+            request_task = asyncio.create_task(session.send_request("capture-html", {}))
+            raw_request = json.loads(await websocket.recv())
+            request_id = raw_request["id"]
+            encoded = json.dumps(
+                {
+                    "type": "response",
+                    "id": "other-request-id",
+                    "ok": True,
+                    "data": {"html": "<p>nope</p>"},
+                }
+            )
+            await websocket.send(
+                json.dumps(
+                    {
+                        "type": "response-chunk",
+                        "id": request_id,
+                        "index": 0,
+                        "final": True,
+                        "chunk": encoded,
+                    }
+                )
+            )
+            with pytest.raises(OperationFailedError, match="id mismatch") as exc_info:
+                await request_task
+            assert exc_info.value.error_code == "EXTENSION_RESPONSE_CHUNK_INVALID"
+            assert session._response_buffers == {}
+
+        await hub.stop()
+
+    asyncio.run(_scenario())
+
+
+@pytest.mark.parametrize(
+    ("index", "match"),
+    [
+        ("not-an-index", "invalid"),
+        (-1, "out of bounds"),
+        (MAX_RESPONSE_CHUNK_INDEX + 1, "out of bounds"),
+    ],
+)
+def test_extension_session_rejects_malformed_or_oversized_chunk_index(
+    monkeypatch, tmp_path: Path, index: object, match: str
+) -> None:
+    async def _scenario() -> None:
+        monkeypatch.setenv(APP_HOME_ENV, str(tmp_path / ".browser-cli-runtime"))
+        monkeypatch.setenv(EXTENSION_PORT_ENV, str(_unused_port()))
+
+        hub = ExtensionHub()
+        await hub.ensure_started()
+        app_paths = get_app_paths()
+
+        async with websockets.connect(app_paths.extension_ws_url) as websocket:
+            await websocket.send(
+                json.dumps(
+                    {
+                        "type": "hello",
+                        "protocol_version": PROTOCOL_VERSION,
+                        "extension_version": "0.1.0-test",
+                        "browser_name": "Chrome",
+                        "browser_version": "146",
+                        "capabilities": sorted(REQUIRED_EXTENSION_CAPABILITIES),
+                        "workspace_window_state": {"connected": True},
+                        "extension_instance_id": "ext-test",
+                    }
+                )
+            )
+            session = await hub.wait_for_session(timeout_seconds=1.0)
+            assert session is not None
+
+            request_task = asyncio.create_task(session.send_request("capture-html", {}))
+            raw_request = json.loads(await websocket.recv())
+            request_id = raw_request["id"]
+            await websocket.send(
+                json.dumps(
+                    {
+                        "type": "response-chunk",
+                        "id": request_id,
+                        "index": index,
+                        "final": True,
+                        "chunk": '{"type":"response","id":"x","ok":true,"data":{}}',
+                    }
+                )
+            )
+            with pytest.raises(OperationFailedError, match=match) as exc_info:
+                await request_task
+            assert exc_info.value.error_code == "EXTENSION_RESPONSE_CHUNK_INVALID"
             assert session._response_buffers == {}
 
         await hub.stop()

@@ -25,6 +25,7 @@ from browser_cli.constants import get_app_paths
 from browser_cli.errors import ExtensionPortInUseError, OperationFailedError
 
 from .protocol import (
+    MAX_RESPONSE_CHUNK_INDEX,
     ExtensionArtifactBegin,
     ExtensionArtifactChunk,
     ExtensionArtifactEnd,
@@ -69,14 +70,36 @@ class _ResponseChunkBuffer:
         if not self.chunks:
             return ""
         indexes = sorted(self.chunks)
-        expected = list(range(indexes[-1] + 1))
-        if indexes != expected:
-            missing = [index for index in expected if index not in self.chunks]
+        min_index = indexes[0]
+        max_index = indexes[-1]
+        if min_index != 0 or len(indexes) != max_index + 1:
             raise OperationFailedError(
-                f"Extension response chunks are incomplete; missing indexes: {missing}",
+                "Extension response chunks are incomplete; "
+                f"received {len(indexes)} chunks covering {min_index}..{max_index}",
                 error_code="EXTENSION_RESPONSE_CHUNK_INCOMPLETE",
             )
         return "".join(self.chunks[index] for index in indexes)
+
+
+def _parse_response_chunk_index(raw: Any) -> int:
+    if isinstance(raw, bool) or raw is None:
+        raise OperationFailedError(
+            f"Extension response chunk index is invalid: {raw!r}",
+            error_code="EXTENSION_RESPONSE_CHUNK_INVALID",
+        )
+    try:
+        index = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise OperationFailedError(
+            f"Extension response chunk index is invalid: {raw!r}",
+            error_code="EXTENSION_RESPONSE_CHUNK_INVALID",
+        ) from exc
+    if index < 0 or index > MAX_RESPONSE_CHUNK_INDEX:
+        raise OperationFailedError(
+            f"Extension response chunk index out of bounds: {index}",
+            error_code="EXTENSION_RESPONSE_CHUNK_INVALID",
+        )
+    return index
 
 
 @dataclass(slots=True)
@@ -129,6 +152,7 @@ class ExtensionSession:
         finally:
             self._pending.pop(request.id, None)
             self._artifact_events.pop(request.id, None)
+            self._response_buffers.pop(request.id, None)
         if not response.ok:
             raise OperationFailedError(
                 response.error_message or f"Extension request failed: {action}",
@@ -154,8 +178,15 @@ class ExtensionSession:
         if future is None or future.done():
             self._response_buffers.pop(request_id, None)
             return
+        try:
+            index = _parse_response_chunk_index(payload.get("index"))
+        except OperationFailedError as exc:
+            self._response_buffers.pop(request_id, None)
+            if not future.done():
+                future.set_exception(exc)
+            return
         buffer = self._response_buffers.setdefault(request_id, _ResponseChunkBuffer())
-        buffer.append(int(payload.get("index") or 0), str(payload.get("chunk") or ""))
+        buffer.append(index, str(payload.get("chunk") or ""))
         if not bool(payload.get("final")):
             return
         try:
@@ -167,6 +198,12 @@ class ExtensionSession:
                     error_code="EXTENSION_RESPONSE_CHUNK_INVALID",
                 )
             response = ExtensionResponse.from_message(message)
+            if response.id != request_id:
+                raise OperationFailedError(
+                    "Extension chunked response id mismatch: "
+                    f"expected {request_id}, got {response.id}",
+                    error_code="EXTENSION_RESPONSE_CHUNK_INVALID",
+                )
         except OperationFailedError as exc:
             self._response_buffers.pop(request_id, None)
             if not future.done():
