@@ -80,6 +80,10 @@ ALL_EXTENSION_CAPABILITIES = REQUIRED_EXTENSION_CAPABILITIES
 CORE_EXTENSION_CAPABILITIES = REQUIRED_EXTENSION_CAPABILITIES
 PROTOCOL_VERSION = "1"
 ARTIFACT_CHUNK_SIZE = 256 * 1024
+# Keep framed WebSocket messages comfortably under the default 1 MiB limit.
+RESPONSE_CHUNK_SIZE = 256 * 1024
+# Cap chunk indexes so a hostile/malformed final index cannot force huge allocations.
+MAX_RESPONSE_CHUNK_INDEX = 16_384
 
 
 @dataclass(slots=True, frozen=True)

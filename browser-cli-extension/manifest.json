@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Browser CLI Bridge",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Browser CLI real-Chrome backend extension.",
   "minimum_chrome_version": "116",
   "permissions": [

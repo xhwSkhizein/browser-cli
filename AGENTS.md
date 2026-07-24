@@ -223,6 +223,9 @@ the implementation, and where should a change land first.
   `read` fails in extension mode with `Separator is found, but chunk is longer than limit` or `chunk exceed the limit`
   -> extension-side page extraction hit a large-result chunking limit on the current page
   -> inspect `src/browser_cli/daemon/browser_service.py::read_page`, `src/browser_cli/drivers/_extension/page_actions.py`, and `browser-cli-extension/src/background/page_actions.js`; safe fix is a one-shot read fallback to Playwright rather than changing CLI contracts
+  `read` fails with `Extension disconnected` and daemon log shows `message too big` / `exceeds limit of 1048576`
+  -> extension tried to send a single oversized `response` frame (common on large pages such as WeChat articles)
+  -> inspect `browser-cli-extension/src/background/response_framing.js`, `src/browser_cli/extension/session.py` response-chunk reassembly, and `browser_service.read_page` fallback patterns; large responses must be framed as `response-chunk` messages, and stale extensions without framing should fall back to Playwright on read
 - If the user reports popup/runtime observer drift:
   start at `src/browser_cli/daemon/runtime_presentation.py`, then `src/browser_cli/extension/session.py`, then `browser-cli-extension/src/background.js`, `browser-cli-extension/src/popup_view.js`, and `browser-cli-extension/src/popup.js`.
 - If the user reports long-run stability drift across repeated reloads, reconnects, or artifact runs:

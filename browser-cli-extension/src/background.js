@@ -14,6 +14,7 @@ import { createInputHandlers } from './background/input_actions.js';
 import { createLocatorHandlers } from './background/locator_actions.js';
 import { createObserveHandlers } from './background/observe_actions.js';
 import { createPageHandlers } from './background/page_actions.js';
+import { sendFramedMessage } from './background/response_framing.js';
 import { createTraceHandlers } from './background/trace_actions.js';
 import { createVideoHandlers } from './background/video_actions.js';
 import { createWorkspaceHandlers } from './background/workspace.js';
@@ -232,7 +233,7 @@ async function connect() {
     }
     const response = await handleRequest(payload);
     if (state.ws && state.ws.readyState === WebSocket.OPEN) {
-      state.ws.send(JSON.stringify(response));
+      sendFramedMessage(state.ws, response);
     }
   };
   socket.onclose = () => {

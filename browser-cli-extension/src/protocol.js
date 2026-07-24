@@ -2,6 +2,8 @@ export const PROTOCOL_VERSION = '1';
 export const DEFAULT_DAEMON_HOST = '127.0.0.1';
 export const DEFAULT_DAEMON_PORT = 19825;
 export const ARTIFACT_CHUNK_SIZE = 256 * 1024;
+// Keep framed WebSocket messages comfortably under the default 1 MiB limit.
+export const RESPONSE_CHUNK_SIZE = 256 * 1024;
 
 export const REQUIRED_CAPABILITIES = [
   'open',
