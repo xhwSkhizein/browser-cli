@@ -4,6 +4,7 @@ from browser_cli.cli.error_hints import next_hint_for_error
 from browser_cli.errors import (
     BrowserUnavailableError,
     ChromeExecutableNotFoundError,
+    EmptyContentError,
     ExtensionPortInUseError,
     ProfileUnavailableError,
     WorkspaceBindingLostError,
@@ -18,6 +19,13 @@ def test_browser_missing_hint_points_to_doctor() -> None:
 def test_profile_lock_hint_points_to_status() -> None:
     hint = next_hint_for_error(ProfileUnavailableError("profile appears to be in use"))
     assert hint == "close Browser CLI-owned Chrome windows or inspect browser-cli status"
+
+
+def test_empty_content_hint_is_actionable() -> None:
+    hint = next_hint_for_error(EmptyContentError())
+    assert hint is not None
+    assert "--settle-ms" in hint
+    assert "--scroll-bottom" in hint
 
 
 def test_recovery_error_hints() -> None:

@@ -36,8 +36,14 @@ class Flow:
         *,
         output_mode: str = "html",
         scroll_bottom: bool = False,
+        settle_ms: int | None = None,
     ) -> ReadResult:
-        return self.client.read(url, output_mode=output_mode, scroll_bottom=scroll_bottom)
+        return self.client.read(
+            url,
+            output_mode=output_mode,
+            scroll_bottom=scroll_bottom,
+            settle_ms=settle_ms,
+        )
 
     def command(self, action: str, **args: Any) -> dict[str, Any]:
         return self.client.command(action, **args)

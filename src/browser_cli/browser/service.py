@@ -262,9 +262,12 @@ class BrowserService:
         url: str,
         output_mode: str = "html",
         scroll_bottom: bool = False,
+        settle_ms: int | None = None,
     ) -> dict[str, Any]:
         if output_mode not in {"html", "snapshot"}:
             raise InvalidInputError(f"Unsupported read output mode: {output_mode}")
+        if settle_ms is not None and settle_ms < 0:
+            raise InvalidInputError("settle_ms must be >= 0.")
         await self.ensure_started()
         page_id: str | None = None
         page: Any | None = None
@@ -277,10 +280,10 @@ class BrowserService:
                 wait_until="load",
                 timeout=self.READ_NAVIGATION_TIMEOUT_SECONDS * 1000.0,
             )
-            await self._settle_page(page)
+            await self._settle_page(page, settle_ms=settle_ms)
             if scroll_bottom:
                 await self._scroll_page_to_bottom(page)
-                await self._settle_page(page)
+                await self._settle_page(page, settle_ms=settle_ms)
             if output_mode == "snapshot":
                 snapshot = await capture_snapshot(
                     page, page_id=page_id, interactive=False, full_page=True
@@ -288,8 +291,20 @@ class BrowserService:
                 body = snapshot.tree
             else:
                 body = await self._capture_html_from_page(page)
-            if not body.strip():
-                raise EmptyContentError()
+            if EmptyContentError.is_empty_body(body):
+                title = ""
+                with contextlib.suppress(Exception):
+                    title = str(await page.title())
+                raise EmptyContentError(
+                    details={
+                        "url": url,
+                        "final_url": str(page.url),
+                        "title": title,
+                        "body_len": len(body.strip()),
+                        "output_mode": output_mode,
+                        "driver": "playwright",
+                    }
+                )
             payload = {
                 "page_id": page_id,
                 "body": body,
@@ -1326,8 +1341,9 @@ class BrowserService:
             }"""
         )
 
-    async def _settle_page(self, page: Any) -> None:
-        await page.wait_for_timeout(self.READ_SETTLE_TIMEOUT_MS)
+    async def _settle_page(self, page: Any, *, settle_ms: int | None = None) -> None:
+        timeout_ms = self.READ_SETTLE_TIMEOUT_MS if settle_ms is None else settle_ms
+        await page.wait_for_timeout(timeout_ms)
 
     async def _scroll_page_to_bottom(self, page: Any) -> None:
         stable_rounds = 0

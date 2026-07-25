@@ -91,6 +91,39 @@ def test_client_read_raises_empty_content_error() -> None:
         BrowserCliTaskClient().read("https://example.com")
 
 
+def test_client_read_treats_empty_snapshot_sentinel_as_failure() -> None:
+    with (
+        patch("browser_cli.task_runtime.read.probe_socket", return_value=True),
+        patch(
+            "browser_cli.task_runtime.read.send_command",
+            return_value={"ok": True, "data": {"body": "(empty)"}},
+        ),
+        pytest.raises(EmptyContentError),
+    ):
+        BrowserCliTaskClient().read("https://example.com", output_mode="snapshot")
+
+
+def test_client_read_passes_settle_ms(tmp_path: Path) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_send_command(action: str, args=None, start_if_needed: bool = True):
+        captured["args"] = args
+        return {"ok": True, "data": {"body": "<html>ready</html>"}}
+
+    with (
+        patch("browser_cli.task_runtime.read.probe_socket", return_value=True),
+        patch("browser_cli.task_runtime.read.send_command", side_effect=_fake_send_command),
+    ):
+        BrowserCliTaskClient().read("https://example.com", settle_ms=3500)
+
+    assert captured["args"] == {
+        "url": "https://example.com",
+        "output_mode": "html",
+        "scroll_bottom": False,
+        "settle_ms": 3500,
+    }
+
+
 def test_run_read_request_preserves_daemon_fallback_metadata() -> None:
     payload = {
         "ok": True,
@@ -119,7 +152,7 @@ def test_flow_read_delegates_to_client(tmp_path: Path) -> None:
 
     class _FakeClient:
         def __init__(self) -> None:
-            self.calls: list[tuple[str, str, bool]] = []
+            self.calls: list[tuple[str, str, bool, int | None]] = []
 
         def read(
             self,
@@ -127,8 +160,9 @@ def test_flow_read_delegates_to_client(tmp_path: Path) -> None:
             *,
             output_mode: str = "html",
             scroll_bottom: bool = False,
+            settle_ms: int | None = None,
         ) -> ReadResult:
-            self.calls.append((url, output_mode, scroll_bottom))
+            self.calls.append((url, output_mode, scroll_bottom, settle_ms))
             return ReadResult(body="snapshot tree")
 
     client = _FakeClient()
@@ -141,7 +175,12 @@ def test_flow_read_delegates_to_client(tmp_path: Path) -> None:
         ),
     )
 
-    result = flow.read("https://example.com", output_mode="snapshot", scroll_bottom=True)
+    result = flow.read(
+        "https://example.com",
+        output_mode="snapshot",
+        scroll_bottom=True,
+        settle_ms=2500,
+    )
 
-    assert client.calls == [("https://example.com", "snapshot", True)]
+    assert client.calls == [("https://example.com", "snapshot", True, 2500)]
     assert result.body == "snapshot tree"

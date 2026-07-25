@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
 from . import error_codes, exit_codes
 
@@ -14,6 +15,7 @@ class BrowserCliError(Exception):
     message: str
     exit_code: int = exit_codes.INTERNAL_ERROR
     error_code: str = error_codes.INTERNAL_ERROR
+    details: dict[str, Any] = field(default_factory=dict)
 
     def __str__(self) -> str:
         return self.message
@@ -40,8 +42,25 @@ class TemporaryReadError(BrowserCliError):
 
 
 class EmptyContentError(BrowserCliError):
-    def __init__(self, message: str = "Read completed but produced no content.") -> None:
-        super().__init__(message, exit_codes.EMPTY_CONTENT, error_codes.EMPTY_CONTENT)
+    EMPTY_SNAPSHOT_SENTINEL = "(empty)"
+
+    def __init__(
+        self,
+        message: str = "Read completed but produced no content.",
+        *,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            exit_codes.EMPTY_CONTENT,
+            error_codes.EMPTY_CONTENT,
+            details or {},
+        )
+
+    @staticmethod
+    def is_empty_body(body: str) -> bool:
+        stripped = body.strip()
+        return not stripped or stripped == EmptyContentError.EMPTY_SNAPSHOT_SENTINEL
 
 
 class InvalidInputError(BrowserCliError):

@@ -28,6 +28,7 @@ class BrowserCliTaskClient:
         *,
         output_mode: str = "html",
         scroll_bottom: bool = False,
+        settle_ms: int | None = None,
     ) -> ReadResult:
         return asyncio.run(
             run_read_request(
@@ -35,6 +36,7 @@ class BrowserCliTaskClient:
                     url=url,
                     output_mode=output_mode,
                     scroll_bottom=scroll_bottom,
+                    settle_ms=settle_ms,
                 ),
                 chrome_environment=self._chrome_environment,
             )

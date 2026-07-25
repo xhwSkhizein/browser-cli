@@ -165,6 +165,7 @@ def test_read_command_normalizes_url_before_client_read(capsys) -> None:
         "https://example.com",
         output_mode="html",
         scroll_bottom=False,
+        settle_ms=None,
     )
 
 
@@ -301,6 +302,50 @@ def test_read_async_json_returns_run_id(capsys) -> None:
         {"url": "https://example.com", "output_mode": "html", "scroll_bottom": False},
         start_if_needed=True,
     )
+
+
+def test_read_passes_settle_ms(capsys) -> None:
+    with patch(
+        "browser_cli.commands.read.BrowserCliTaskClient.read",
+        return_value=ReadResult(body="ok"),
+    ) as mock_read:
+        exit_code = main(["read", "https://example.com", "--settle-ms", "3500"])
+
+    assert exit_code == 0
+    mock_read.assert_called_once_with(
+        "https://example.com",
+        output_mode="html",
+        scroll_bottom=False,
+        settle_ms=3500,
+    )
+
+
+def test_read_json_empty_content_includes_hint_and_details(capsys) -> None:
+    from browser_cli.errors import EmptyContentError
+
+    with patch(
+        "browser_cli.commands.read.BrowserCliTaskClient.read",
+        side_effect=EmptyContentError(
+            details={
+                "url": "https://example.com",
+                "final_url": "https://example.com/",
+                "title": "",
+                "body_len": 0,
+                "output_mode": "html",
+                "driver": "extension",
+            }
+        ),
+    ):
+        exit_code = main(["read", "https://example.com", "--json"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 66
+    payload = json.loads(captured.out)
+    assert payload["ok"] is False
+    assert payload["error_code"] == "EMPTY_CONTENT"
+    assert payload["details"]["driver"] == "extension"
+    assert "--settle-ms" in payload["next_action"]
+    assert captured.err == ""
 
 
 def test_install_skills_help_mentions_target(capsys) -> None:

@@ -31,6 +31,11 @@ def next_hint_for_error(exc: BrowserCliError) -> str | None:
         error_codes.AUTOMATION_SERVICE_NOT_AVAILABLE,
     }:
         return "run browser-cli reload"
+    if exc.error_code == error_codes.EMPTY_CONTENT:
+        return (
+            "retry with --scroll-bottom or a longer --settle-ms; "
+            "if still empty, try --snapshot or an alternate content source for this site"
+        )
     message = str(exc).lower()
     if exc.error_code == error_codes.INVALID_INPUT and "task" in message:
         return "run browser-cli task validate <task-dir>"

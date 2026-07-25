@@ -395,14 +395,18 @@ class BrowserService:
         url: str,
         output_mode: str = "html",
         scroll_bottom: bool = False,
+        settle_ms: int | None = None,
     ) -> dict[str, Any]:
         if output_mode not in {"html", "snapshot"}:
             raise InvalidInputError(f"Unsupported read output mode: {output_mode}")
+        if settle_ms is not None and settle_ms < 0:
+            raise InvalidInputError("settle_ms must be >= 0.")
         try:
             return await self._read_page_once(
                 url=url,
                 output_mode=output_mode,
                 scroll_bottom=scroll_bottom,
+                settle_ms=settle_ms,
             )
         except Exception as exc:
             if not self._should_retry_read_on_playwright(exc):
@@ -416,6 +420,7 @@ class BrowserService:
                 url=url,
                 output_mode=output_mode,
                 scroll_bottom=scroll_bottom,
+                settle_ms=settle_ms,
             )
             payload["driver_fallback"] = {
                 "from": "extension",
@@ -426,10 +431,18 @@ class BrowserService:
             return payload
 
     async def read_page_from_args(self, args: dict[str, Any]) -> dict[str, Any]:
+        settle_raw = args.get("settle_ms")
+        settle_ms: int | None = None
+        if settle_raw is not None and str(settle_raw).strip() != "":
+            try:
+                settle_ms = int(settle_raw)
+            except (TypeError, ValueError) as exc:
+                raise InvalidInputError("settle_ms must be an integer.") from exc
         return await self.read_page(
             url=str(args.get("url") or ""),
             output_mode=str(args.get("output_mode") or "html"),
             scroll_bottom=bool(args.get("scroll_bottom")),
+            settle_ms=settle_ms,
         )
 
     async def _read_page_once(
@@ -438,16 +451,20 @@ class BrowserService:
         url: str,
         output_mode: str,
         scroll_bottom: bool,
+        settle_ms: int | None = None,
     ) -> dict[str, Any]:
         page = await self.new_tab(
             url=url, wait_until="load", timeout_seconds=self.READ_NAVIGATION_TIMEOUT_SECONDS
         )
         page_id = str(page["page_id"])
+        settle_seconds = (
+            settle_ms if settle_ms is not None else self.READ_SETTLE_TIMEOUT_MS
+        ) / 1000.0
         try:
-            await self.wait(page_id, seconds=self.READ_SETTLE_TIMEOUT_MS / 1000.0)
+            await self.wait(page_id, seconds=settle_seconds)
             if scroll_bottom:
                 await self._scroll_page_to_bottom(page_id)
-                await self.wait(page_id, seconds=self.READ_SETTLE_TIMEOUT_MS / 1000.0)
+                await self.wait(page_id, seconds=settle_seconds)
             if output_mode == "snapshot":
                 body = str(
                     (await self.capture_snapshot(page_id, interactive=False, full_page=True))[
@@ -456,8 +473,14 @@ class BrowserService:
                 )
             else:
                 body = str((await self.capture_html(page_id))["html"])
-            if not body.strip():
-                raise EmptyContentError()
+            if EmptyContentError.is_empty_body(body):
+                raise await self._empty_content_error(
+                    page_id,
+                    requested_url=url,
+                    fallback_url=str(page.get("url") or url),
+                    body=body,
+                    output_mode=output_mode,
+                )
             payload = {
                 "page_id": page_id,
                 "body": body,
@@ -483,6 +506,32 @@ class BrowserService:
             return False
         message = str(exc)
         return any(pattern in message for pattern in self._READ_EXTENSION_FALLBACK_PATTERNS)
+
+    async def _empty_content_error(
+        self,
+        page_id: str,
+        *,
+        requested_url: str,
+        fallback_url: str,
+        body: str,
+        output_mode: str,
+    ) -> EmptyContentError:
+        final_url = fallback_url
+        title = ""
+        with contextlib.suppress(Exception):
+            summary = await self.get_page_summary(page_id)
+            final_url = str(summary.get("url") or final_url)
+            title = str(summary.get("title") or "")
+        return EmptyContentError(
+            details={
+                "url": requested_url,
+                "final_url": final_url,
+                "title": title,
+                "body_len": len(body.strip()),
+                "output_mode": output_mode,
+                "driver": self.active_driver_name,
+            }
+        )
 
     async def close_tab(self, page_id: str) -> dict[str, Any]:
         self._snapshot_registry.clear_page(page_id)
@@ -517,6 +566,23 @@ class BrowserService:
             full_page=full_page,
             captured_at=snapshot_input.captured_at,
         )
+        if EmptyContentError.is_empty_body(semantic_snapshot.tree):
+            title = ""
+            final_url = str(snapshot_input.captured_url or "")
+            with contextlib.suppress(Exception):
+                summary = await self.get_page_summary(page_id)
+                title = str(summary.get("title") or "")
+                final_url = str(summary.get("url") or final_url)
+            raise EmptyContentError(
+                details={
+                    "url": snapshot_input.captured_url,
+                    "final_url": final_url,
+                    "title": title,
+                    "body_len": len(semantic_snapshot.tree.strip()),
+                    "output_mode": "snapshot",
+                    "driver": self.active_driver_name,
+                }
+            )
         state = self._snapshot_registry.store(semantic_snapshot)
         return {
             "page_id": page_id,

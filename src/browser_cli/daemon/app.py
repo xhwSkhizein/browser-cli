@@ -188,6 +188,8 @@ class BrowserDaemonApp:
         }
         if runtime_meta:
             meta.update(runtime_meta)
+        if exc.details:
+            meta["details"] = dict(exc.details)
         return DaemonResponse.failure(
             error_code=exc.error_code,
             error_message=exc.message,
@@ -222,13 +224,14 @@ class BrowserDaemonApp:
 
     async def _handle_run_start_read(self, request: DaemonRequest) -> dict[str, Any]:
         url = self._require_str(request.args, "url")
-        return self._state.run_registry.start_read(
-            {
-                "url": url,
-                "output_mode": str(request.args.get("output_mode") or "html"),
-                "scroll_bottom": bool(request.args.get("scroll_bottom")),
-            }
-        )
+        args: dict[str, Any] = {
+            "url": url,
+            "output_mode": str(request.args.get("output_mode") or "html"),
+            "scroll_bottom": bool(request.args.get("scroll_bottom")),
+        }
+        if "settle_ms" in request.args and request.args.get("settle_ms") is not None:
+            args["settle_ms"] = self._optional_non_negative_int(request.args, "settle_ms")
+        return self._state.run_registry.start_read(args)
 
     async def _handle_run_status(self, request: DaemonRequest) -> dict[str, Any]:
         return self._state.run_registry.status(self._require_str(request.args, "run_id"))
@@ -355,10 +358,14 @@ class BrowserDaemonApp:
         url = self._require_str(request.args, "url")
         output_mode = str(request.args.get("output_mode") or "html").strip() or "html"
         scroll_bottom = bool(request.args.get("scroll_bottom"))
+        settle_ms = None
+        if "settle_ms" in request.args and request.args.get("settle_ms") is not None:
+            settle_ms = self._optional_non_negative_int(request.args, "settle_ms")
         payload = await self._state.browser_service.read_page(
             url=url,
             output_mode=output_mode,
             scroll_bottom=scroll_bottom,
+            settle_ms=settle_ms,
         )
         return payload
 
@@ -948,6 +955,13 @@ class BrowserDaemonApp:
             return int(raw)
         except (TypeError, ValueError) as exc:
             raise InvalidInputError(f"{key} must be an integer.") from exc
+
+    @classmethod
+    def _optional_non_negative_int(cls, args: dict[str, Any], key: str) -> int:
+        value = cls._require_int(args, key)
+        if value < 0:
+            raise InvalidInputError(f"{key} must be >= 0.")
+        return value
 
     @classmethod
     def _require_float(cls, args: dict[str, Any], key: str) -> float:

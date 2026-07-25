@@ -51,6 +51,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Scroll to the bottom before capture to trigger lazy-loaded content.",
     )
     read_parser.add_argument(
+        "--settle-ms",
+        type=int,
+        default=None,
+        help="Milliseconds to wait after navigation (and after --scroll-bottom) before capture. Default: 1200.",
+    )
+    read_parser.add_argument(
         "--json",
         action="store_true",
         help="Return machine-readable read result.",

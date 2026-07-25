@@ -266,7 +266,10 @@ Inspect semantics:
 
 ### `read`
 
-- `stdout`: final rendered result only
+- Prefer `--json` for agent integrations.
+- With `--json`, success and failure both write structured JSON to `stdout`. Parse `ok` / `error_code` / `message` / `next_action` / `details` from stdout first; stderr is human-facing only.
+- Non-zero exit does not mean the CLI is missing. `EMPTY_CONTENT` (exit `66`) means the page rendered no usable content.
+- `stdout` (non-JSON): final rendered result only
 - `stderr`: diagnostics only
 
 Exit codes:

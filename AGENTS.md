@@ -23,7 +23,7 @@ the implementation, and where should a change land first.
 - Repository local Python selection is pinned through `.python-version`.
 - Published package name is `browser-control-and-automation-cli`; the installed CLI command remains `browser-cli`.
 - Published distributions must not include PEP 440 local version identifiers; `setuptools-scm` local suffixes are stripped so PyPI accepts non-tagged builds.
-- `read` stays intentionally small: one URL positional plus `--snapshot`, `--scroll-bottom`, `--json`, and `--async`; async read creates daemon-memory runs for polling.
+- `read` stays intentionally small: one URL positional plus `--snapshot`, `--scroll-bottom`, `--settle-ms`, `--json`, and `--async`; async read creates daemon-memory runs for polling.
 - Managed profile mode is the default browser backend.
 - Managed profile mode uses Browser CLI's dedicated Chrome data root at `~/.browser-cli/default-profile`.
 - Extension mode is the preferred real-Chrome backend when the Browser CLI extension is connected and healthy.
@@ -214,6 +214,8 @@ the implementation, and where should a change land first.
   inspect the snapshot manifest under `~/.browser-cli/automations/<automation-id>/versions/<version>/automation.toml` first, then compare it with `browser_cli.commands.automation` live inspect payload assembly and `browser_cli.automation.api.server` persisted automation serialization.
 - If the user reports that `browser-cli read` stopped explaining fallback profile use:
   inspect `src/browser_cli/daemon/browser_service.py::read_page`, `src/browser_cli/task_runtime/read.py`, and `src/browser_cli/commands/read.py`; fallback metadata is only guaranteed on the read path.
+- If the user reports empty `read` / snapshot results that look like success:
+  inspect `src/browser_cli/errors.py::EmptyContentError`, `src/browser_cli/daemon/browser_service.py::read_page` / `capture_snapshot`, and `src/browser_cli/cli/error_hints.py`; empty HTML and the snapshot sentinel `(empty)` must both surface as `EMPTY_CONTENT` with diagnostic `details` and `next_action`, never as a successful body.
 - If the user mentions extension capability gaps, artifacts, or real Chrome behavior:
   inspect both `src/browser_cli/extension/*` and `browser-cli-extension/src/*`; many bugs live in protocol drift between Python and extension JS.
   Symptom -> root cause -> where to inspect:

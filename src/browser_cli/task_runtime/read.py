@@ -16,6 +16,7 @@ class ReadRequest:
     url: str
     output_mode: str
     scroll_bottom: bool = False
+    settle_ms: int | None = None
 
 
 @dataclass(slots=True)
@@ -46,17 +47,19 @@ async def run_read_request(
     *,
     chrome_environment: ChromeEnvironment | None = None,
 ) -> ReadResult:
-    command_args = {
+    command_args: dict[str, object] = {
         "url": request.url,
         "output_mode": request.output_mode,
         "scroll_bottom": request.scroll_bottom,
     }
+    if request.settle_ms is not None:
+        command_args["settle_ms"] = request.settle_ms
     if not probe_socket():
         resolved_environment = chrome_environment or discover_chrome_environment()
         command_args["chrome_environment"] = serialize_chrome_environment(resolved_environment)
     payload = await asyncio.to_thread(send_command, "read-page", command_args)
     body = str(payload.get("data", {}).get("body") or "")
-    if not body.strip():
+    if EmptyContentError.is_empty_body(body):
         raise EmptyContentError()
     used_fallback = bool(payload.get("data", {}).get("used_fallback_profile"))
     return ReadResult(

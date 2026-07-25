@@ -23,10 +23,12 @@ def run_read_command(args: Namespace) -> str:
         return _run_read_async(args)
     client = BrowserCliTaskClient()
     output_mode = "snapshot" if args.snapshot else "html"
+    settle_ms = _settle_ms_from_args(args)
     result = client.read(
         normalize_url(args.url),
         output_mode=output_mode,
         scroll_bottom=bool(args.scroll_bottom),
+        settle_ms=settle_ms,
     )
     if getattr(args, "json", False):
         return render_json_payload(
@@ -57,16 +59,30 @@ def _run_read_async(args: Namespace) -> str:
     if not getattr(args, "json", False):
         raise InvalidInputError("read --async requires --json")
     output_mode = "snapshot" if args.snapshot else "html"
+    command_args: dict[str, object] = {
+        "url": normalize_url(args.url),
+        "output_mode": output_mode,
+        "scroll_bottom": bool(args.scroll_bottom),
+    }
+    settle_ms = _settle_ms_from_args(args)
+    if settle_ms is not None:
+        command_args["settle_ms"] = settle_ms
     response = send_command(
         "run-start-read",
-        {
-            "url": normalize_url(args.url),
-            "output_mode": output_mode,
-            "scroll_bottom": bool(args.scroll_bottom),
-        },
+        command_args,
         start_if_needed=True,
     )
     data = dict(response.get("data") or {})
     if data.get("run_id"):
         data["poll"] = f"browser-cli run-status {data['run_id']} --json"
     return render_json_payload({"ok": True, "data": data, "meta": {"action": "read-async"}})
+
+
+def _settle_ms_from_args(args: Namespace) -> int | None:
+    raw = getattr(args, "settle_ms", None)
+    if raw is None:
+        return None
+    settle_ms = int(raw)
+    if settle_ms < 0:
+        raise InvalidInputError("--settle-ms must be >= 0.")
+    return settle_ms

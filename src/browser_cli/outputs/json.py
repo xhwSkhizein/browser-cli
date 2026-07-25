@@ -27,4 +27,6 @@ def render_json_error(
         payload["meta"] = {"action": action}
     if next_action:
         payload["next_action"] = next_action
+    if exc.details:
+        payload["details"] = dict(exc.details)
     return render_json_payload(payload)

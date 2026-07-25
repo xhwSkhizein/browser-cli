@@ -252,6 +252,10 @@ def _wait_for_pid_exit(pid: int, *, timeout_seconds: float) -> bool:
 def _error_from_payload(payload: dict[str, Any]) -> BrowserCliError:
     error_code = str(payload.get("error_code") or "OPERATION_FAILED")
     message = str(payload.get("error_message") or "Daemon command failed.")
+    meta = dict(payload.get("meta") or {})
+    details = dict(meta.get("details") or {})
+    if meta.get("driver") is not None and "driver" not in details:
+        details["driver"] = meta["driver"]
     if error_code == "INVALID_INPUT":
         return InvalidInputError(message)
     if error_code == "NO_ACTIVE_TAB":
@@ -277,7 +281,7 @@ def _error_from_payload(payload: dict[str, Any]) -> BrowserCliError:
     if error_code == "PROFILE_UNAVAILABLE":
         return ProfileUnavailableError(message)
     if error_code == "EMPTY_CONTENT":
-        return EmptyContentError(message)
+        return EmptyContentError(message, details=details or None)
     if error_code == "TEMPORARY_FAILURE":
         return TemporaryReadError(message)
     return OperationFailedError(message, error_code=error_code)
