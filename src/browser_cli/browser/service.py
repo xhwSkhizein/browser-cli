@@ -837,6 +837,10 @@ class BrowserService:
                 "Capture viewport must match the fixed isolated context viewport."
             )
         before = await page.evaluate(PAGE_GEOMETRY_JS)
+        scrollbars_visible = await page.evaluate(
+            "() => innerWidth > document.documentElement.clientWidth || "
+            "innerHeight > document.documentElement.clientHeight"
+        )
         original_viewport = page.viewport_size
         if options.viewport is not None and original_viewport is None:
             raise InvalidInputError("Temporary viewport capture requires a fixed page viewport.")
@@ -886,13 +890,19 @@ class BrowserService:
             if options.viewport is not None:
                 await page.set_viewport_size(original_viewport)
             await session.send("Emulation.setDeviceMetricsOverride", metrics(before))
+            if scrollbars_visible:
+                # Chrome can leave native scrollbars suppressed after a
+                # beyond-viewport capture. Restore only previously visible bars.
+                # A fresh CDP agent caches false and treats false -> false as
+                # a no-op even if capture changed renderer preferences. Toggle
+                # its state first so the visible setting is actually reapplied.
+                await session.send("Emulation.setScrollbarsHidden", {"hidden": True})
+                await session.send("Emulation.setScrollbarsHidden", {"hidden": False})
             await page.evaluate(
                 "position => window.scrollTo({left: position.x, top: position.y, behavior: 'instant'})",
                 {"x": before["scroll_x"], "y": before["scroll_y"]},
             )
-        # Beyond-viewport capture temporarily hides native scrollbars. Chrome
-        # can acknowledge restoration before the renderer has applied it, which
-        # changes Linux layout width by the scrollbar gutter for a few frames.
+        # Allow the renderer to apply restored scrollbar preferences and metrics.
         # Wait for the original geometry, but keep rejecting persistent changes.
         for attempt in range(20):
             after = await page.evaluate(PAGE_GEOMETRY_JS)

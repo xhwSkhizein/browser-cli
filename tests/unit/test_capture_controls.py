@@ -163,20 +163,23 @@ def test_context_font_bytes_are_embedded_in_each_document(tmp_path):
     assert options.metadata()["zoom_method"] == "css"
 
 
-@pytest.mark.parametrize("restores", [True, False])
+@pytest.mark.parametrize("restoration", ["delayed", "sticky", "changed"])
 def test_capture_waits_for_scrollbar_restoration_without_accepting_persistent_changes(
-    tmp_path, restores
+    tmp_path, restoration
 ):
     class ScrollbarPage(CapturePage):
         def __init__(self):
             super().__init__()
             self.captured = False
             self.after_reads = 0
+            self.scrollbars_restored = False
             send = self.cdp.send.side_effect
 
             async def screenshot_send(method, params):
                 if method == "Page.captureScreenshot":
                     self.captured = True
+                if method == "Emulation.setScrollbarsHidden" and params == {"hidden": False}:
+                    self.scrollbars_restored = True
                 return await send(method, params)
 
             self.cdp.send.side_effect = screenshot_send
@@ -189,7 +192,14 @@ def test_capture_waits_for_scrollbar_restoration_without_accepting_persistent_ch
                 # Chromium temporarily suppresses classic scrollbars during
                 # beyond-viewport capture; restoration can lag its response.
                 result["page_width"] = (
-                    1440 if self.captured and (not restores or self.after_reads < 3) else 1425
+                    1440
+                    if self.captured
+                    and (
+                        restoration == "changed"
+                        or (restoration == "sticky" and not self.scrollbars_restored)
+                        or self.after_reads < 3
+                    )
+                    else 1425
                 )
             return result
 
@@ -197,13 +207,34 @@ def test_capture_waits_for_scrollbar_restoration_without_accepting_persistent_ch
     service = BrowserService()
     service._pages["scrollbar"] = page
     output = tmp_path / "scrollbar.png"
-    if restores:
+    if restoration != "changed":
         result = asyncio.run(service.screenshot("scrollbar", path=str(output), full_page=True))
         assert result["capture"]["before"] == result["capture"]["after"]
         assert result["capture"]["after"]["page_width"] == 1425
         assert page.after_reads >= 3
         assert output.is_file()
+        assert [
+            call.args[1]
+            for call in page.cdp.send.call_args_list
+            if call.args[0] == "Emulation.setScrollbarsHidden"
+        ] == [{"hidden": True}, {"hidden": False}]
     else:
         with pytest.raises(OperationFailedError, match="Page geometry changed"):
             asyncio.run(service.screenshot("scrollbar", path=str(output), full_page=True))
         assert not output.exists()
+
+
+def test_capture_does_not_force_hidden_or_overlay_scrollbars_visible(tmp_path):
+    class HiddenScrollbarPage(CapturePage):
+        async def evaluate(self, script, arg=None):
+            if "document.documentElement.clientWidth" in script:
+                return False
+            return await super().evaluate(script, arg)
+
+    page = HiddenScrollbarPage()
+    service = BrowserService()
+    service._pages["hidden"] = page
+    asyncio.run(service.screenshot("hidden", path=str(tmp_path / "hidden.png"), full_page=True))
+    assert all(
+        call.args[0] != "Emulation.setScrollbarsHidden" for call in page.cdp.send.call_args_list
+    )
