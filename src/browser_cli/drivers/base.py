@@ -337,7 +337,15 @@ class BrowserDriver(ABC):
 
     @abstractmethod
     async def screenshot(
-        self, page_id: str, *, path: str, full_page: bool = False
+        self,
+        page_id: str,
+        *,
+        path: str,
+        full_page: bool = False,
+        clip: dict[str, float] | None = None,
+        viewport_width: int | None = None,
+        viewport_height: int | None = None,
+        device_scale_factor: float | None = None,
     ) -> dict[str, Any]: ...
 
     @abstractmethod

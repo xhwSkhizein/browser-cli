@@ -81,4 +81,4 @@ def test_action_catalog_covers_bridgic_surface() -> None:
 
 def test_browser_cli_only_adds_documented_extensions() -> None:
     names = {spec.name for spec in get_action_specs()}
-    assert names - BRIDGIC_COMMANDS == {"html", "stop"}
+    assert names - BRIDGIC_COMMANDS == {"batch", "html", "stop"}

@@ -162,9 +162,25 @@ class Flow:
         output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         return output_path
 
-    def screenshot(self, relative_path: str, *, full_page: bool = False) -> Path:
+    def screenshot(
+        self,
+        relative_path: str,
+        *,
+        full_page: bool = False,
+        clip: dict[str, float] | None = None,
+        viewport_width: int | None = None,
+        viewport_height: int | None = None,
+        device_scale_factor: float | None = None,
+    ) -> Path:
         output_path = (self.artifacts_dir / relative_path).resolve()
-        self.client.screenshot(str(output_path), full_page=full_page)
+        self.client.screenshot(
+            str(output_path),
+            full_page=full_page,
+            clip=clip,
+            viewport_width=viewport_width,
+            viewport_height=viewport_height,
+            device_scale_factor=device_scale_factor,
+        )
         return output_path
 
     def close(self) -> dict[str, Any]:

@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import traceback
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
-from browser_cli import error_codes
+from browser_cli import __version__, error_codes
+from browser_cli.browser.capture import CaptureOptions
+from browser_cli.browser.context import ContextOptions
 from browser_cli.constants import DEFAULT_PUBLIC_AGENT_ID
 from browser_cli.errors import (
     BrowserCliError,
@@ -19,10 +22,12 @@ from browser_cli.errors import (
     OperationFailedError,
 )
 from browser_cli.profiles.discovery import ChromeEnvironment
+from browser_cli.tabs import TabRegistry
 
 from .models import DaemonRequest, DaemonResponse
 from .runtime_presentation import build_runtime_presentation
 from .state import DaemonState
+from .transport import DAEMON_RUNTIME_VERSION
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +38,7 @@ class BrowserDaemonApp:
     def __init__(self, state: DaemonState | None = None) -> None:
         self._state = state or DaemonState()
         self._handlers: dict[str, Handler] = {
+            "batch": self._handle_batch,
             "runtime-status": self._handle_runtime_status,
             "run-start-read": self._handle_run_start_read,
             "run-status": self._handle_run_status,
@@ -117,6 +123,17 @@ class BrowserDaemonApp:
         return self._state
 
     async def execute(self, request: DaemonRequest) -> DaemonResponse:
+        # Status remains observable during long batches. Browser actions retain
+        # TabRegistry's immediate busy-tab errors instead of queuing per agent.
+        observable = request.action in {"run-status", "run-logs", "run-cancel", "run-start-read"}
+        observable |= request.action == "runtime-status" and not request.args.get("warmup")
+        if observable and "chrome_environment" not in request.args:
+            return await self._execute(request)
+        exclusive = request.action in {"batch", "stop", "workspace-rebuild-binding"}
+        async with self._state.execution.scope(exclusive=exclusive):
+            return await self._execute(request)
+
+    async def _execute(self, request: DaemonRequest) -> DaemonResponse:
         agent_id = request.agent_id or DEFAULT_PUBLIC_AGENT_ID
         request.agent_id = agent_id
         handler = self._handlers.get(request.action)
@@ -128,6 +145,16 @@ class BrowserDaemonApp:
         runtime_meta: dict[str, Any] = {}
         command_started = False
         try:
+            if (
+                request.runtime_version is not None
+                and request.runtime_version != DAEMON_RUNTIME_VERSION
+            ):
+                raise OperationFailedError(
+                    "Client and daemon runtime versions differ. Upgrade Browser CLI and run browser-cli reload.",
+                    error_code=error_codes.DAEMON_INCOMPATIBLE,
+                )
+            if request.action == "batch" and "chrome_environment" in request.args:
+                raise InvalidInputError("batch cannot reconfigure the browser profile.")
             self._maybe_configure_browser_environment(request.args)
             if request.action not in {
                 "runtime-status",
@@ -137,6 +164,7 @@ class BrowserDaemonApp:
                 "run-status",
                 "run-logs",
                 "run-cancel",
+                "batch",
             }:
                 await self._state.browser_service.begin_command(request.action)
                 command_started = True
@@ -144,6 +172,7 @@ class BrowserDaemonApp:
             meta = {
                 "action": request.action,
                 "agent_id": agent_id,
+                "runtime_version": DAEMON_RUNTIME_VERSION,
             }
             if command_started:
                 runtime_meta = await self._state.browser_service.end_command()
@@ -154,10 +183,16 @@ class BrowserDaemonApp:
                     meta["runtime_note"] = "Browser CLI rebuilt its owned workspace binding."
             else:
                 meta["driver"] = self._state.browser_service.active_driver_name
+            if request.action == "batch" and "context" in data:
+                meta["state_reset"] = data["state_reset"]
             chrome_environment = self._state.browser_service.chrome_environment
             if chrome_environment is not None:
                 meta["profile_source"] = chrome_environment.source
             return DaemonResponse.success(data, meta=meta)
+        except asyncio.CancelledError:
+            if command_started:
+                await self._state.browser_service.end_command()
+            raise
         except BrowserCliError as exc:
             if command_started:
                 runtime_meta = await self._state.browser_service.end_command()
@@ -185,6 +220,7 @@ class BrowserDaemonApp:
             "action": request.action,
             "agent_id": request.agent_id,
             "driver": self._state.browser_service.active_driver_name,
+            "runtime_version": DAEMON_RUNTIME_VERSION,
         }
         if runtime_meta:
             meta.update(runtime_meta)
@@ -204,7 +240,111 @@ class BrowserDaemonApp:
         raw_status = await self._state.browser_service.runtime_status(warmup=warmup)
         return {
             **raw_status,
+            "runtime_version": DAEMON_RUNTIME_VERSION,
+            "package_version": __version__,
             "presentation": build_runtime_presentation(raw_status),
+        }
+
+    async def _handle_batch(self, request: DaemonRequest) -> dict[str, Any]:
+        commands = request.args.get("commands")
+        if not isinstance(commands, list) or not 1 <= len(commands) <= 500:
+            raise InvalidInputError("batch requires an array of 1 to 500 commands.")
+        for index, item in enumerate(commands):
+            if not isinstance(item, dict) or not isinstance(item.get("action"), str):
+                raise InvalidInputError(f"batch command {index} requires an action string.")
+            action = item["action"]
+            if action not in self._handlers or action in {
+                "batch",
+                "stop",
+                "workspace-rebuild-binding",
+                "run-start-read",
+                "run-status",
+                "run-logs",
+                "run-cancel",
+            }:
+                raise InvalidInputError(f"Action is not allowed in batch: {action}")
+            if not isinstance(item.get("args", {}), dict):
+                raise InvalidInputError(f"batch command {index}.args must be an object.")
+            if "chrome_environment" in item.get("args", {}):
+                raise InvalidInputError("batch commands cannot reconfigure the browser profile.")
+        stop_on_error = request.args.get("stop_on_error", True)
+        if not isinstance(stop_on_error, bool):
+            raise InvalidInputError("stop_on_error must be a boolean.")
+        result_mode = request.args.get("result_mode", "all")
+        if not isinstance(result_mode, str) or result_mode not in {"all", "last", "summary"}:
+            raise InvalidInputError("result_mode must be all, last or summary.")
+        context_payload = request.args.get("context")
+        if context_payload is not None:
+            options = ContextOptions.from_dict(context_payload)
+            tabs = TabRegistry()
+            before_driver = self._state.browser_service.active_driver_name
+            async with self._state.browser_service.isolated_context(options, tabs) as service:
+                child = BrowserDaemonApp(DaemonState(tabs=tabs, browser_service=service))
+                canceled = asyncio.Event()
+                running = asyncio.create_task(
+                    child._run_batch_commands(
+                        request, commands, stop_on_error, result_mode, canceled=canceled
+                    )
+                )
+                try:
+                    data = await asyncio.shield(running)
+                except asyncio.CancelledError:
+                    # Closing the owned context aborts pending browser calls.
+                    # Let them consume their responses before releasing the gate;
+                    # canceling Playwright futures directly can leave orphan errors.
+                    canceled.set()
+                    await service.stop()
+                    await asyncio.gather(running, return_exceptions=True)
+                    raise
+            data["context"] = {**options.metadata(), "closed": True}
+            data["state_reset"] = before_driver != "playwright"
+            return data
+        return await self._run_batch_commands(request, commands, stop_on_error, result_mode)
+
+    async def _run_batch_commands(
+        self,
+        request: DaemonRequest,
+        commands: list[dict[str, Any]],
+        stop_on_error: bool,
+        result_mode: str,
+        *,
+        canceled: asyncio.Event | None = None,
+    ) -> dict[str, Any]:
+        results = []
+        errors = []
+        failed_indices = []
+        completed_count = 0
+        for index, item in enumerate(commands):
+            if canceled is not None and canceled.is_set():
+                break
+            child = DaemonRequest(
+                action=item["action"],
+                args=item.get("args", {}),
+                agent_id=request.agent_id,
+                request_id=f"{request.request_id}:{index}",
+            )
+            response = await self._execute(child)
+            payload = response.to_dict()
+            payload["index"] = index
+            completed_count += 1
+            if result_mode == "last":
+                results[:] = [payload]
+            elif result_mode == "all" or not response.ok:
+                results.append(payload)
+            if not response.ok:
+                failed_indices.append(index)
+                errors.append(payload)
+                if stop_on_error:
+                    break
+        return {
+            "results": results,
+            "success": not failed_indices,
+            "completed": completed_count == len(commands),
+            "completed_count": completed_count,
+            "total_count": len(commands),
+            "errors": errors,
+            "failed_indices": failed_indices,
+            "stop_on_error": stop_on_error,
         }
 
     async def _handle_workspace_rebuild_binding(self, request: DaemonRequest) -> dict[str, Any]:
@@ -640,10 +780,21 @@ class BrowserDaemonApp:
     async def _handle_screenshot(self, request: DaemonRequest) -> dict[str, Any]:
         path = self._require_str(request.args, "path")
         full_page = bool(request.args.get("full_page"))
+        options = CaptureOptions.from_dict(request.args)
+        clip = options.clip
+        viewport_width = options.viewport["width"] if options.viewport else None
+        viewport_height = options.viewport["height"] if options.viewport else None
+        device_scale_factor = options.device_scale_factor
         return await self._run_active_page_action(
             request,
             lambda page_id: self._state.browser_service.screenshot(
-                page_id, path=path, full_page=full_page
+                page_id,
+                path=path,
+                full_page=full_page,
+                clip=clip,
+                viewport_width=viewport_width,
+                viewport_height=viewport_height,
+                device_scale_factor=device_scale_factor,
             ),
         )
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import email
+import tarfile
 import zipfile
 from pathlib import Path
 
@@ -34,3 +35,35 @@ def test_built_wheel_uses_a_pypi_uploadable_version() -> None:
     version = metadata["Version"]
     assert version is not None
     assert "+" not in version
+
+
+def test_built_wheel_contains_importable_node_client() -> None:
+    wheels = list((_repo_root() / "dist").glob("*.whl"))
+    if not wheels:
+        pytest.skip("Build a wheel before running this test: uv build --wheel")
+    wheel_path = max(wheels, key=lambda path: path.stat().st_mtime)
+    with zipfile.ZipFile(wheel_path) as archive:
+        assert "browser_cli/task_runtime/node/client.mjs" in archive.namelist()
+        assert "browser_cli/task_runtime/node/package.json" in archive.namelist()
+        assert b"export class BrowserCliClient" in archive.read(
+            "browser_cli/task_runtime/node/client.mjs"
+        )
+
+
+def test_source_distribution_contains_new_extension_modules_and_acceptance_tests() -> None:
+    root = _repo_root()
+    distributions = list((root / "dist").glob("*.tar.gz"))
+    if not distributions:
+        pytest.skip("Build a source distribution before running this test: uv build")
+    distribution = max(distributions, key=lambda path: path.stat().st_mtime)
+    with tarfile.open(distribution) as archive:
+        prefix = archive.getnames()[0].split("/", 1)[0]
+        for relative in (
+            "browser-cli-extension/src/offscreen_client.js",
+            "browser-cli-extension/src/offscreen_image.js",
+            "tests/integration/test_capture_context_batch.py",
+            "tests/unit/test_batch.py",
+        ):
+            content = archive.extractfile(f"{prefix}/{relative}")
+            assert content is not None
+            assert content.read() == (root / relative).read_bytes()

@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
 from browser_cli.actions import get_action_specs
 from browser_cli.cli.main import build_parser
 from browser_cli.constants import EXTENSION_HOST_ENV, EXTENSION_PORT_ENV
+from browser_cli.daemon.transport import DAEMON_RUNTIME_VERSION
 from browser_cli.extension.protocol import REQUIRED_EXTENSION_CAPABILITIES
 from scripts.guards.common import Finding
 
-REQUIRED_ACTIONS = {"html", "stop"}
+REQUIRED_ACTIONS = {"batch", "html", "stop"}
 REQUIRED_TOP_LEVEL_COMMANDS = {
     "doctor": "CONTRACT018",
     "paths": "CONTRACT019",
@@ -94,9 +96,41 @@ def run(_root: Path) -> list[Finding]:
     if "page-reload" in top_level_commands:
         findings.extend(_check_page_reload_contract(top_level_commands["page-reload"]))
 
+    for name, expected in {
+        "screenshot": {
+            "--clip",
+            "--viewport-width",
+            "--viewport-height",
+            "--device-scale-factor",
+            "--page-range",
+        },
+        "batch": {"--commands", "--file", "--context", "--context-file", "--result-mode"},
+    }.items():
+        if name in top_level_commands and not expected.issubset(
+            _custom_option_strings(top_level_commands[name])
+        ):
+            findings.append(
+                Finding(
+                    "error",
+                    "CONTRACT026",
+                    f"'{name}' must preserve its controlled automation options.",
+                )
+            )
     findings.extend(_check_action_specs())
     findings.extend(_check_extension_required_capabilities())
     findings.extend(_check_extension_env_vars())
+    node_manifest = _root / "src/browser_cli/task_runtime/node/package.json"
+    if (
+        json.loads(node_manifest.read_text(encoding="utf-8")).get("browserCliRuntimeVersion")
+        != DAEMON_RUNTIME_VERSION
+    ):
+        findings.append(
+            Finding(
+                "error",
+                "CONTRACT027",
+                "Packaged Node client and daemon runtime versions must match.",
+            )
+        )
     return findings
 
 

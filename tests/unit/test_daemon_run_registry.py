@@ -129,3 +129,17 @@ def test_run_registry_not_found() -> None:
 
     registry = CommandRunRegistry(read_handler=_read)
     assert registry.status("run_missing")["status"] == "not_found"
+
+
+def test_cancel_before_read_task_starts_reaches_a_terminal_status() -> None:
+    async def scenario():
+        async def read(args):
+            raise AssertionError("Canceled read must not start")
+
+        registry = CommandRunRegistry(read_handler=read)
+        run_id = registry.start_read({"url": "https://example.com"})["run_id"]
+        registry.cancel(run_id)
+        await registry.wait_for_idle()
+        assert registry.status(run_id)["status"] == "canceled"
+
+    asyncio.run(scenario())

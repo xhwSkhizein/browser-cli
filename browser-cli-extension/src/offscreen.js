@@ -1,3 +1,5 @@
+import {cropImage} from './offscreen_image.js';
+
 const videoSessions = new Map();
 
 function preferredMimeType() {
@@ -220,7 +222,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   void (async () => {
     try {
       let data;
-      if (command === 'video-start') {
+      if (command === 'image-crop') {
+        data = await cropImage(message.payload.dataBase64, message.payload);
+      } else if (command === 'video-start') {
         data = await startVideo(tabId, {
           fps: message.payload?.fps,
           width: message.payload?.width ?? null,

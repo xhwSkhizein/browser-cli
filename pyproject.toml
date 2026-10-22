@@ -33,6 +33,7 @@ include-package-data = true
 
 [tool.setuptools.package-data]
 "browser_cli.packaged_skills" = ["*/SKILL.md"]
+"browser_cli.task_runtime" = ["node/*.mjs", "node/*.json"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

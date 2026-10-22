@@ -9,6 +9,8 @@ from typing import Any
 
 from browser_cli.errors import BrowserCliError
 
+from .execution import BrowserExecutionCoordinator
+
 ReadHandler = Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]
 BeginHandler = Callable[[str], Awaitable[None]]
 EndHandler = Callable[[], Awaitable[dict[str, Any]]]
@@ -25,11 +27,13 @@ class CommandRunRegistry:
         begin_handler: BeginHandler | None = None,
         end_handler: EndHandler | None = None,
         max_completed_runs: int = MAX_COMPLETED_RUNS,
+        execution: BrowserExecutionCoordinator | None = None,
     ) -> None:
         self._read_handler = read_handler
         self._begin_handler = begin_handler
         self._end_handler = end_handler
         self._max_completed_runs = max_completed_runs
+        self._execution = execution or BrowserExecutionCoordinator()
         self._counter = 0
         self._runs: dict[str, dict[str, Any]] = {}
         self._tasks: dict[str, asyncio.Task[None]] = {}
@@ -52,6 +56,7 @@ class CommandRunRegistry:
         self._runs[run_id] = record
         self._event(record, "queued", "Read run queued.")
         self._tasks[run_id] = asyncio.create_task(self._execute_read(run_id))
+        self._tasks[run_id].add_done_callback(lambda task: self._run_finished(run_id, task))
         self._evict_completed_runs()
         return self.status(run_id)
 
@@ -96,14 +101,9 @@ class CommandRunRegistry:
 
     async def _execute_read(self, run_id: str) -> None:
         record = self._runs[run_id]
-        command_started = False
         try:
-            record["status"] = "running"
-            self._event(record, "started", "Read run started.")
-            if self._begin_handler is not None:
-                await self._begin_handler("read-async")
-                command_started = True
-            result = await self._read_handler(dict(record["args"]))
+            async with self._execution.scope():
+                result = await self._read_in_scope(record)
             record["status"] = "succeeded"
             record["result"] = dict(result)
             self._event(record, "completed", "Read run completed.")
@@ -124,21 +124,35 @@ class CommandRunRegistry:
             record["error"] = {"message": str(exc), "type": type(exc).__name__}
             self._event(record, "failed", str(exc))
         finally:
-            if command_started and self._end_handler is not None:
-                try:
-                    record["meta"] = await self._end_handler()
-                except Exception as exc:  # pragma: no cover - last-resort cleanup guard
-                    record["error"] = {"message": str(exc), "type": type(exc).__name__}
-                    if record["status"] == "succeeded":
-                        record["status"] = "failed"
-                    self._event(record, "failed", f"Command cleanup failed: {exc}")
             record["updated_at"] = time.time()
             self._evict_completed_runs()
+
+    async def _read_in_scope(self, record: dict[str, Any]) -> dict[str, Any]:
+        command_started = False
+        try:
+            record["status"] = "running"
+            self._event(record, "started", "Read run started.")
+            if self._begin_handler is not None:
+                await self._begin_handler("read-async")
+                command_started = True
+            return await self._read_handler(dict(record["args"]))
+        finally:
+            if command_started and self._end_handler is not None:
+                record["meta"] = await self._end_handler()
 
     def _event(self, record: dict[str, Any], event: str, message: str) -> None:
         now = time.time()
         record["updated_at"] = now
         record["events"].append({"at": now, "event": event, "message": message})
+
+    def _run_finished(self, run_id: str, task: asyncio.Task[None]) -> None:
+        record = self._runs.get(run_id)
+        # A task canceled before its first event-loop turn never enters the
+        # coroutine's try/finally. Finalize that case from the done callback.
+        if task.cancelled() and record is not None and record["status"] != "canceled":
+            record["status"] = "canceled"
+            self._event(record, "canceled", "Read run canceled before execution.")
+        self._evict_completed_runs()
 
     def _evict_completed_runs(self) -> None:
         if len(self._runs) <= self._max_completed_runs:

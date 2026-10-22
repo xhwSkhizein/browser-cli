@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from browser_cli.browser.context import ContextOptions
 from browser_cli.browser.service import BrowserService as PlaywrightBrowserService
 from browser_cli.profiles.discovery import ChromeEnvironment
 from browser_cli.refs.models import LocatorSpec, SnapshotInput
@@ -31,6 +32,11 @@ class PlaywrightDriver(BrowserDriver):
 
     def configure_environment(self, chrome_environment: ChromeEnvironment) -> None:
         self._service.configure_environment(chrome_environment)
+
+    async def create_isolated_driver(self, options: ContextOptions) -> PlaywrightDriver:
+        driver = PlaywrightDriver()
+        driver._service = await self._service.create_isolated_service(options)
+        return driver
 
     @staticmethod
     def build_search_url(query: str, engine: str = "duckduckgo") -> str:
@@ -437,9 +443,25 @@ class PlaywrightDriver(BrowserDriver):
         return await self._service.mouse_up(page_id, button=button)
 
     async def screenshot(
-        self, page_id: str, *, path: str, full_page: bool = False
+        self,
+        page_id: str,
+        *,
+        path: str,
+        full_page: bool = False,
+        clip: dict[str, float] | None = None,
+        viewport_width: int | None = None,
+        viewport_height: int | None = None,
+        device_scale_factor: float | None = None,
     ) -> dict[str, Any]:
-        return await self._service.screenshot(page_id, path=path, full_page=full_page)
+        return await self._service.screenshot(
+            page_id,
+            path=path,
+            full_page=full_page,
+            clip=clip,
+            viewport_width=viewport_width,
+            viewport_height=viewport_height,
+            device_scale_factor=device_scale_factor,
+        )
 
     async def save_pdf(self, page_id: str, *, path: str) -> dict[str, Any]:
         return await self._service.save_pdf(page_id, path=path)

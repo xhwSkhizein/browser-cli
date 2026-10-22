@@ -1,14 +1,23 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import io
 import zipfile
 from pathlib import Path
 
 from browser_cli.drivers.extension_driver import ExtensionDriver
 from browser_cli.errors import OperationFailedError
-from browser_cli.extension.protocol import REQUIRED_EXTENSION_CAPABILITIES, ExtensionHello
+from browser_cli.extension.protocol import (
+    ALL_EXTENSION_CAPABILITIES,
+    REQUIRED_EXTENSION_CAPABILITIES,
+    ExtensionHello,
+)
 from browser_cli.refs.models import LocatorSpec
+
+PNG_IMAGE = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWQAAAABJRU5ErkJggg=="
+)
 
 
 class _FakeSession:
@@ -22,15 +31,20 @@ class _FakeSession:
             return {"tab_id": 9, "url": payload.get("url") or "about:blank", "title": "Example"}
         if action == "screenshot":
             return {
+                "capture": {
+                    "before": {"viewport_width": 1440},
+                    "after": {"viewport_width": 1440},
+                    "page_dimensions_unchanged": True,
+                },
                 "_artifacts": [
                     {
                         "artifact_kind": "screenshot",
                         "filename": "page_0001.png",
                         "page_id": "page_0001",
                         "metadata": {"full_page": True},
-                        "content": b"png-bytes",
+                        "content": PNG_IMAGE,
                     }
-                ]
+                ],
             }
         if action == "pdf":
             return {
@@ -194,7 +208,7 @@ def _hello(*, capabilities: set[str] | None = None) -> ExtensionHello:
             "extension_version": "0.1.0-test",
             "browser_name": "Chrome",
             "browser_version": "146",
-            "capabilities": sorted(capabilities or set(REQUIRED_EXTENSION_CAPABILITIES)),
+            "capabilities": sorted(capabilities or set(ALL_EXTENSION_CAPABILITIES)),
             "workspace_window_state": {"window_id": 77, "tab_count": 1},
             "extension_instance_id": "ext-test",
         }
@@ -216,7 +230,8 @@ def test_extension_driver_health_reports_missing_required_capabilities() -> None
     asyncio.run(_scenario())
 
 
-def test_extension_driver_routes_representative_actions(tmp_path: Path) -> None:
+def test_extension_driver_routes_representative_actions(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("BROWSER_CLI_HOME", str(tmp_path / "runtime"))
     session = _FakeSession(_hello())
     driver = ExtensionDriver(_FakeHub(session))
     locator = LocatorSpec(ref="abcd1234", role="button", name="Submit")
@@ -267,7 +282,7 @@ def test_extension_driver_routes_representative_actions(tmp_path: Path) -> None:
         page2 = await driver.new_tab(page_id="page_0002", url="https://example.com/two")
         stop_payload = await driver.stop()
 
-        assert Path(screenshot["path"]).read_bytes() == b"png-bytes"
+        assert Path(screenshot["path"]).read_bytes() == PNG_IMAGE
         assert Path(pdf["path"]).read_bytes() == b"%PDF-1.4"
         assert Path(trace["path"]).exists()
         assert waited_record["record"]["body"]["text"] == '{"ok":true}'
@@ -356,3 +371,20 @@ def test_extension_protocol_js_lists_workspace_runtime_capabilities() -> None:
     ).read_text(encoding="utf-8")
     assert "'workspace-status'" in protocol_js
     assert "'workspace-rebuild-binding'" in protocol_js
+
+
+def test_stale_extension_cannot_silently_ignore_screenshot_controls(tmp_path: Path) -> None:
+    session = _FakeSession(_hello(capabilities=set(REQUIRED_EXTENSION_CAPABILITIES)))
+    driver = ExtensionDriver(_FakeHub(session))
+
+    async def scenario():
+        import pytest
+
+        from browser_cli.errors import ExtensionCapabilityIncompleteError
+
+        await driver.new_tab(page_id="page_0001", url="https://example.com")
+        with pytest.raises(ExtensionCapabilityIncompleteError, match="Reload"):
+            await driver.screenshot("page_0001", path=str(tmp_path / "shot.png"))
+        assert not any(action == "screenshot" for action, _ in session.requests)
+
+    asyncio.run(scenario())

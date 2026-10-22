@@ -186,16 +186,34 @@ export function createArtifactHandlers(context) {
   return {
     async screenshot(payload, meta) {
       await context.getManagedTab(payload.tab_id);
-      const dataBase64 = await captureScreenshot(payload.tab_id, { fullPage: !!payload.full_page });
+      const format = payload.format === 'jpeg' ? 'jpeg' : 'png';
+      const { dataBase64, capture } = await captureScreenshot(payload.tab_id, {
+        format,
+        fullPage: !!payload.full_page,
+        clip: payload.clip || undefined,
+        viewportWidth: payload.viewport_width || undefined,
+        viewportHeight: payload.viewport_height || undefined,
+        deviceScaleFactor: payload.device_scale_factor || undefined,
+      });
       const descriptor = buildArtifactDescriptor({
         artifactKind: 'screenshot',
-        mimeType: 'image/png',
-        filename: `${context.pageIdForTab(payload.tab_id) || 'page'}.png`,
+        mimeType: `image/${format}`,
+        filename: `${context.pageIdForTab(payload.tab_id) || 'page'}.${format === 'jpeg' ? 'jpg' : 'png'}`,
         pageId: context.pageIdForTab(payload.tab_id),
-        metadata: { full_page: !!payload.full_page },
+        metadata: {
+          full_page: !!payload.full_page,
+          clip: payload.clip || null,
+          viewport_width: payload.viewport_width || null,
+          viewport_height: payload.viewport_height || null,
+          device_scale_factor: payload.device_scale_factor || null,
+        },
       });
       await emitBase64Artifact(context, meta.requestId, descriptor, dataBase64);
-      return { artifacts: [descriptor], full_page: !!payload.full_page };
+      return {
+        artifacts: [descriptor],
+        full_page: !!payload.full_page,
+        capture,
+      };
     },
     async pdf(payload, meta) {
       await context.getManagedTab(payload.tab_id);

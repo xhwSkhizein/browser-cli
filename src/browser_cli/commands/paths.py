@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from argparse import Namespace
+from pathlib import Path
 
 from browser_cli.constants import get_app_paths
 from browser_cli.outputs.json import render_json_payload
@@ -12,6 +13,10 @@ def _paths_payload() -> dict[str, str]:
     app_paths = get_app_paths()
     return {
         "home": str(app_paths.home),
+        "socket_path": str(app_paths.socket_path),
+        "node_client": str(
+            Path(__file__).resolve().parents[1] / "task_runtime" / "node" / "client.mjs"
+        ),
         "tasks_dir": str(app_paths.tasks_dir),
         "automations_dir": str(app_paths.automations_dir),
         "artifacts_dir": str(app_paths.artifacts_dir),

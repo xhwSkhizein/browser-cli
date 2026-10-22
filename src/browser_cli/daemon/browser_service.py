@@ -5,10 +5,13 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any
 
 from browser_cli import error_codes
+from browser_cli.browser.context import ContextOptions
 from browser_cli.daemon.runtime_presentation import build_runtime_presentation
 from browser_cli.drivers.base import BrowserDriver
 from browser_cli.drivers.extension_driver import ExtensionDriver
@@ -101,6 +104,7 @@ class BrowserService:
         self._stability = _StabilityMetrics()
         self._page_counter = 0
         self._rebind_lock = asyncio.Lock()
+        self._isolated = False
 
     @property
     def chrome_environment(self) -> ChromeEnvironment | None:
@@ -199,6 +203,8 @@ class BrowserService:
         return self._driver_name or "playwright"
 
     async def ensure_started(self) -> None:
+        if self._isolated:
+            return
         await self._extension_hub.ensure_started()
         if self._watch_task is None:
             self._watch_task = asyncio.create_task(self._watch_extension_changes())
@@ -861,9 +867,25 @@ class BrowserService:
         return await self._active_driver().mouse_up(page_id, button=button)
 
     async def screenshot(
-        self, page_id: str, *, path: str, full_page: bool = False
+        self,
+        page_id: str,
+        *,
+        path: str,
+        full_page: bool = False,
+        clip: dict[str, float] | None = None,
+        viewport_width: int | None = None,
+        viewport_height: int | None = None,
+        device_scale_factor: float | None = None,
     ) -> dict[str, Any]:
-        return await self._active_driver().screenshot(page_id, path=path, full_page=full_page)
+        return await self._active_driver().screenshot(
+            page_id,
+            path=path,
+            full_page=full_page,
+            clip=clip,
+            viewport_width=viewport_width,
+            viewport_height=viewport_height,
+            device_scale_factor=device_scale_factor,
+        )
 
     async def save_pdf(self, page_id: str, *, path: str) -> dict[str, Any]:
         return await self._active_driver().save_pdf(page_id, path=path)
@@ -1090,6 +1112,8 @@ class BrowserService:
             return
 
     async def _maybe_apply_pending_rebind(self) -> None:
+        if self._isolated:
+            return
         if self._command_depth != 0:
             return
         if not self._pending_driver:
@@ -1099,6 +1123,35 @@ class BrowserService:
         self._pending_driver = None
         self._pending_reason = None
         await self._activate_driver(target, reason=reason)
+
+    @asynccontextmanager
+    async def isolated_context(
+        self, options: ContextOptions, tabs: TabRegistry
+    ) -> AsyncIterator[BrowserService]:
+        if self._command_depth:
+            raise OperationFailedError(
+                "An isolated context can start only while the browser is idle."
+            )
+        await self.begin_command("batch")
+        try:
+            if self._command_depth != 1:
+                raise OperationFailedError(
+                    "The browser became busy while starting an isolated context."
+                )
+            if self._driver_name != "playwright":
+                await self._activate_driver("playwright", reason="isolated-context-requested")
+            driver = await self._playwright.create_isolated_driver(options)
+            service = BrowserService(tabs=tabs)
+            service._isolated = True
+            service._playwright = driver
+            service._driver = driver
+            service._driver_name = "playwright"
+            try:
+                yield service
+            finally:
+                await driver.stop()
+        finally:
+            await self.end_command()
 
     def _active_driver(self) -> BrowserDriver:
         if self._driver is None:

@@ -74,10 +74,11 @@ export const REQUIRED_CAPABILITIES = [
   'verify-value',
 ];
 
-export const OPTIONAL_CAPABILITIES = [];
+export const OPTIONAL_CAPABILITIES = ['screenshot-controls'];
 
 export const SUPPORTED_CAPABILITIES = [
   ...REQUIRED_CAPABILITIES,
+  ...OPTIONAL_CAPABILITIES,
 ];
 
 export const CORE_CAPABILITIES = REQUIRED_CAPABILITIES;

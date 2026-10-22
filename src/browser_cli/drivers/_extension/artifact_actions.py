@@ -1,27 +1,90 @@
 from __future__ import annotations
 
 import base64
+from pathlib import Path
 from typing import Any
+
+from browser_cli.browser.capture import CaptureOptions, image_dimensions
+from browser_cli.errors import ExtensionCapabilityIncompleteError, OperationFailedError
 
 
 class ExtensionDriverArtifactActionsMixin:
     async def screenshot(
-        self, page_id: str, *, path: str, full_page: bool = False
+        self,
+        page_id: str,
+        *,
+        path: str,
+        full_page: bool = False,
+        clip: dict[str, float] | None = None,
+        viewport_width: int | None = None,
+        viewport_height: int | None = None,
+        device_scale_factor: float | None = None,
     ) -> dict[str, Any]:
+        CaptureOptions.from_dict(
+            {
+                "full_page": full_page,
+                "clip": clip,
+                "viewport_width": viewport_width,
+                "viewport_height": viewport_height,
+                "device_scale_factor": device_scale_factor,
+            }
+        )
+        session = await self._require_session()
+        if "screenshot-controls" not in session.hello.capabilities:
+            raise ExtensionCapabilityIncompleteError(
+                "Reload the Browser CLI extension to enable screenshot-controls before capturing screenshots."
+            )
+        suffix = Path(path).suffix.lower()
+        suffix = suffix if suffix in {".jpg", ".jpeg"} else ".png"
         payload = await self._page_command(
             page_id,
             "screenshot",
-            {"full_page": full_page},
+            {
+                "full_page": full_page,
+                "format": "jpeg" if suffix != ".png" else "png",
+                "clip": clip,
+                "viewport_width": viewport_width,
+                "viewport_height": viewport_height,
+                "device_scale_factor": device_scale_factor,
+            },
         )
+        capture = payload.get("capture")
+        if (
+            not isinstance(capture, dict)
+            or capture.get("page_dimensions_unchanged") is not True
+            or capture.get("before") != capture.get("after")
+        ):
+            raise OperationFailedError(
+                "Extension did not confirm that page geometry was restored; screenshot was not saved."
+            )
+        artifacts = [
+            item
+            for item in payload.get("_artifacts", [])
+            if item.get("artifact_kind") == "screenshot"
+        ]
+        content = (
+            artifacts[0].get("content")
+            if artifacts
+            else base64.b64decode(payload.get("data_base64", ""))
+        )
+        if not isinstance(content, bytes | bytearray):
+            raise OperationFailedError("Extension screenshot is missing image bytes.")
+        screenshot_size = image_dimensions(bytes(content))
         output_path = await self._materialize_single_artifact(
             payload,
             page_id=page_id,
             path=path,
-            suffix=".png",
+            suffix=suffix,
             artifact_kind="screenshot",
             inline_key="data_base64",
         )
-        return {"page_id": page_id, "path": output_path, "full_page": full_page}
+        return {
+            "page_id": page_id,
+            "path": output_path,
+            "full_page": full_page,
+            "capture": capture,
+            "screenshot_size": screenshot_size,
+        }
 
     async def save_pdf(self, page_id: str, *, path: str) -> dict[str, Any]:
         payload = await self._page_command(page_id, "pdf", {})
