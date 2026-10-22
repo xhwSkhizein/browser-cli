@@ -890,7 +890,16 @@ class BrowserService:
                 "position => window.scrollTo({left: position.x, top: position.y, behavior: 'instant'})",
                 {"x": before["scroll_x"], "y": before["scroll_y"]},
             )
-        after = await page.evaluate(PAGE_GEOMETRY_JS)
+        # Beyond-viewport capture temporarily hides native scrollbars. Chrome
+        # can acknowledge restoration before the renderer has applied it, which
+        # changes Linux layout width by the scrollbar gutter for a few frames.
+        # Wait for the original geometry, but keep rejecting persistent changes.
+        for attempt in range(20):
+            after = await page.evaluate(PAGE_GEOMETRY_JS)
+            if before == after:
+                break
+            if attempt < 19:
+                await asyncio.sleep(0.025)
         if before != after:
             raise OperationFailedError(
                 f"Page geometry changed during capture; screenshot was not saved. before={before}, after={after}"

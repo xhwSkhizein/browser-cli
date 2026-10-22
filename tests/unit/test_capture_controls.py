@@ -161,3 +161,49 @@ def test_context_font_bytes_are_embedded_in_each_document(tmp_path):
     assert "data:font/ttf;base64,dGVzdCBmb250" in script
     assert "zoom: 1.25 !important" in script
     assert options.metadata()["zoom_method"] == "css"
+
+
+@pytest.mark.parametrize("restores", [True, False])
+def test_capture_waits_for_scrollbar_restoration_without_accepting_persistent_changes(
+    tmp_path, restores
+):
+    class ScrollbarPage(CapturePage):
+        def __init__(self):
+            super().__init__()
+            self.captured = False
+            self.after_reads = 0
+            send = self.cdp.send.side_effect
+
+            async def screenshot_send(method, params):
+                if method == "Page.captureScreenshot":
+                    self.captured = True
+                return await send(method, params)
+
+            self.cdp.send.side_effect = screenshot_send
+
+        async def evaluate(self, script, arg=None):
+            result = await super().evaluate(script, arg)
+            if script == PAGE_GEOMETRY_JS:
+                if self.captured:
+                    self.after_reads += 1
+                # Chromium temporarily suppresses classic scrollbars during
+                # beyond-viewport capture; restoration can lag its response.
+                result["page_width"] = (
+                    1440 if self.captured and (not restores or self.after_reads < 3) else 1425
+                )
+            return result
+
+    page = ScrollbarPage()
+    service = BrowserService()
+    service._pages["scrollbar"] = page
+    output = tmp_path / "scrollbar.png"
+    if restores:
+        result = asyncio.run(service.screenshot("scrollbar", path=str(output), full_page=True))
+        assert result["capture"]["before"] == result["capture"]["after"]
+        assert result["capture"]["after"]["page_width"] == 1425
+        assert page.after_reads >= 3
+        assert output.is_file()
+    else:
+        with pytest.raises(OperationFailedError, match="Page geometry changed"):
+            asyncio.run(service.screenshot("scrollbar", path=str(output), full_page=True))
+        assert not output.exists()

@@ -70,6 +70,7 @@ def runtime(browser_runtime):
     transport = BrowserDaemonServer(browser_runtime.app)
 
     async def listen():
+        browser_runtime.socket.parent.mkdir(parents=True, exist_ok=True)
         return await asyncio.start_unix_server(
             transport._handle_client, path=str(browser_runtime.socket)
         )
@@ -423,3 +424,40 @@ def test_disconnected_or_timed_out_client_does_not_replay_and_eventually_closes_
     ) as create_context:
         runtime.loop.run_until_complete(scenario())
         create_context.assert_awaited_once()
+
+
+@pytest.mark.parametrize("custom_scrollbar", [False, True])
+def test_repeated_captures_restore_native_and_classic_scrollbar_layout(runtime, custom_scrollbar):
+    async def scenario():
+        await command(runtime, "open", url=runtime.url + "/static")
+        await command(runtime, "resize", width=800, height=600)
+        page_id = await runtime.app.state.tabs.current_active_page_id("capture-test")
+        page = runtime.low._pages[page_id]
+        scrollbar_css = "::-webkit-scrollbar { width: 15px; }" if custom_scrollbar else ""
+        await page.set_content(
+            "<!doctype html><style>html { overflow-y: scroll; }"
+            "body { margin: 0; height: 2400px; }" + scrollbar_css + "</style>"
+            '<div style="width:100%;height:100px;background:red">Scrollbar capture</div>'
+        )
+        await page.evaluate("() => scrollTo(0, 300)")
+        before = await page.evaluate(
+            "() => ({width: document.documentElement.clientWidth, scroll: scrollY})"
+        )
+        if custom_scrollbar:
+            assert before["width"] == 785
+        for index in range(3):
+            result = await command(
+                runtime,
+                "screenshot",
+                full_page=True,
+                path=str(runtime.root / f"scrollbar-{custom_scrollbar}-{index}.png"),
+            )
+            assert result["capture"]["before"] == result["capture"]["after"]
+            assert (
+                await page.evaluate(
+                    "() => ({width: document.documentElement.clientWidth, scroll: scrollY})"
+                )
+                == before
+            )
+
+    runtime.loop.run_until_complete(scenario())
