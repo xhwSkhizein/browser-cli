@@ -11,6 +11,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
+from PIL import Image
 from tests.integration.fixture_server import run_fixture_server
 
 from browser_cli.browser.context import ContextOptions
@@ -426,33 +427,43 @@ def test_disconnected_or_timed_out_client_does_not_replay_and_eventually_closes_
         create_context.assert_awaited_once()
 
 
-@pytest.mark.parametrize("custom_scrollbar", [False, True])
-def test_repeated_captures_restore_native_and_classic_scrollbar_layout(runtime, custom_scrollbar):
+@pytest.mark.parametrize("scrollbar", ["native", "classic", "hidden"])
+def test_repeated_captures_restore_scrollbar_layout_and_bottom_pixels(runtime, scrollbar):
     async def scenario():
         await command(runtime, "open", url=runtime.url + "/static")
         await command(runtime, "resize", width=800, height=600)
         page_id = await runtime.app.state.tabs.current_active_page_id("capture-test")
         page = runtime.low._pages[page_id]
-        scrollbar_css = "::-webkit-scrollbar { width: 15px; }" if custom_scrollbar else ""
+        scrollbar_css = {
+            "native": "",
+            "classic": "::-webkit-scrollbar { width: 15px; }",
+            "hidden": "html { scrollbar-width: none; } ::-webkit-scrollbar { display: none; }",
+        }[scrollbar]
         await page.set_content(
             "<!doctype html><style>html { overflow-y: scroll; }"
             "body { margin: 0; height: 2400px; }" + scrollbar_css + "</style>"
             '<div style="width:100%;height:100px;background:red">Scrollbar capture</div>'
+            '<div style="position:absolute;left:0;top:2200px;width:200px;height:200px;background:red"></div>'
         )
         await page.evaluate("() => scrollTo(0, 300)")
         before = await page.evaluate(
             "() => ({width: document.documentElement.clientWidth, scroll: scrollY})"
         )
-        if custom_scrollbar:
+        if scrollbar == "classic":
             assert before["width"] == 785
+        elif scrollbar == "hidden":
+            assert before["width"] == 800
         for index in range(3):
             result = await command(
                 runtime,
                 "screenshot",
                 full_page=True,
-                path=str(runtime.root / f"scrollbar-{custom_scrollbar}-{index}.png"),
+                path=str(runtime.root / f"scrollbar-{scrollbar}-{index}.png"),
             )
             assert result["capture"]["before"] == result["capture"]["after"]
+            with Image.open(result["path"]) as image:
+                pixel = image.convert("RGB").getpixel((10, image.height - 50))
+                assert pixel[0] > 200 and pixel[1] < 100 and pixel[2] < 100
             assert (
                 await page.evaluate(
                     "() => ({width: document.documentElement.clientWidth, scroll: scrollY})"

@@ -63,6 +63,9 @@ def test_source_distribution_contains_new_extension_modules_and_acceptance_tests
             "browser-cli-extension/src/offscreen_image.js",
             "tests/integration/test_capture_context_batch.py",
             "tests/unit/test_batch.py",
+            "src/browser_cli/browser/raster.py",
+            "tests/unit/test_tiled_capture.py",
+            "tests/unit/test_capture_runtime_fixture.py",
         ):
             content = archive.extractfile(f"{prefix}/{relative}")
             assert content is not None

@@ -18,6 +18,7 @@ from browser_cli.browser.context import ContextOptions
 from browser_cli.browser.launch_preflight import ensure_browser_launch_allowed
 from browser_cli.browser.models import BrowserLaunchConfig, default_headless
 from browser_cli.browser.network_capture import PlaywrightNetworkObserver
+from browser_cli.browser.raster import PAINTABLE_VIEWPORT_JS, capture_tiled
 from browser_cli.browser.snapshot import SnapshotCapture, capture_snapshot
 from browser_cli.browser.stealth import (
     build_context_options,
@@ -837,10 +838,6 @@ class BrowserService:
                 "Capture viewport must match the fixed isolated context viewport."
             )
         before = await page.evaluate(PAGE_GEOMETRY_JS)
-        scrollbars_visible = await page.evaluate(
-            "() => innerWidth > document.documentElement.clientWidth || "
-            "innerHeight > document.documentElement.clientHeight"
-        )
         original_viewport = page.viewport_size
         if options.viewport is not None and original_viewport is None:
             raise InvalidInputError("Temporary viewport capture requires a fixed page viewport.")
@@ -876,33 +873,46 @@ class BrowserService:
             # with the existing metrics so capturing cannot reset another client's DPR.
             await session.send("Emulation.setDeviceMetricsOverride", metrics(captured))
             capture_clip = options.capture_clip(captured)
-            result = await session.send(
-                "Page.captureScreenshot",
-                {
-                    "format": "jpeg" if output_path.suffix.lower() in {".jpg", ".jpeg"} else "png",
-                    "fromSurface": True,
-                    "captureBeyondViewport": True,
-                    "clip": capture_clip,
-                },
+            paintable = await page.evaluate(PAINTABLE_VIEWPORT_JS)
+            fits = (
+                capture_clip["x"] >= captured["scroll_x"]
+                and capture_clip["y"] >= captured["scroll_y"]
+                and capture_clip["x"] + capture_clip["width"]
+                <= captured["scroll_x"] + captured["viewport_width"]
+                and capture_clip["y"] + capture_clip["height"]
+                <= captured["scroll_y"] + captured["viewport_height"]
             )
-            image_bytes = base64.b64decode(result["data"])
+            image_format = "jpeg" if output_path.suffix.lower() in {".jpg", ".jpeg"} else "png"
+            if not fits:
+                image_bytes = await capture_tiled(
+                    page,
+                    session,
+                    capture_clip,
+                    geometry=captured,
+                    paintable=paintable,
+                    density=options.device_scale_factor or captured["device_scale_factor"],
+                    image_format=image_format,
+                )
+            else:
+                result = await session.send(
+                    "Page.captureScreenshot",
+                    {
+                        "format": image_format,
+                        "fromSurface": True,
+                        "captureBeyondViewport": False,
+                        "clip": capture_clip,
+                    },
+                )
+                image_bytes = base64.b64decode(result["data"])
         finally:
             if options.viewport is not None:
                 await page.set_viewport_size(original_viewport)
             await session.send("Emulation.setDeviceMetricsOverride", metrics(before))
-            if scrollbars_visible:
-                # Chrome can leave native scrollbars suppressed after a
-                # beyond-viewport capture. Restore only previously visible bars.
-                # A fresh CDP agent caches false and treats false -> false as
-                # a no-op even if capture changed renderer preferences. Toggle
-                # its state first so the visible setting is actually reapplied.
-                await session.send("Emulation.setScrollbarsHidden", {"hidden": True})
-                await session.send("Emulation.setScrollbarsHidden", {"hidden": False})
             await page.evaluate(
                 "position => window.scrollTo({left: position.x, top: position.y, behavior: 'instant'})",
                 {"x": before["scroll_x"], "y": before["scroll_y"]},
             )
-        # Allow the renderer to apply restored scrollbar preferences and metrics.
+        # Renderer updates can lag restoration of metrics and scroll.
         # Wait for the original geometry, but keep rejecting persistent changes.
         for attempt in range(20):
             after = await page.evaluate(PAGE_GEOMETRY_JS)

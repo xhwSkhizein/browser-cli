@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import base64
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from browser_cli.browser.capture import PAGE_GEOMETRY_JS, CaptureOptions, image_dimensions
 from browser_cli.browser.context import ContextOptions
+from browser_cli.browser.raster import PAINTABLE_VIEWPORT_JS
 from browser_cli.browser.service import BrowserService
 from browser_cli.errors import InvalidInputError, OperationFailedError
 
@@ -34,6 +35,8 @@ class CapturePage:
         self.context.new_cdp_session.return_value = self.cdp
 
     async def evaluate(self, script, arg=None):
+        if script == PAINTABLE_VIEWPORT_JS:
+            return dict(self.viewport_size)
         if script == PAGE_GEOMETRY_JS:
             return {
                 "viewport_width": self.viewport_size["width"],
@@ -58,25 +61,19 @@ def test_full_page_capture_uses_a_rectangle_without_resizing(tmp_path):
     page = CapturePage()
     service = BrowserService()
     service._pages["page_1"] = page
-    result = asyncio.run(
-        service.screenshot(
-            "page_1", path=str(tmp_path / "full.png"), full_page=True, device_scale_factor=2
+    with patch(
+        "browser_cli.browser.service.capture_tiled", new_callable=AsyncMock, return_value=PNG
+    ) as capture:
+        result = asyncio.run(
+            service.screenshot(
+                "page_1", path=str(tmp_path / "full.png"), full_page=True, device_scale_factor=2
+            )
         )
-    )
     assert page.viewport_changes == []
-    assert next(
-        call.args
-        for call in page.cdp.send.call_args_list
-        if call.args[0] == "Page.captureScreenshot"
-    ) == (
-        "Page.captureScreenshot",
-        {
-            "format": "png",
-            "fromSurface": True,
-            "captureBeyondViewport": True,
-            "clip": {"x": 0, "y": 0, "width": 1440, "height": 2400, "scale": 2},
-        },
-    )
+    capture.assert_awaited_once()
+    assert capture.await_args.args[2] == {"x": 0, "y": 0, "width": 1440, "height": 2400, "scale": 2}
+    assert capture.await_args.kwargs["density"] == 2
+    assert all(call.args[0] != "Page.captureScreenshot" for call in page.cdp.send.call_args_list)
     assert result["screenshot_size"] == {"width": 1, "height": 1}
     assert result["capture"]["before"] == result["capture"]["after"]
     page.cdp.detach.assert_not_awaited()
@@ -163,23 +160,20 @@ def test_context_font_bytes_are_embedded_in_each_document(tmp_path):
     assert options.metadata()["zoom_method"] == "css"
 
 
-@pytest.mark.parametrize("restoration", ["delayed", "sticky", "changed"])
+@pytest.mark.parametrize("restores", [True, False])
 def test_capture_waits_for_scrollbar_restoration_without_accepting_persistent_changes(
-    tmp_path, restoration
+    tmp_path, restores
 ):
     class ScrollbarPage(CapturePage):
         def __init__(self):
             super().__init__()
             self.captured = False
             self.after_reads = 0
-            self.scrollbars_restored = False
             send = self.cdp.send.side_effect
 
             async def screenshot_send(method, params):
                 if method == "Page.captureScreenshot":
                     self.captured = True
-                if method == "Emulation.setScrollbarsHidden" and params == {"hidden": False}:
-                    self.scrollbars_restored = True
                 return await send(method, params)
 
             self.cdp.send.side_effect = screenshot_send
@@ -189,17 +183,9 @@ def test_capture_waits_for_scrollbar_restoration_without_accepting_persistent_ch
             if script == PAGE_GEOMETRY_JS:
                 if self.captured:
                     self.after_reads += 1
-                # Chromium temporarily suppresses classic scrollbars during
-                # beyond-viewport capture; restoration can lag its response.
+                # Renderer geometry updates may lag metric restoration.
                 result["page_width"] = (
-                    1440
-                    if self.captured
-                    and (
-                        restoration == "changed"
-                        or (restoration == "sticky" and not self.scrollbars_restored)
-                        or self.after_reads < 3
-                    )
-                    else 1425
+                    1440 if self.captured and (not restores or self.after_reads < 3) else 1425
                 )
             return result
 
@@ -207,34 +193,13 @@ def test_capture_waits_for_scrollbar_restoration_without_accepting_persistent_ch
     service = BrowserService()
     service._pages["scrollbar"] = page
     output = tmp_path / "scrollbar.png"
-    if restoration != "changed":
-        result = asyncio.run(service.screenshot("scrollbar", path=str(output), full_page=True))
+    if restores:
+        result = asyncio.run(service.screenshot("scrollbar", path=str(output)))
         assert result["capture"]["before"] == result["capture"]["after"]
         assert result["capture"]["after"]["page_width"] == 1425
         assert page.after_reads >= 3
         assert output.is_file()
-        assert [
-            call.args[1]
-            for call in page.cdp.send.call_args_list
-            if call.args[0] == "Emulation.setScrollbarsHidden"
-        ] == [{"hidden": True}, {"hidden": False}]
     else:
         with pytest.raises(OperationFailedError, match="Page geometry changed"):
-            asyncio.run(service.screenshot("scrollbar", path=str(output), full_page=True))
+            asyncio.run(service.screenshot("scrollbar", path=str(output)))
         assert not output.exists()
-
-
-def test_capture_does_not_force_hidden_or_overlay_scrollbars_visible(tmp_path):
-    class HiddenScrollbarPage(CapturePage):
-        async def evaluate(self, script, arg=None):
-            if "document.documentElement.clientWidth" in script:
-                return False
-            return await super().evaluate(script, arg)
-
-    page = HiddenScrollbarPage()
-    service = BrowserService()
-    service._pages["hidden"] = page
-    asyncio.run(service.screenshot("hidden", path=str(tmp_path / "hidden.png"), full_page=True))
-    assert all(
-        call.args[0] != "Emulation.setScrollbarsHidden" for call in page.cdp.send.call_args_list
-    )

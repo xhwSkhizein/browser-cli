@@ -42,6 +42,8 @@ browser-cli screenshot fixed.png --viewport-width 1280 --viewport-height 720 --d
 
 截图的 `--dpr` 控制输出图片密度，并保留页面的 `window.devicePixelRatio`。需要让页面代码、媒体查询也看到指定 DPR 时，把 `device_scale_factor` 放在下文的上下文设置里。相对输出路径以 `browser-cli paths` 给出的 `artifacts_dir` 为基准；绝对路径直接使用。
 
+托管 Chrome 对超出可见视口的区域采用实际滚动、逐片捕获和 Pillow 像素合成，避免 Chrome 整页接口持续隐藏滚动条。结束后恢复原滚动位置，前后几何校验仍然生效；合成保留 ICC 配置，PNG/JPEG 底部内容也有像素回归。分片按页面滚动时的实际渲染合成，固定定位和吸附元素遵循页面自身的滚动行为。分片输出最多 6400 万像素、256 片，超出时请分区截图。
+
 扩展模式需要新版扩展提供 `screenshot-controls` 能力。旧扩展会收到明确的重新加载提示，不会悄悄忽略新参数。
 
 扩展截图和 `resize` 会计入 Chrome 标签页自身的浏览器缩放，例如 90%，以保持请求的 CSS 视口尺寸和页面 DPR；用户的浏览器缩放设置保持原值。布局尚未稳定或精确尺寸无法应用时会明确报错，并恢复原视口。
