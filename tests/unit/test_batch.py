@@ -298,6 +298,38 @@ def test_canceled_browser_action_releases_command_lifecycle():
     asyncio.run(scenario())
 
 
+@pytest.mark.parametrize("cancel_cleanup", [False, True])
+def test_command_cleanup_is_not_repeated_when_cleanup_fails_or_is_canceled(cancel_cleanup):
+    async def scenario():
+        app, service, _ = app_with_steps()
+        entered = asyncio.Event()
+
+        async def end_command():
+            # Repeating cleanup would decrement the shared command count again,
+            # possibly allowing a backend rebind while another command is active.
+            if service.end_command.await_count == 1:
+                entered.set()
+                if cancel_cleanup:
+                    await asyncio.Event().wait()
+                raise InvalidInputError("cleanup failed")
+            return {}
+
+        service.end_command.side_effect = end_command
+        task = asyncio.create_task(app.execute(request("eval")))
+        await entered.wait()
+        if cancel_cleanup:
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        else:
+            result = await task
+            assert not result.ok
+            assert result.error_code == "INVALID_INPUT"
+        service.end_command.assert_awaited_once()
+
+    asyncio.run(scenario())
+
+
 def test_background_read_queued_during_batch_can_be_canceled_without_blocking():
     async def scenario():
         service = Service()

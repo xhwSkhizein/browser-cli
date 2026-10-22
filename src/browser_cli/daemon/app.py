@@ -175,6 +175,9 @@ class BrowserDaemonApp:
                 "runtime_version": DAEMON_RUNTIME_VERSION,
             }
             if command_started:
+                # Cleanup may fail or be canceled after decrementing the shared
+                # command count. The exception handlers must not run it twice.
+                command_started = False
                 runtime_meta = await self._state.browser_service.end_command()
                 meta.update(runtime_meta)
                 if runtime_meta.get("driver_reason") == "extension-connected":
