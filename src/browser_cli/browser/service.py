@@ -12,6 +12,7 @@ import urllib.parse
 from pathlib import Path
 from typing import Any
 
+from browser_cli.browser.launch_preflight import ensure_browser_launch_allowed
 from browser_cli.browser.models import BrowserLaunchConfig, default_headless
 from browser_cli.browser.network_capture import PlaywrightNetworkObserver
 from browser_cli.browser.snapshot import SnapshotCapture, capture_snapshot
@@ -99,6 +100,7 @@ class BrowserService:
             await self._start()
 
     async def _start(self) -> None:
+        ensure_browser_launch_allowed()
         try:
             from playwright.async_api import async_playwright
         except ImportError as exc:  # pragma: no cover

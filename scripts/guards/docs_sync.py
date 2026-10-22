@@ -7,6 +7,7 @@ from pathlib import Path
 from scripts.guards.common import Finding, discover_top_level_packages, read_section
 
 REQUIRED_AGENT_PHRASES = [
+    "On macOS, check sandbox access to LaunchServices before launching Chrome.",
     "Managed profile mode is the default browser backend.",
     "Extension mode is the preferred real-Chrome backend when the Browser CLI extension is connected and healthy.",
     "Driver rebinding may happen automatically only at safe idle points, and it must be reported as `state_reset` rather than treated as perfectly continuous state.",

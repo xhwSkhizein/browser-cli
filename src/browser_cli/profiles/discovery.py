@@ -8,6 +8,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from browser_cli.constants import get_app_paths
 from browser_cli.errors import BrowserUnavailableError, ProfileUnavailableError
 
 DEFAULT_PROFILE_DIRECTORY = "Default"
@@ -120,8 +121,9 @@ def discover_user_data_dir(platform: str | None = None, home: Path | None = None
 
 
 def discover_default_profile_dir(home: Path | None = None) -> Path:
-    home_dir = home or Path.home()
-    return home_dir / DEFAULT_MANAGED_ROOT
+    if home is not None:
+        return home / DEFAULT_MANAGED_ROOT
+    return get_app_paths().home / "default-profile"
 
 
 def discover_local_state_path(user_data_dir: Path) -> Path:

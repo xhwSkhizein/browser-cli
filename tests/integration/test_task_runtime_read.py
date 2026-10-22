@@ -3,26 +3,34 @@ from __future__ import annotations
 import asyncio
 import socket
 import sys
+from functools import lru_cache
 from pathlib import Path
 
 import pytest
 from tests.integration.fixture_server import run_fixture_server
 
+from browser_cli.browser.launch_preflight import ensure_browser_launch_allowed
 from browser_cli.daemon.client import send_command
-from browser_cli.profiles.discovery import ChromeEnvironment
+from browser_cli.errors import BrowserUnavailableError
+from browser_cli.profiles.discovery import ChromeEnvironment, discover_chrome_executable
 from browser_cli.task_runtime.client import BrowserCliTaskClient
 
 
+@lru_cache(maxsize=1)
 def _can_launch_playwright_browser() -> bool:
     try:
+        ensure_browser_launch_allowed()
+        executable = discover_chrome_executable()
         from playwright.async_api import async_playwright
-    except ImportError:
+    except (ImportError, BrowserUnavailableError):
         return False
 
     async def _probe() -> bool:
         playwright = await async_playwright().start()
         try:
-            browser = await playwright.chromium.launch(headless=True)
+            browser = await playwright.chromium.launch(
+                executable_path=str(executable), headless=True
+            )
             await browser.close()
             return True
         except Exception:
@@ -62,7 +70,7 @@ def _build_chrome_environment(tmp_path: Path) -> ChromeEnvironment:
     user_data_dir = tmp_path / "user-data"
     (user_data_dir / "Default").mkdir(parents=True)
     return ChromeEnvironment(
-        executable_path=None,
+        executable_path=discover_chrome_executable(),
         user_data_dir=user_data_dir,
         profile_directory="Default",
     )
@@ -84,7 +92,7 @@ def _serialize_environment(chrome_environment: ChromeEnvironment) -> dict[str, s
 
 
 @pytest.mark.skipif(
-    not _can_launch_playwright_browser(), reason="Playwright browser runtime unavailable"
+    not _can_launch_playwright_browser(), reason="Stable Chrome runtime unavailable"
 )
 def test_task_runtime_read_capture_html_from_dynamic_fixture(monkeypatch, tmp_path: Path) -> None:
     _configure_runtime(monkeypatch, tmp_path)
@@ -100,7 +108,7 @@ def test_task_runtime_read_capture_html_from_dynamic_fixture(monkeypatch, tmp_pa
 
 
 @pytest.mark.skipif(
-    not _can_launch_playwright_browser(), reason="Playwright browser runtime unavailable"
+    not _can_launch_playwright_browser(), reason="Stable Chrome runtime unavailable"
 )
 def test_task_runtime_read_capture_snapshot_from_static_fixture(
     monkeypatch, tmp_path: Path
@@ -115,7 +123,7 @@ def test_task_runtime_read_capture_snapshot_from_static_fixture(
 
 
 @pytest.mark.skipif(
-    not _can_launch_playwright_browser(), reason="Playwright browser runtime unavailable"
+    not _can_launch_playwright_browser(), reason="Stable Chrome runtime unavailable"
 )
 def test_task_runtime_read_scroll_bottom_loads_more_content_without_leaking_tabs(
     monkeypatch, tmp_path: Path
@@ -146,14 +154,14 @@ def test_task_runtime_read_scroll_bottom_loads_more_content_without_leaking_tabs
 
 
 @pytest.mark.skipif(
-    not _can_launch_playwright_browser(), reason="Playwright browser runtime unavailable"
+    not _can_launch_playwright_browser(), reason="Stable Chrome runtime unavailable"
 )
 def test_task_runtime_read_daemon_path_reports_fallback_metadata(
     monkeypatch, tmp_path: Path
 ) -> None:
     _configure_runtime(monkeypatch, tmp_path)
     chrome_environment = ChromeEnvironment(
-        executable_path=None,
+        executable_path=discover_chrome_executable(),
         user_data_dir=tmp_path / "fallback-user-data",
         profile_directory="Default",
         source="fallback",

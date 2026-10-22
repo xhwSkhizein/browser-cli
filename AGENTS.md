@@ -26,9 +26,11 @@ the implementation, and where should a change land first.
 - `read` stays intentionally small: one URL positional plus `--snapshot`, `--scroll-bottom`, `--json`, and `--async`; async read creates daemon-memory runs for polling.
 - Managed profile mode is the default browser backend.
 - Managed profile mode uses Browser CLI's dedicated Chrome data root at `~/.browser-cli/default-profile`.
+- `BROWSER_CLI_HOME` relocates that managed profile to `<runtime-home>/default-profile` as well as sockets and artifacts; independent runtimes must not share the default profile accidentally.
 - Extension mode is the preferred real-Chrome backend when the Browser CLI extension is connected and healthy.
 - `browser-cli status` is the first-line lifecycle diagnosis command.
 - `browser-cli status --json` is the stable agent-facing runtime status surface.
+- `status --json` classifies runtime health; `doctor --json` classifies environment health. Both expose separate `health` entries for service, extension, configuration, managed profile, and output directory. Filesystem probes describe the caller's permissions and must not override daemon-owned presentation.
 - `browser-cli reload` is the runtime reset command; page reload remains public as `browser-cli page-reload`.
 - `browser-cli workspace rebuild --json` is the precise non-interactive extension workspace binding repair command.
 - `browser-cli recover --json` is the broader agent recovery command and may reload before rebuilding workspace binding.
@@ -113,6 +115,8 @@ the implementation, and where should a change land first.
 - Extension-driver action mixins:
   `src/browser_cli/drivers/_extension/*.py`
 
+- Shared caller filesystem diagnostics:
+  `src/browser_cli/daemon/health.py`
 - Low-level Playwright browser primitives, page state, screenshots, PDF, eval, input, storage, tracing, and video:
   `src/browser_cli/browser/service.py`, `src/browser_cli/browser/session.py`
 - Snapshot capture helpers:
@@ -186,6 +190,12 @@ the implementation, and where should a change land first.
 - If the user reports daemon startup, stale socket, or reload issues:
   inspect `src/browser_cli/daemon/client.py`, `src/browser_cli/daemon/transport.py`, `src/browser_cli/commands/status.py`, and `src/browser_cli/commands/reload.py`.
   If startup fails while waiting for an extension session, inspect `src/browser_cli/daemon/browser_service.py::ensure_started`; extension handshake wait is a best-effort preference signal and must fall back to Playwright instead of aborting daemon startup.
+- On macOS, check sandbox access to LaunchServices before launching Chrome.
+  `Google Chrome quit unexpectedly` with `SIGABRT` in `_RegisterApplication` / `TransformProcessType`
+  -> an agent sandbox denied desktop service access during startup, even if the popup appears after the task
+  -> inspect `src/browser_cli/browser/launch_preflight.py`, `browser/service.py`, and `browser/session.py`
+  -> reuse the existing daemon/extension via `browser-cli status --json`, or start Browser CLI outside the agent sandbox with elevated execution permission. Do not retry direct Playwright launches inside that sandbox; integration availability probes must run the same preflight before launching.
+  Match the report's PID, executable, and parent process to the launching command first. Independent Playwright test runners can launch Chrome for Testing directly and bypass Browser CLI entirely; those launchers need their own preflight and approved execution outside the sandbox.
 - If the user reports that agent automation cannot decide whether Browser CLI is healthy:
   inspect `src/browser_cli/commands/status.py`, `src/browser_cli/daemon/runtime_presentation.py`, and `src/browser_cli/commands/recovery.py`; `status --json` should remain a stable projection of daemon-owned presentation.
 - If the user reports stale or absent extension workspace binding:

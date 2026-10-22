@@ -14,6 +14,7 @@ from browser_cli.automation.service.client import (
 )
 from browser_cli.constants import get_app_paths
 from browser_cli.daemon.client import run_info_is_compatible, send_command
+from browser_cli.daemon.health import directory_health
 from browser_cli.daemon.transport import DAEMON_RUNTIME_VERSION, probe_socket, read_run_info
 from browser_cli.errors import BrowserCliError
 from browser_cli.outputs.json import render_json_payload
@@ -31,6 +32,7 @@ class StatusReport:
     presentation: dict[str, Any] = field(default_factory=dict)
     stability: dict[str, Any] = field(default_factory=dict)
     automation_service: dict[str, Any] = field(default_factory=dict)
+    directories: dict[str, Any] = field(default_factory=dict)
     live_error: str | None = None
 
 
@@ -120,6 +122,7 @@ def collect_status_report(*, warmup: bool = False) -> StatusReport:
             automation_service_section["running"] = False
     backend_section = _build_backend_section(live_payload, live_error=live_error)
     browser_section = _build_browser_section(live_payload)
+    directories = directory_health(app_paths)
     presentation = dict((live_payload or {}).get("presentation") or {})
     stability = dict((live_payload or {}).get("stability") or {})
     overall_status = str(presentation.get("overall_state") or "") or _classify_overall_status(
@@ -145,6 +148,7 @@ def collect_status_report(*, warmup: bool = False) -> StatusReport:
         guidance=guidance,
         presentation=presentation,
         stability=stability,
+        directories=directories,
         live_error=live_error,
     )
 
@@ -181,6 +185,13 @@ def render_status_report(report: StatusReport) -> str:
         )
     lines.extend(
         [
+            "",
+            "Directories",
+            "  checked from this process; runtime status is independent of directory access",
+            *[
+                f"  {name}: {item['state']} ({item['path']})"
+                for name, item in report.directories.items()
+            ],
             "",
             "Automation Service",
             f"  running: {_yes_no(report.automation_service['running'])}",
@@ -238,6 +249,26 @@ def status_report_to_json_data(report: StatusReport) -> dict[str, Any]:
     available_actions = list(report.presentation.get("available_actions") or [])
     return {
         "status": report.overall_status,
+        "status_scope": "runtime",
+        "health": {
+            "service": {
+                "status": "pass"
+                if report.daemon_state == "running" and not report.live_error
+                else "warn"
+                if report.daemon_state == "stopped"
+                else "fail",
+                "state": report.daemon_state,
+            },
+            "extension": {
+                "status": "pass"
+                if report.backend["extension_connected"]
+                and report.backend["extension_capability_complete"]
+                else "warn",
+                "connected": bool(report.backend["extension_connected"]),
+                "capability_complete": bool(report.backend["extension_capability_complete"]),
+            },
+            **report.directories,
+        },
         "daemon": {
             "state": report.daemon["state"],
             "pid": report.daemon["pid"],

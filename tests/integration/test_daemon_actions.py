@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 from tests.integration.fixture_server import run_fixture_server
 
+from browser_cli.browser.launch_preflight import ensure_browser_launch_allowed
 from browser_cli.cli.main import main
 from browser_cli.daemon.client import send_command
 from browser_cli.errors import (
@@ -25,6 +26,7 @@ from browser_cli.profiles.discovery import discover_chrome_executable
 
 def _can_launch_daemon_browser() -> bool:
     try:
+        ensure_browser_launch_allowed()
         executable_path = discover_chrome_executable()
     except Exception:
         return False
