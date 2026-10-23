@@ -111,7 +111,10 @@ export class BrowserCliClient {
 
   async #resolveSocket() {
     if (this.socketPath) return;
-    this._pathsPromise ||= this.#runCli(['paths', '--json']);
+    this._pathsPromise ||= this.#runCli(['paths', '--json']).catch((error) => {
+      this._pathsPromise = undefined;
+      throw error;
+    });
     const payload = await this._pathsPromise;
     if (typeof payload.data?.socket_path !== 'string') {
       throw new BrowserCliError('Installed Browser CLI does not provide socket_path. Upgrade Browser CLI.');

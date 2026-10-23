@@ -111,7 +111,7 @@ the implementation, and where should a change land first.
 - Shared daemon state:
   `src/browser_cli/daemon/state.py`
 - Daemon-memory async command run registry:
-  `src/browser_cli/daemon/run_registry.py`
+  `src/browser_cli/daemon/run_registry.py`. Retain captured results before cleanup; cleanup failures still mark the run failed.
 - Request and background-read coordination, including exclusive batches:
   `src/browser_cli/daemon/execution.py`, wired once by `src/browser_cli/daemon/state.py`
 - Browser lifecycle, driver selection, safe-point rebinding, read-page flow, and ref-aware command routing:
@@ -300,7 +300,7 @@ public interactive commands.
   per clone with `git config core.hooksPath .githooks`.
 - Public daemon-backed actions should be added through `ActionSpec`, not by manually bolting ad hoc parsers into `main.py`.
 - The lifecycle command `browser-cli reload` and the page action `browser-cli page-reload` are intentionally different surfaces. Do not collapse them.
-- `batch` request validation happens before executing steps. Steps keep the standard response envelope and index; batch `ok` describes request handling while `data.success` describes step success. Context isolation uses Playwright through the daemon and reports `state_reset` when switching from extension mode. Batch forbids nested batches, global lifecycle changes, profile reconfiguration, and asynchronous run management.
+- `batch` request validation happens before executing steps. Steps keep the standard response envelope and index; batch `ok` describes request handling while `data.success` describes step success. Context isolation starts the shared managed Playwright backend without rebinding the active driver or resetting extension tabs; `state_reset` reports an actual shared-driver change. Batch forbids nested batches, global lifecycle changes, profile reconfiguration, and asynchronous run management.
 - Public daemon commands return JSON payloads. Preserve `ok/data/meta` shape and machine-readable error codes.
 - `runtime-status` is the agent/runtime truth surface; popup code may read and render it, but must not redefine runtime state semantics.
 - Tab targeting is agent-scoped. Do not add public `--page`, `--page-id`, session IDs, or similar cross-agent escape hatches.

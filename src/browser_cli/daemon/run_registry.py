@@ -103,9 +103,8 @@ class CommandRunRegistry:
         record = self._runs[run_id]
         try:
             async with self._execution.scope():
-                result = await self._read_in_scope(record)
+                await self._read_in_scope(record)
             record["status"] = "succeeded"
-            record["result"] = dict(result)
             self._event(record, "completed", "Read run completed.")
         except asyncio.CancelledError:
             record["status"] = "canceled"
@@ -135,7 +134,9 @@ class CommandRunRegistry:
             if self._begin_handler is not None:
                 await self._begin_handler("read-async")
                 command_started = True
-            return await self._read_handler(dict(record["args"]))
+            result = await self._read_handler(dict(record["args"]))
+            record["result"] = dict(result)
+            return result
         finally:
             if command_started and self._end_handler is not None:
                 record["meta"] = await self._end_handler()

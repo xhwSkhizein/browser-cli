@@ -154,3 +154,22 @@ test('version rejection by a newer daemon keeps both versions and reload guidanc
     error.code === 'DAEMON_INCOMPATIBLE' && error.payload.actual_runtime_version === 'newer-runtime' &&
     error.payload.expected_runtime_version === runtimeVersion && /reload/.test(error.message));
 });
+
+
+test('retries failed paths discovery and shares concurrent attempts', async (t) => {
+  const { dir, path } = await daemon(t, (_, socket) => socket.end(JSON.stringify(success()) + '\n'));
+  const script = join(dir, 'retry-paths.mjs');
+  const calls = join(dir, 'path-calls');
+  writeFileSync(script, `#!${process.execPath}\nimport { appendFileSync, existsSync } from 'node:fs';\nconst first = !existsSync(${JSON.stringify(calls)});\nappendFileSync(${JSON.stringify(calls)}, 'paths\\n');\nif (first) { console.error('temporary discovery failure'); process.exit(1); }\nconsole.log(${JSON.stringify(JSON.stringify(success({ socket_path: path })))});\n`, { mode: 0o700 });
+  const client = new BrowserCliClient({ command: script });
+  const failed = await Promise.allSettled([client.request('info'), client.request('info')]);
+  for (const result of failed) {
+    assert.equal(result.status, 'rejected');
+    assert.match(result.reason.message, /temporary discovery failure/);
+  }
+  assert.equal(readFileSync(calls, 'utf8'), 'paths\n');
+  await Promise.all([client.request('info'), client.request('info')]);
+  await client.request('info');
+  assert.equal(client.socketPath, path);
+  assert.equal(readFileSync(calls, 'utf8'), 'paths\npaths\n');
+});

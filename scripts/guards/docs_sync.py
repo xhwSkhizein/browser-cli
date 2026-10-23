@@ -11,6 +11,7 @@ REQUIRED_AGENT_PHRASES = [
     "Screenshots return actual image dimensions and capture geometry.",
     "The packaged Node.js client lives under `browser_cli.task_runtime/node`",
     "including background async reads",
+    "Context isolation starts the shared managed Playwright backend without rebinding the active driver or resetting extension tabs",
     "DAEMON_INCOMPATIBLE",
     "On macOS, check sandbox access to LaunchServices before launching Chrome.",
     "Managed profile mode is the default browser backend.",

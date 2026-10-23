@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import io
 import math
@@ -108,6 +109,10 @@ async def capture_tiled(
                 canvas.paste(
                     image.convert("RGBA").crop((0, 0, pixels_wide, pixels_high)), (left, top)
                 )
+    return await asyncio.to_thread(_encode_capture, canvas, image_format, profile)
+
+
+def _encode_capture(canvas: Image.Image, image_format: str, profile: bytes | None) -> bytes:
     output = io.BytesIO()
     metadata = {"icc_profile": profile} if profile else {}
     if image_format == "jpeg":

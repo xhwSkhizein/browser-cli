@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import io
+import threading
 
 import pytest
 from PIL import Image, ImageCms, ImageDraw
@@ -133,3 +134,40 @@ def test_oversized_tile_capture_fails_before_allocating_or_scrolling(tmp_path):
     assert page.tiles == []
     assert page.position == {"x": 0, "y": 300}
     assert not output.exists()
+
+
+@pytest.mark.parametrize("suffix", ["png", "jpg"])
+def test_final_image_conversion_and_encoding_run_outside_event_loop(tmp_path, monkeypatch, suffix):
+    loop_thread = threading.get_ident()
+    save = Image.Image.save
+    convert = Image.Image.convert
+    encoded = []
+    converted = []
+
+    def checked_convert(image, *args, **kwargs):
+        if image.size == (785, 2400):
+            converted.append(threading.get_ident())
+        return convert(image, *args, **kwargs)
+
+    def checked_save(image, fp, *args, **kwargs):
+        if image.size == (785, 2400):
+            encoded.append(threading.get_ident())
+            assert threading.get_ident() != loop_thread
+            assert kwargs["icc_profile"] == PROFILE
+            assert kwargs["format"] == ("JPEG" if suffix == "jpg" else "PNG")
+            if suffix == "jpg":
+                assert kwargs["quality"] == 80
+        return save(image, fp, *args, **kwargs)
+
+    monkeypatch.setattr(Image.Image, "convert", checked_convert)
+    monkeypatch.setattr(Image.Image, "save", checked_save)
+    service = BrowserService()
+    service._pages["page"] = ScrollbarCapturePage()
+    output = tmp_path / f"threaded.{suffix}"
+    asyncio.run(service.screenshot("page", path=str(output), full_page=True))
+    assert len(encoded) == 1
+    if suffix == "jpg":
+        assert converted == encoded
+    with Image.open(output) as image:
+        assert image.size == (785, 2400)
+        assert image.info["icc_profile"] == PROFILE

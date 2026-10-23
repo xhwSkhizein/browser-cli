@@ -113,8 +113,10 @@ def test_batch_validates_before_running_any_step(extra):
     assert seen == []
 
 
-def test_isolated_batch_closes_context_on_failed_step():
+@pytest.mark.parametrize("driver", ["playwright", "extension"])
+def test_isolated_batch_closes_context_on_failed_step(driver):
     app, service, _ = app_with_steps()
+    service.active_driver_name = driver
     # Exercise the real child app handler with an invalid argument, before page access.
     response = asyncio.run(
         app.execute(
@@ -133,6 +135,9 @@ def test_isolated_batch_closes_context_on_failed_step():
     assert service.closed
     assert response.data["context"]["closed"] is True
     assert response.data["context"]["locale"] == "en-US"
+    assert response.data["state_reset"] is False
+    assert response.meta["state_reset"] is False
+    assert response.meta["driver"] == driver
 
 
 def test_isolated_request_waits_for_other_agents_and_holds_shared_commands():

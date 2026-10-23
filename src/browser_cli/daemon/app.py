@@ -300,7 +300,10 @@ class BrowserDaemonApp:
                     await asyncio.gather(running, return_exceptions=True)
                     raise
             data["context"] = {**options.metadata(), "closed": True}
-            data["state_reset"] = before_driver != "playwright"
+            data["state_reset"] = (
+                before_driver is not None
+                and before_driver != self._state.browser_service.active_driver_name
+            )
             return data
         return await self._run_batch_commands(request, commands, stop_on_error, result_mode)
 

@@ -94,7 +94,7 @@ browser-cli batch --file commands.json --context-file context.json --result-mode
 
 每个文件最多 10 MiB，最多八个文件。后台会把字体内容嵌入上下文，后续页面无需访问原字体 URL。系统字体名称仍依赖本机安装情况；封闭的 Shadow DOM 或页面自行修改样式也可能影响渲染。
 
-临时上下文使用后台管理的 Chrome 进程。若当前使用扩展驱动，明确请求隔离运行会切换到托管驱动，并在结果的 `meta.state_reset` 和 `data.state_reset` 中报告重建共享标签页的状态。切换可能丢失共享页面的内存状态，登录状态也可能因配置不同而变化。
+临时上下文使用后台管理的 Chrome 进程。当前使用扩展驱动时，后台会启动托管后端供临时上下文使用，共享工作区继续使用扩展驱动，原有标签页及页面内存状态得以保留。正常隔离运行的 `meta.state_reset` 和 `data.state_reset` 均为 `false`；只有共享驱动确实发生切换时才报告 `true`。临时上下文拥有独立存储，不继承扩展页面的登录状态。
 
 ## 从 Node.js 调用
 

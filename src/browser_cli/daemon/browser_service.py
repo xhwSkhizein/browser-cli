@@ -1138,8 +1138,9 @@ class BrowserService:
                 raise OperationFailedError(
                     "The browser became busy while starting an isolated context."
                 )
-            if self._driver_name != "playwright":
-                await self._activate_driver("playwright", reason="isolated-context-requested")
+            # The disposable context borrows managed Chrome without rebinding
+            # the shared workspace or replacing its extension tabs.
+            await self._playwright.ensure_started()
             driver = await self._playwright.create_isolated_driver(options)
             service = BrowserService(tabs=tabs)
             service._isolated = True

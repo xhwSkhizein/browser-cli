@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -752,3 +753,46 @@ def test_browser_service_command_forces_playwright_when_extension_is_still_disco
         await service.stop()
 
     asyncio.run(_scenario())
+
+
+@pytest.mark.parametrize("fail_context", [False, True])
+def test_isolated_context_preserves_extension_tabs(_patched_browser_service, fail_context):
+    from browser_cli.browser.context import ContextOptions
+
+    async def scenario():
+        _patched_browser_service.connect()
+        tabs = TabRegistry()
+        service = browser_service_module.BrowserService(tabs)
+        try:
+            await service.begin_command("open")
+            page = await service.new_tab(url="https://example.com")
+            record = await tabs.add_tab(page_id=page["page_id"], owner_agent_id="agent")
+            record.last_snapshot_id = "keep-snapshot"
+            await service.end_command()
+            extension = service._extension
+            pages = dict(extension.pages)
+            child = _FakePlaywrightDriver()
+            service._playwright.create_isolated_driver = AsyncMock(return_value=child)
+            try:
+                async with service.isolated_context(ContextOptions(), TabRegistry()) as isolated:
+                    assert isolated.active_driver_name == "playwright"
+                    assert service.active_driver_name == "extension"
+                    assert not extension.stopped
+                    if fail_context:
+                        raise RuntimeError("isolated action failed")
+            except RuntimeError as exc:
+                assert fail_context and str(exc) == "isolated action failed"
+            assert child.stopped
+            assert service._playwright.started
+            assert not service._playwright.stopped
+            assert service.active_driver_name == "extension"
+            assert extension.pages == pages
+            assert record.last_snapshot_id == "keep-snapshot"
+            assert service._command_depth == 0
+            await service.begin_command("wait")
+            await service.wait(page["page_id"], seconds=0)
+            assert (await service.end_command())["driver"] == "extension"
+        finally:
+            await service.stop()
+
+    asyncio.run(scenario())
