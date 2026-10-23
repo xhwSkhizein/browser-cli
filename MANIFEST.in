@@ -1,1 +1,6 @@
 recursive-include skills *
+recursive-include node *.mjs *.json
+recursive-include browser-cli-extension *.js *.html *.css *.json
+recursive-include tests *.py
+include docs/automation-api-zh.md
+include scripts/smoke_installed_wheel.py

@@ -10,6 +10,7 @@ import pytest
 from browser_cli import __version__
 from browser_cli.commands.reload import run_reload_command
 from browser_cli.commands.status import StatusReport, collect_status_report, run_status_command
+from browser_cli.daemon.transport import DAEMON_RUNTIME_VERSION
 from browser_cli.errors import DaemonNotAvailableError, OperationFailedError
 
 
@@ -63,7 +64,7 @@ def test_status_json_returns_stable_agent_schema(tmp_path: Path) -> None:
     run_info = {
         "pid": 4083,
         "package_version": __version__,
-        "runtime_version": "2026-04-10-dual-driver-extension-v1",
+        "runtime_version": DAEMON_RUNTIME_VERSION,
     }
     runtime_status = {
         "browser_started": True,
@@ -106,10 +107,16 @@ def test_status_json_returns_stable_agent_schema(tmp_path: Path) -> None:
     ):
         payload = json.loads(run_status_command(Namespace(json=True)))
 
+    health = payload["data"]["health"]
+    assert set(health) == {"service", "extension", "config_dir", "managed_profile", "output_dir"}
+    assert health["service"] == {"status": "pass", "state": "running"}
+    assert health["extension"]["connected"] is True
     assert payload == {
         "ok": True,
         "data": {
             "status": "degraded",
+            "status_scope": "runtime",
+            "health": health,
             "daemon": {"state": "running", "pid": 4083, "socket_reachable": True},
             "backend": {
                 "active_driver": "extension",
@@ -139,7 +146,7 @@ def test_collect_status_report_when_managed_backend_is_degraded(tmp_path: Path) 
     run_info = {
         "pid": 123,
         "package_version": __version__,
-        "runtime_version": "2026-04-10-dual-driver-extension-v1",
+        "runtime_version": DAEMON_RUNTIME_VERSION,
     }
     runtime_status = {
         "browser_started": True,
@@ -205,7 +212,7 @@ def test_collect_status_report_uses_daemon_presentation_snapshot(tmp_path: Path)
     run_info = {
         "pid": 123,
         "package_version": __version__,
-        "runtime_version": "2026-04-10-dual-driver-extension-v1",
+        "runtime_version": DAEMON_RUNTIME_VERSION,
     }
     runtime_status = {
         "browser_started": True,
@@ -276,7 +283,7 @@ def test_collect_status_report_renders_stability_section(tmp_path: Path) -> None
     run_info = {
         "pid": 123,
         "package_version": __version__,
-        "runtime_version": "2026-04-10-dual-driver-extension-v1",
+        "runtime_version": DAEMON_RUNTIME_VERSION,
     }
     runtime_status = {
         "browser_started": True,

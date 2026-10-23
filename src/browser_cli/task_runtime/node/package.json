@@ -1,0 +1,9 @@
+{
+  "name": "browser-cli-client",
+  "version": "0.1.0",
+  "browserCliRuntimeVersion": "2026-10-22-capture-context-batch-v2",
+  "description": "Structured Node.js client for the Browser CLI daemon",
+  "type": "module",
+  "engines": { "node": ">=18" },
+  "exports": "./client.mjs"
+}

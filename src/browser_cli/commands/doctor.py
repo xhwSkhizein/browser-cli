@@ -20,6 +20,7 @@ from browser_cli.automation.service.client import (
 )
 from browser_cli.constants import AppPaths, get_app_paths
 from browser_cli.daemon.client import run_info_is_compatible, send_command
+from browser_cli.daemon.health import directory_health, directory_writable
 from browser_cli.daemon.transport import probe_socket, read_run_info
 from browser_cli.outputs.json import render_json_payload
 
@@ -54,6 +55,8 @@ def collect_doctor_report() -> dict[str, Any]:
         _chrome_candidates_check(),
         _playwright_check(),
         _home_check(app_paths),
+        _config_dir_check(app_paths),
+        _output_dir_check(app_paths),
         _managed_profile_check(),
         _daemon_check(app_paths),
         _automation_service_check(app_paths),
@@ -69,13 +72,24 @@ def collect_doctor_report() -> dict[str, Any]:
         overall_status = "warn"
     return {
         "overall_status": overall_status,
+        "status_scope": "environment",
+        "runtime_status": (daemon_payload or {}).get("presentation", {}).get("overall_state"),
+        "health": {
+            "service": {"status": next(item.status for item in checks if item.id == "daemon")},
+            "extension": {"status": next(item.status for item in checks if item.id == "extension")},
+            **directory_health(app_paths),
+        },
         "environment": environment,
         "checks": [asdict(item) for item in checks],
     }
 
 
 def render_doctor_report(report: dict[str, Any]) -> str:
-    lines = [f"Doctor: {report['overall_status']}", ""]
+    lines = [
+        f"Doctor: {report['overall_status']} (environment checks)",
+        "Service reachability, extension connection, and directory access are checked separately.",
+        "",
+    ]
     for check in report["checks"]:
         details = f" ({check['details']})" if check.get("details") else ""
         lines.append(f"{check['id']}: {check['status']} - {check['summary']}{details}")
@@ -165,6 +179,30 @@ def _home_check(app_paths: AppPaths) -> DoctorCheck:
         status="pass",
         summary="Browser CLI home is ready.",
         details=str(app_paths.home),
+    )
+
+
+def _config_dir_check(app_paths: AppPaths) -> DoctorCheck:
+    check = _home_check(app_paths)
+    return DoctorCheck(
+        id="config_dir",
+        status=check.status,
+        summary=check.summary,
+        details=check.details,
+        next=check.next,
+    )
+
+
+def _output_dir_check(app_paths: AppPaths) -> DoctorCheck:
+    health = directory_health(app_paths)["output_dir"]
+    return DoctorCheck(
+        id="output_dir",
+        status=health["status"],
+        summary=f"Output directory: {health['state']}.",
+        details=health["path"],
+        next="fix output directory access or set BROWSER_CLI_HOME to a writable directory"
+        if health["status"] == "fail"
+        else None,
     )
 
 
@@ -448,7 +486,7 @@ def _daemon_runtime_payload() -> dict[str, Any] | None:
 
 
 def _is_writable_directory(path: Path) -> bool:
-    return path.is_dir() and os.access(path, os.W_OK)
+    return directory_writable(path)
 
 
 def _runtime_reachability_check(

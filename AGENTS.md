@@ -26,9 +26,20 @@ the implementation, and where should a change land first.
 - `read` stays intentionally small: one URL positional plus `--snapshot`, `--scroll-bottom`, `--json`, and `--async`; async read creates daemon-memory runs for polling.
 - Managed profile mode is the default browser backend.
 - Managed profile mode uses Browser CLI's dedicated Chrome data root at `~/.browser-cli/default-profile`.
+- `BROWSER_CLI_HOME` relocates that managed profile to `<runtime-home>/default-profile` as well as sockets and artifacts; independent runtimes must not share the default profile accidentally.
 - Extension mode is the preferred real-Chrome backend when the Browser CLI extension is connected and healthy.
 - `browser-cli status` is the first-line lifecycle diagnosis command.
 - `browser-cli status --json` is the stable agent-facing runtime status surface.
+- `status --json` classifies runtime health; `doctor --json` classifies environment health. Both expose separate `health` entries for service, extension, configuration, managed profile, and output directory. Filesystem probes describe the caller's permissions and must not override daemon-owned presentation.
+- `browser-cli batch` executes ordered actions with compact result modes. An explicit `context` creates a disposable context in the daemon-managed Chrome, with fixed viewport, DPR, CSS zoom, locale, timezone, and fonts (with CSP bypass for injected styles); it closes on success, failure, or server-task cancellation. Client timeout or disconnect leaves the batch running until completion and cleanup, without replay. Batches wait for shared commands, including background async reads, and exclude browser actions until completion; runtime status, run polling, and cancellation remain observable. Ordinary parallel actions retain immediate busy-tab errors.
+- Screenshot CDP sessions live until their page closes: detaching after capture clears Chrome emulation, including Playwright viewport/DPR. Inspect `browser/service.py::_capture_sessions` if capture unexpectedly changes page geometry.
+- Extension resize or controlled capture fails at non-100% Chrome zoom -> CDP metrics use device-independent units while page geometry uses CSS pixels -> inspect `browser-cli-extension/src/debugger.js::viewportMetrics`; compensate using `chrome.tabs.getZoom`, preserve page DPR, and wait for geometry to settle without changing user zoom settings.
+- Extension clip dimensions lose pixels at fractional Chrome zoom -> CDP rounds fractional DIP capture bounds -> inspect `debugger.js::cropCapture`; capture an enclosing integer region as PNG, then crop at the requested output density before PNG/JPEG encoding. The live extension smoke also checks crop pixel colors, not only image headers.
+- Rectangle screenshot changes colors -> Chrome can omit the display ICC profile from the rectangle image -> inspect `debugger.js::preserveCaptureColorProfile`; restore metadata from an un-clipped capture before DOM image decoding in `src/offscreen_image.js`. Share the existing offscreen document transport with video via `src/offscreen_client.js` and retain color comparisons against the full screenshot in the live smoke.
+- Linux screenshot leaves a scrollbar-width geometry change -> Chromium beyond-viewport capture can permanently suppress classic scrollbars; waiting or toggling the CDP scrollbar state does not reliably restore browser preferences -> inspect `browser/service.py::screenshot` and `browser/raster.py`; use painted viewport tiles for regions beyond the visible viewport, preserve ICC while composing with Pillow, and restore scroll in the outer finally block. Keep bottom-pixel assertions: merely disabling beyond-viewport on a large clip returns blank unpainted content despite correct image dimensions.
+- Screenshots return actual image dimensions and capture geometry. Full-page/rectangle capture must not resize the page; explicit temporary viewports restore viewport and scroll in `finally`. A successful capture confirms identical before/after page geometry.
+- The extension's optional `screenshot-controls` capability gates controlled captures; stale extensions must fail before capture instead of ignoring parameters.
+- The packaged Node.js client lives under `browser_cli.task_runtime/node`; `browser-cli paths --json` exposes `node_client` and `socket_path`. It uses the same daemon action protocol and agent scoping as Python, never a second runtime. Every Node request checks daemon `runtime_version` before browser work; mismatch returns `DAEMON_INCOMPATIBLE` with upgrade/reload guidance. The packaged `package.json` runtime version must match `daemon/transport.py`, enforced by the product guard.
 - `browser-cli reload` is the runtime reset command; page reload remains public as `browser-cli page-reload`.
 - `browser-cli workspace rebuild --json` is the precise non-interactive extension workspace binding repair command.
 - `browser-cli recover --json` is the broader agent recovery command and may reload before rebuilding workspace binding.
@@ -100,7 +111,9 @@ the implementation, and where should a change land first.
 - Shared daemon state:
   `src/browser_cli/daemon/state.py`
 - Daemon-memory async command run registry:
-  `src/browser_cli/daemon/run_registry.py`
+  `src/browser_cli/daemon/run_registry.py`. Retain captured results before cleanup; cleanup failures still mark the run failed.
+- Request and background-read coordination, including exclusive batches:
+  `src/browser_cli/daemon/execution.py`, wired once by `src/browser_cli/daemon/state.py`
 - Browser lifecycle, driver selection, safe-point rebinding, read-page flow, and ref-aware command routing:
   `src/browser_cli/daemon/browser_service.py`
 
@@ -113,6 +126,12 @@ the implementation, and where should a change land first.
 - Extension-driver action mixins:
   `src/browser_cli/drivers/_extension/*.py`
 
+- Controlled screenshot validation and disposable context settings:
+  `src/browser_cli/browser/capture.py`, `src/browser_cli/browser/context.py`, `src/browser_cli/browser/raster.py`
+- Shared caller filesystem diagnostics:
+  `src/browser_cli/daemon/health.py`
+- Node.js client and protocol tests:
+  `src/browser_cli/task_runtime/node/client.mjs`, `node/tests/*`
 - Low-level Playwright browser primitives, page state, screenshots, PDF, eval, input, storage, tracing, and video:
   `src/browser_cli/browser/service.py`, `src/browser_cli/browser/session.py`
 - Snapshot capture helpers:
@@ -186,10 +205,19 @@ the implementation, and where should a change land first.
 - If the user reports daemon startup, stale socket, or reload issues:
   inspect `src/browser_cli/daemon/client.py`, `src/browser_cli/daemon/transport.py`, `src/browser_cli/commands/status.py`, and `src/browser_cli/commands/reload.py`.
   If startup fails while waiting for an extension session, inspect `src/browser_cli/daemon/browser_service.py::ensure_started`; extension handshake wait is a best-effort preference signal and must fall back to Playwright instead of aborting daemon startup.
+- On macOS, check sandbox access to LaunchServices before launching Chrome.
+  `Google Chrome quit unexpectedly` with `SIGABRT` in `_RegisterApplication` / `TransformProcessType`
+  -> an agent sandbox denied desktop service access during startup, even if the popup appears after the task
+  -> inspect `src/browser_cli/browser/launch_preflight.py`, `browser/service.py`, and `browser/session.py`
+  -> reuse the existing daemon/extension via `browser-cli status --json`, or start Browser CLI outside the agent sandbox with elevated execution permission. Do not retry direct Playwright launches inside that sandbox; integration availability probes must run the same preflight before launching.
+  Match the report's PID, executable, and parent process to the launching command first. Independent Playwright test runners can launch Chrome for Testing directly and bypass Browser CLI entirely; those launchers need their own preflight and approved execution outside the sandbox.
 - If the user reports that agent automation cannot decide whether Browser CLI is healthy:
   inspect `src/browser_cli/commands/status.py`, `src/browser_cli/daemon/runtime_presentation.py`, and `src/browser_cli/commands/recovery.py`; `status --json` should remain a stable projection of daemon-owned presentation.
 - If the user reports stale or absent extension workspace binding:
   inspect `src/browser_cli/commands/recovery.py`, `src/browser_cli/daemon/app.py::_handle_workspace_rebuild_binding`, and `src/browser_cli/daemon/browser_service.py::rebuild_workspace_binding`; safe repair is `browser-cli workspace rebuild --json` or `browser-cli recover --json`.
+- Batch overlaps async read or rejects isolation as busy -> background run outlived its start request -> inspect `daemon/execution.py`, `daemon/state.py`, and `daemon/run_registry.py`; browser work must hold the shared coordinator through lifecycle cleanup, while polling/cancel requests bypass the gate. A run canceled before its coroutine starts must still reach `canceled` via its task completion callback.
+- Canceled isolated batch emits unhandled Playwright futures -> cancellation interrupted a pending protocol call -> inspect `daemon/app.py::_handle_batch`; shield the child batch, close its owned context, and drain the child task before releasing exclusivity.
+- Command cleanup fails or is canceled -> `end_command` may already have decremented the shared command count -> inspect `daemon/app.py::_execute`; mark cleanup as started before awaiting it so exception handlers never repeat it and expose a false idle state.
 - If the user reports async read polling issues:
   inspect `src/browser_cli/daemon/run_registry.py`, `src/browser_cli/commands/runs.py`, and `src/browser_cli/commands/read.py`; first-version run ids are daemon-memory only and do not survive daemon restart.
 - If the user wants a first-run environment check or path discovery for installed users:
@@ -272,6 +300,7 @@ public interactive commands.
   per clone with `git config core.hooksPath .githooks`.
 - Public daemon-backed actions should be added through `ActionSpec`, not by manually bolting ad hoc parsers into `main.py`.
 - The lifecycle command `browser-cli reload` and the page action `browser-cli page-reload` are intentionally different surfaces. Do not collapse them.
+- `batch` request validation happens before executing steps. Steps keep the standard response envelope and index; batch `ok` describes request handling while `data.success` describes step success. Context isolation starts the shared managed Playwright backend without rebinding the active driver or resetting extension tabs; `state_reset` reports an actual shared-driver change. Batch forbids nested batches, global lifecycle changes, profile reconfiguration, and asynchronous run management.
 - Public daemon commands return JSON payloads. Preserve `ok/data/meta` shape and machine-readable error codes.
 - `runtime-status` is the agent/runtime truth surface; popup code may read and render it, but must not redefine runtime state semantics.
 - Tab targeting is agent-scoped. Do not add public `--page`, `--page-id`, session IDs, or similar cross-agent escape hatches.
@@ -294,6 +323,7 @@ public interactive commands.
 - Contract-sensitive areas include CLI parser shape, action catalog parity, daemon lifecycle, semantic refs, driver parity, automation validation, and `X_AGENT_ID` tab isolation.
 - The repository target is Python 3.10+. Keep runtime code and tests on Python 3.10-compatible syntax and stdlib APIs; local 3.12-only constructs can pass ad hoc checks and still fail CI collection, lint, or guards.
 - `scripts/guards/python_compatibility.py` owns the static Python 3.10 compatibility check; keep new syntax and stdlib-API regression rules there so local 3.12 development fails before CI does.
+- Integration socket fixtures must create the socket parent before each bind. Cover both short homes (socket under `<home>/run`) and long homes (hashed socket under the existing temporary directory); testing only the latter can hide missing-directory setup bugs.
 - Tests and task fixtures must resolve repo assets relative to the checked-out repository, not a developer-specific absolute workspace path; CI runners will fail on hard-coded local paths first.
 - `scripts/lint.sh` owns repository lint execution.
 - `scripts/test.sh` owns repository test execution.
@@ -301,6 +331,7 @@ public interactive commands.
 - `scripts/check.sh` runs lint, tests, and guard in the expected order.
 - The guard implementations live under `scripts/guards/`.
 - Repo-local test runs should refresh the editable package with `uv sync --dev --reinstall-package browser-control-and-automation-cli` before `pytest`; otherwise daemon compatibility checks can drift after local commits because `setuptools-scm` version metadata lags behind the current checkout.
+- Installed-wheel smoke validation uses `uv run python scripts/smoke_installed_wheel.py dist/<wheel>.whl`; it checks launch permissions first, installs into a temporary venv outside the repo, prepares that Playwright version's ffmpeg in an isolated cache, discovers the packaged Node client, cold-starts a temporary daemon, captures an isolated screenshot, and validates step failure handling.
 - Release builds should use `uv build --no-sources --clear` so stale `dist/` artifacts are not accidentally published alongside the current package.
 - After each code change, run lint and guard as part of the full validation flow.
 - After each code change, run lint, tests, and guard.

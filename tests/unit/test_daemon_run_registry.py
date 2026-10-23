@@ -129,3 +129,41 @@ def test_run_registry_not_found() -> None:
 
     registry = CommandRunRegistry(read_handler=_read)
     assert registry.status("run_missing")["status"] == "not_found"
+
+
+def test_cancel_before_read_task_starts_reaches_a_terminal_status() -> None:
+    async def scenario():
+        async def read(args):
+            raise AssertionError("Canceled read must not start")
+
+        registry = CommandRunRegistry(read_handler=read)
+        run_id = registry.start_read({"url": "https://example.com"})["run_id"]
+        registry.cancel(run_id)
+        await registry.wait_for_idle()
+        assert registry.status(run_id)["status"] == "canceled"
+
+    asyncio.run(scenario())
+
+
+def test_read_result_survives_cleanup_failure() -> None:
+    async def scenario():
+        async def begin(command):
+            pass
+
+        async def read(args):
+            return {"body": "already captured"}
+
+        async def end():
+            assert registry.status(run_id)["result"] == {"body": "already captured"}
+            raise RuntimeError("cleanup failed")
+
+        registry = CommandRunRegistry(read_handler=read, begin_handler=begin, end_handler=end)
+        run_id = registry.start_read({"url": "https://example.com"})["run_id"]
+        await registry.wait_for_idle()
+        status = registry.status(run_id)
+        assert status["status"] == "failed"
+        assert status["result"] == {"body": "already captured"}
+        assert status["error"] == {"message": "cleanup failed", "type": "RuntimeError"}
+        assert registry.logs(run_id)["events"][-1]["event"] == "failed"
+
+    asyncio.run(scenario())

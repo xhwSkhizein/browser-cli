@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+import math
 from argparse import ArgumentParser, Namespace
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 RequestBuilder = Callable[[Namespace], dict[str, Any]]
@@ -25,6 +27,13 @@ class ActionSpec:
 
 def get_action_specs() -> list[ActionSpec]:
     return [
+        ActionSpec(
+            "batch",
+            "Run a sequence of browser actions as one request.",
+            "Run ordered actions, optionally in a disposable browser context. Results use the daemon JSON contract.",
+            _add_batch_arguments,
+            _batch_request,
+        ),
         ActionSpec(
             "open",
             "Open a URL in a new tab.",
@@ -312,7 +321,7 @@ def get_action_specs() -> list[ActionSpec]:
             "Save a screenshot.",
             "Save a screenshot to path.",
             _add_screenshot_arguments,
-            _default_request,
+            _screenshot_request,
         ),
         ActionSpec(
             "pdf",
@@ -674,6 +683,25 @@ def _add_wait_network_arguments(parser: ArgumentParser) -> None:
 def _add_screenshot_arguments(parser: ArgumentParser) -> None:
     parser.add_argument("path", help="Output path.")
     parser.add_argument("--full-page", action="store_true", help="Capture the full page.")
+    parser.add_argument(
+        "--page-range",
+        choices=["viewport", "full"],
+        help="Capture the current viewport or the full page. Defaults to viewport.",
+    )
+    parser.add_argument(
+        "--clip",
+        metavar="X,Y,WIDTH,HEIGHT",
+        help="Capture a page rectangle without changing the page viewport.",
+    )
+    parser.add_argument("--viewport-width", type=int, help="Temporary capture viewport width.")
+    parser.add_argument("--viewport-height", type=int, help="Temporary capture viewport height.")
+    parser.add_argument(
+        "--device-scale-factor",
+        "--dpr",
+        dest="device_scale_factor",
+        type=float,
+        help="Image pixel ratio; preserves the page devicePixelRatio. Use context settings for page DPR.",
+    )
 
 
 def _add_path_arguments(parser: ArgumentParser) -> None:
@@ -851,6 +879,80 @@ def _default_request(args: Namespace) -> dict[str, Any]:
             continue
         payload[key] = value
     return payload
+
+
+def _screenshot_request(args: Namespace) -> dict[str, Any]:
+    payload = _default_request(args)
+    page_range = payload.pop("page_range", None)
+    if page_range == "viewport" and payload.get("full_page"):
+        raise ValueError("--full-page cannot be combined with --page-range viewport.")
+    if page_range is not None:
+        payload["full_page"] = page_range == "full"
+    if payload.get("clip"):
+        if payload.get("full_page"):
+            raise ValueError("--clip cannot be combined with full-page capture.")
+        payload["clip"] = _parse_clip(str(args.clip))
+    return payload
+
+
+def _add_batch_arguments(parser: ArgumentParser) -> None:
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--commands", help="JSON array of {action, args} objects.")
+    source.add_argument("--file", help="UTF-8 file containing the command array.")
+    context = parser.add_mutually_exclusive_group()
+    context.add_argument(
+        "--context", help="JSON settings for a disposable browser context ({} uses defaults)."
+    )
+    context.add_argument("--context-file", help="UTF-8 JSON file containing context settings.")
+    parser.add_argument(
+        "--continue-on-error", action="store_true", help="Continue after a failed step."
+    )
+    parser.add_argument(
+        "--result-mode",
+        choices=["all", "last", "summary"],
+        default="all",
+        help="Keep all results, the final result, or failures only.",
+    )
+
+
+def _batch_request(args: Namespace) -> dict[str, Any]:
+    def load(inline: str | None, path: str | None) -> Any:
+        try:
+            return json.loads(
+                Path(path).expanduser().read_text(encoding="utf-8") if path else inline or "null"
+            )
+        except (OSError, ValueError) as exc:
+            raise ValueError(f"Cannot load batch JSON: {exc}") from exc
+
+    payload = {
+        "commands": load(args.commands, args.file),
+        "stop_on_error": not args.continue_on_error,
+        "result_mode": args.result_mode,
+    }
+    if args.context is not None or args.context_file is not None:
+        payload["context"] = load(args.context, args.context_file)
+        if not isinstance(payload["context"], dict):
+            raise ValueError("context must be a JSON object.")
+    return payload
+
+
+def _parse_clip(value: str) -> dict[str, float]:
+    parts = [part.strip() for part in value.split(",")]
+    if len(parts) != 4:
+        raise ValueError("--clip must be X,Y,WIDTH,HEIGHT.")
+    try:
+        x, y, width, height = (float(part) for part in parts)
+    except ValueError as exc:
+        raise ValueError("--clip values must be numbers.") from exc
+    if (
+        not all(math.isfinite(v) for v in (x, y, width, height))
+        or x < 0
+        or y < 0
+        or width <= 0
+        or height <= 0
+    ):
+        raise ValueError("--clip requires x/y >= 0 and positive width/height.")
+    return {"x": x, "y": y, "width": width, "height": height}
 
 
 def _fill_form_request(args: Namespace) -> dict[str, Any]:

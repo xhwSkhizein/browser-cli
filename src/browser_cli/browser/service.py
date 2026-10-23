@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import contextlib
 import json
 import os
@@ -12,8 +13,12 @@ import urllib.parse
 from pathlib import Path
 from typing import Any
 
+from browser_cli.browser.capture import PAGE_GEOMETRY_JS, CaptureOptions, image_dimensions
+from browser_cli.browser.context import ContextOptions
+from browser_cli.browser.launch_preflight import ensure_browser_launch_allowed
 from browser_cli.browser.models import BrowserLaunchConfig, default_headless
 from browser_cli.browser.network_capture import PlaywrightNetworkObserver
+from browser_cli.browser.raster import PAINTABLE_VIEWPORT_JS, capture_tiled
 from browser_cli.browser.snapshot import SnapshotCapture, capture_snapshot
 from browser_cli.browser.stealth import (
     build_context_options,
@@ -64,6 +69,8 @@ class BrowserService:
         self._headless = default_headless() if headless is None else headless
         self._playwright: Any | None = None
         self._context: Any | None = None
+        self._fixed_viewport: dict[str, int] | None = None
+        self._capture_sessions: dict[str, Any] = {}
         self._pages: dict[str, Any] = {}
         self._page_counter = 0
         self._reusable_startup_pages: list[Any] = []
@@ -92,6 +99,25 @@ class BrowserService:
             )
         self._chrome_environment = chrome_environment
 
+    async def create_isolated_service(self, options: ContextOptions) -> BrowserService:
+        """Borrow this browser process while owning a fresh incognito context."""
+        await self.ensure_started()
+        browser = self._context.browser
+        if browser is None:
+            raise OperationFailedError("Managed Chrome does not expose context creation.")
+        context = await browser.new_context(**options.playwright_options())
+        try:
+            await context.add_init_script(options.init_script())
+        except BaseException:
+            await context.close()
+            raise
+        service = BrowserService(
+            chrome_environment=self._chrome_environment, headless=self._headless
+        )
+        service._context = context
+        service._fixed_viewport = options.playwright_options()["viewport"]
+        return service
+
     async def ensure_started(self) -> None:
         async with self._start_lock:
             if self._context is not None:
@@ -99,6 +125,7 @@ class BrowserService:
             await self._start()
 
     async def _start(self) -> None:
+        ensure_browser_launch_allowed()
         try:
             from playwright.async_api import async_playwright
         except ImportError as exc:  # pragma: no cover
@@ -180,6 +207,7 @@ class BrowserService:
             except Exception:
                 pass
         self._pages.clear()
+        self._capture_sessions.clear()
         self._snapshot_registry.clear()
         self._console_messages.clear()
         self._console_handlers.clear()
@@ -408,6 +436,13 @@ class BrowserService:
         return await self.get_page_summary(page_id)
 
     async def resize(self, page_id: str, *, width: int, height: int) -> dict[str, Any]:
+        if self._fixed_viewport is not None and self._fixed_viewport != {
+            "width": width,
+            "height": height,
+        }:
+            raise InvalidInputError(
+                "The isolated context viewport is fixed. Create another context to use a different size."
+            )
         page = self._require_page(page_id)
         await page.set_viewport_size({"width": width, "height": height})
         return {"page_id": page_id, "width": width, "height": height}
@@ -774,12 +809,131 @@ class BrowserService:
         return {"page_id": page_id, "network_idle": True}
 
     async def screenshot(
-        self, page_id: str, *, path: str, full_page: bool = False
+        self,
+        page_id: str,
+        *,
+        path: str,
+        full_page: bool = False,
+        clip: dict[str, float] | None = None,
+        viewport_width: int | None = None,
+        viewport_height: int | None = None,
+        device_scale_factor: float | None = None,
     ) -> dict[str, Any]:
         page = self._require_page(page_id)
         output_path = self._resolve_output_path(path)
-        await page.screenshot(path=str(output_path), full_page=full_page)
-        return {"page_id": page_id, "path": str(output_path), "full_page": full_page}
+        options = CaptureOptions.from_dict(
+            {
+                "full_page": full_page,
+                "clip": clip,
+                "viewport_width": viewport_width,
+                "viewport_height": viewport_height,
+                "device_scale_factor": device_scale_factor,
+            }
+        )
+        if self._fixed_viewport is not None and options.viewport not in (
+            None,
+            self._fixed_viewport,
+        ):
+            raise InvalidInputError(
+                "Capture viewport must match the fixed isolated context viewport."
+            )
+        before = await page.evaluate(PAGE_GEOMETRY_JS)
+        original_viewport = page.viewport_size
+        if options.viewport is not None and original_viewport is None:
+            raise InvalidInputError("Temporary viewport capture requires a fixed page viewport.")
+        # Detaching a CDP client clears the target's emulation overrides, even
+        # those installed by Playwright. Keep one client per page until it closes.
+        session = self._capture_sessions.get(page_id)
+        if session is None:
+            session = await page.context.new_cdp_session(page)
+            self._capture_sessions[page_id] = session
+        captured: dict[str, Any] | None = None
+
+        def metrics(geometry: dict[str, Any]) -> dict[str, Any]:
+            return {
+                "width": geometry["viewport_width"],
+                "height": geometry["viewport_height"],
+                "screenWidth": geometry.get("screen_width", geometry["viewport_width"]),
+                "screenHeight": geometry.get("screen_height", geometry["viewport_height"]),
+                "deviceScaleFactor": geometry["device_scale_factor"],
+                "mobile": False,
+            }
+
+        try:
+            if options.viewport is not None:
+                await page.set_viewport_size(options.viewport)
+            await page.evaluate("() => document.fonts.ready.then(() => true)")
+            captured = await page.evaluate(PAGE_GEOMETRY_JS)
+            if options.viewport is not None and options.viewport != {
+                "width": captured["viewport_width"],
+                "height": captured["viewport_height"],
+            }:
+                raise OperationFailedError("Requested capture viewport was not applied.")
+            # Chrome keeps screenshot emulation per CDP client. Seed our client
+            # with the existing metrics so capturing cannot reset another client's DPR.
+            await session.send("Emulation.setDeviceMetricsOverride", metrics(captured))
+            capture_clip = options.capture_clip(captured)
+            paintable = await page.evaluate(PAINTABLE_VIEWPORT_JS)
+            fits = (
+                capture_clip["x"] >= captured["scroll_x"]
+                and capture_clip["y"] >= captured["scroll_y"]
+                and capture_clip["x"] + capture_clip["width"]
+                <= captured["scroll_x"] + captured["viewport_width"]
+                and capture_clip["y"] + capture_clip["height"]
+                <= captured["scroll_y"] + captured["viewport_height"]
+            )
+            image_format = "jpeg" if output_path.suffix.lower() in {".jpg", ".jpeg"} else "png"
+            if not fits:
+                image_bytes = await capture_tiled(
+                    page,
+                    session,
+                    capture_clip,
+                    geometry=captured,
+                    paintable=paintable,
+                    density=options.device_scale_factor or captured["device_scale_factor"],
+                    image_format=image_format,
+                )
+            else:
+                result = await session.send(
+                    "Page.captureScreenshot",
+                    {
+                        "format": image_format,
+                        "fromSurface": True,
+                        "captureBeyondViewport": False,
+                        "clip": capture_clip,
+                    },
+                )
+                image_bytes = base64.b64decode(result["data"])
+        finally:
+            if options.viewport is not None:
+                await page.set_viewport_size(original_viewport)
+            await session.send("Emulation.setDeviceMetricsOverride", metrics(before))
+            await page.evaluate(
+                "position => window.scrollTo({left: position.x, top: position.y, behavior: 'instant'})",
+                {"x": before["scroll_x"], "y": before["scroll_y"]},
+            )
+        # Renderer updates can lag restoration of metrics and scroll.
+        # Wait for the original geometry, but keep rejecting persistent changes.
+        for attempt in range(20):
+            after = await page.evaluate(PAGE_GEOMETRY_JS)
+            if before == after:
+                break
+            if attempt < 19:
+                await asyncio.sleep(0.025)
+        if before != after:
+            raise OperationFailedError(
+                f"Page geometry changed during capture; screenshot was not saved. before={before}, after={after}"
+            )
+        size = image_dimensions(image_bytes)
+        output_path.write_bytes(image_bytes)
+        capture = options.metadata(captured, before=before, after=after)
+        return {
+            "page_id": page_id,
+            "path": str(output_path),
+            "full_page": full_page,
+            "capture": capture,
+            "screenshot_size": size,
+        }
 
     async def save_pdf(self, page_id: str, *, path: str) -> dict[str, Any]:
         page = self._require_page(page_id)
@@ -1403,6 +1557,7 @@ class BrowserService:
             await self._remove_page_handlers(page_id)
             await page.close()
         self._pages.pop(page_id, None)
+        self._capture_sessions.pop(page_id, None)
         self._snapshot_registry.clear_page(page_id)
         result: dict[str, Any] = {"page_id": page_id, "closed": True}
         if video is not None and video_requested:

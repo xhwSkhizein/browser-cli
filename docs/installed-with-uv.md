@@ -84,6 +84,15 @@ walkthrough, see [`install-skills.md`](install-skills.md).
 
 ## First Read
 
+On macOS, an agent sandbox can deny Chrome access to desktop services and cause
+a `Google Chrome quit unexpectedly` dialog during startup. Browser CLI checks
+this restriction before launching Chrome and returns `BROWSER_UNAVAILABLE`.
+Run `browser-cli status --json` first: a healthy existing daemon and connected
+extension can be used from the agent without launching another browser. If a new
+browser is needed, start Browser CLI from a normal terminal or have the agent
+request elevated execution outside its sandbox. Headless mode does not remove
+the host sandbox restriction.
+
 Use `read` to verify that Browser CLI can open a page and return output:
 
 ```bash

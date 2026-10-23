@@ -6,37 +6,9 @@ import {
   buildArtifactDescriptor,
   emitBase64Artifact,
 } from './artifact_actions.js';
+import {ensureOffscreenDocument, sendOffscreenCommand} from '../offscreen_client.js';
 
 const DEFAULT_VIDEO_FPS = 8;
-
-async function ensureOffscreenDocument() {
-  if (!chrome.offscreen) {
-    throw new Error('Chrome offscreen documents are not available.');
-  }
-  const hasDocument = typeof chrome.offscreen.hasDocument === 'function'
-    ? await chrome.offscreen.hasDocument()
-    : false;
-  if (hasDocument) {
-    return;
-  }
-  await chrome.offscreen.createDocument({
-    url: 'offscreen.html',
-    reasons: [chrome.offscreen.Reason.DISPLAY_MEDIA, chrome.offscreen.Reason.BLOBS],
-    justification: 'Encode Browser CLI screencast frames into deferred video artifacts.',
-  });
-}
-
-async function sendOffscreenCommand(command, payload) {
-  const response = await chrome.runtime.sendMessage({
-    type: 'offscreen-command',
-    command,
-    payload,
-  });
-  if (!response?.ok) {
-    throw new Error(response?.error || `Offscreen command failed: ${command}`);
-  }
-  return response.data || {};
-}
 
 function defaultVideoFilename(context, tabId) {
   return `${context.pageIdForTab(tabId) || 'page'}.webm`;

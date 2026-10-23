@@ -1,3 +1,5 @@
+import {ensureOffscreenDocument, sendOffscreenCommand} from './offscreen_client.js';
+
 const attached = new Set();
 const traceWaiters = new Map();
 const screencastConsumers = new Map();
@@ -587,27 +589,183 @@ export async function stopTraceNetworkCapture(tabId, traceId = 'trace') {
   return cloneJson(buffer?.records || []);
 }
 
-export async function captureScreenshot(tabId, { format = 'png', fullPage = false } = {}) {
-  if (fullPage) {
-    const metrics = await sendCommand(tabId, 'Page.getLayoutMetrics');
-    const size = metrics.cssContentSize || metrics.contentSize;
-    if (size) {
-      await sendCommand(tabId, 'Emulation.setDeviceMetricsOverride', {
-        mobile: false,
-        width: Math.ceil(size.width),
-        height: Math.ceil(size.height),
-        deviceScaleFactor: 1,
+const viewportOverrides = new Map();
+
+const geometryExpression = `(() => ({
+  viewport_width: innerWidth, viewport_height: innerHeight,
+  page_width: Math.max(document.body?.scrollWidth || 0, document.documentElement.scrollWidth),
+  page_height: Math.max(document.body?.scrollHeight || 0, document.documentElement.scrollHeight),
+  screen_width: screen.width, screen_height: screen.height,
+  scroll_x: scrollX, scroll_y: scrollY, device_scale_factor: devicePixelRatio
+}))()`;
+
+async function pageGeometry(tabId) {
+  const result = await sendCommand(tabId, 'Runtime.evaluate', {
+    expression: geometryExpression, returnByValue: true,
+  });
+  if (result.exceptionDetails || !result.result?.value) throw new Error('Could not read page geometry.');
+  return result.result.value;
+}
+
+async function settledGeometry(tabId, expected) {
+  let previous;
+  let current;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    current = await pageGeometry(tabId);
+    if ((!expected || (current.viewport_width === expected.width && current.viewport_height === expected.height)) &&
+        JSON.stringify(current) === JSON.stringify(previous)) return current;
+    previous = current;
+    await new Promise(resolve => setTimeout(resolve, 25));
+  }
+  throw new Error(`Page geometry did not settle${expected ? ` at ${expected.width}x${expected.height}` : ''}: ${JSON.stringify(current)}`);
+}
+
+function viewportMetrics(width, height, geometry, zoom) {
+  // Chrome's UI zoom changes both CSS viewport size and devicePixelRatio.
+  // Compensate in the emulation metrics without changing the user's zoom.
+  return {
+    mobile: false, width: Math.max(1, Math.round(width * zoom)), height: Math.max(1, Math.round(height * zoom)),
+    deviceScaleFactor: Number((geometry.device_scale_factor / zoom).toFixed(6)),
+  };
+}
+
+async function cropCapture(dataBase64, {rectangle, enclosing, zoom, density, format}) {
+  await ensureOffscreenDocument();
+  const result = await sendOffscreenCommand('image-crop', {dataBase64, rectangle, enclosing, zoom, density, format});
+  if (!result.data_base64) throw new Error('Cropped screenshot is missing image bytes.');
+  return result.data_base64;
+}
+
+function pngColorChunks(bytes) {
+  const signature = [137,80,78,71,13,10,26,10];
+  if (bytes.length < 33 || !signature.every((value, index) => bytes[index] === value)) return null;
+  const colors = [];
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  for (let offset = 8; offset + 12 <= bytes.length;) {
+    const size = view.getUint32(offset);
+    if (offset + size + 12 > bytes.length) return null;
+    const type = String.fromCharCode(...bytes.subarray(offset + 4, offset + 8));
+    if (['iCCP','sRGB','gAMA','cHRM','cICP'].includes(type)) colors.push(bytes.subarray(offset, offset + size + 12));
+    offset += size + 12;
+  }
+  return colors;
+}
+
+async function preserveCaptureColorProfile(tabId, dataBase64) {
+  const bytes = decodeBase64Bytes(dataBase64);
+  const colors = pngColorChunks(bytes);
+  if (colors === null || colors.length) return dataBase64;
+  // Chrome can omit its display ICC profile when taking a rectangle subset.
+  // Copy color metadata from an un-clipped capture before decoding/cropping.
+  const native = await sendCommand(tabId, 'Page.captureScreenshot', {format:'png', fromSurface:true});
+  const reference = pngColorChunks(decodeBase64Bytes(native.data || '')) || [];
+  if (!reference.length) return dataBase64;
+  const restored = new Uint8Array(bytes.length + reference.reduce((sum, chunk) => sum + chunk.length, 0));
+  restored.set(bytes.subarray(0, 33));
+  let offset = 33;
+  for (const chunk of reference) { restored.set(chunk, offset); offset += chunk.length; }
+  restored.set(bytes.subarray(33), offset);
+  return bytesToBase64(restored);
+}
+
+export async function setViewport(tabId, width, height) {
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1 || width > 16384 || height > 16384) {
+    throw new Error('Viewport width and height must be positive integers.');
+  }
+  const before = await settledGeometry(tabId);
+  const zoom = await chrome.tabs.getZoom(tabId);
+  const override = viewportMetrics(width, height, before, zoom);
+  const previousOverride = viewportOverrides.get(tabId);
+  let after;
+  try {
+    await sendCommand(tabId, 'Emulation.setDeviceMetricsOverride', override);
+    after = await settledGeometry(tabId, {width, height});
+    viewportOverrides.set(tabId, override);
+  } catch (error) {
+    if (previousOverride) await sendCommand(tabId, 'Emulation.setDeviceMetricsOverride', previousOverride);
+    else await sendCommand(tabId, 'Emulation.clearDeviceMetricsOverride');
+    throw error;
+  }
+  return { width: after.viewport_width, height: after.viewport_height };
+}
+
+export async function captureScreenshot(
+  tabId,
+  { format = 'png', fullPage = false, clip, viewportWidth, viewportHeight, deviceScaleFactor } = {},
+) {
+  if (fullPage && clip) throw new Error('clip and fullPage cannot be combined.');
+  if (clip && (Object.keys(clip).sort().join(',') !== 'height,width,x,y' ||
+      !Object.values(clip).every((value) => Number.isFinite(value) && value >= 0 && value <= 100000) ||
+      clip.width <= 0 || clip.height <= 0)) throw new Error('Invalid capture rectangle.');
+  const temporaryViewport = viewportWidth !== undefined || viewportHeight !== undefined;
+  if (temporaryViewport && (!Number.isInteger(viewportWidth) || !Number.isInteger(viewportHeight) || viewportWidth < 1 || viewportHeight < 1 || viewportWidth > 16384 || viewportHeight > 16384)) {
+    throw new Error('Supply both positive viewport dimensions.');
+  }
+  if (deviceScaleFactor !== undefined && (!Number.isFinite(deviceScaleFactor) || deviceScaleFactor < 0.1 || deviceScaleFactor > 8)) throw new Error('DPR must be between 0.1 and 8.');
+  const before = await settledGeometry(tabId);
+  const zoom = await chrome.tabs.getZoom(tabId);
+  const previousOverride = viewportOverrides.get(tabId);
+  let captured;
+  let dataBase64;
+  try {
+    if (temporaryViewport) {
+      await sendCommand(tabId, 'Emulation.setDeviceMetricsOverride', viewportMetrics(viewportWidth, viewportHeight, before, zoom));
+    }
+    await sendCommand(tabId, 'Runtime.evaluate', {
+      expression: 'document.fonts.ready.then(() => true)', awaitPromise: true,
+    });
+    captured = await settledGeometry(tabId, temporaryViewport ? {width:viewportWidth, height:viewportHeight} : undefined);
+    const rectangle = clip || (fullPage
+      ? { x: 0, y: 0, width: captured.page_width, height: captured.page_height }
+      : { x: captured.scroll_x, y: captured.scroll_y, width: captured.viewport_width, height: captured.viewport_height });
+    const dipRectangle = Object.fromEntries(Object.entries(rectangle).map(([key, value]) => [key, value * zoom]));
+    const fractional = Object.values(dipRectangle).some(value => Math.abs(value - Math.round(value)) > 1e-6);
+    // Chrome rounds fractional DIP rectangles before capture. Capture an
+    // enclosing integer region, then crop at the requested pixel density.
+    const enclosing = fractional ? {
+      x:Math.floor(dipRectangle.x), y:Math.floor(dipRectangle.y),
+      width:Math.ceil(dipRectangle.x + dipRectangle.width) - Math.floor(dipRectangle.x) + 1,
+      height:Math.ceil(dipRectangle.y + dipRectangle.height) - Math.floor(dipRectangle.y) + 1,
+    } : dipRectangle;
+    const result = await sendCommand(tabId, 'Page.captureScreenshot', {
+      format:'png', fromSurface: true, captureBeyondViewport: true,
+      // CDP capture rectangles use device-independent pixels, while the
+      // public rectangle is in page CSS pixels at the tab's current zoom.
+      clip: {
+        ...enclosing,
+        scale: (deviceScaleFactor || captured.device_scale_factor) / captured.device_scale_factor,
+      },
+    });
+    dataBase64 = await preserveCaptureColorProfile(tabId, String(result.data || ''));
+    if (fractional || format === 'jpeg') {
+      dataBase64 = await cropCapture(dataBase64, {
+        rectangle, enclosing, zoom, density:deviceScaleFactor || captured.device_scale_factor, format,
       });
     }
-  }
-  try {
-    const result = await sendCommand(tabId, 'Page.captureScreenshot', { format });
-    return String(result.data || '');
   } finally {
-    if (fullPage) {
-      await sendCommand(tabId, 'Emulation.clearDeviceMetricsOverride').catch(() => {});
+    if (temporaryViewport) {
+      if (previousOverride) await sendCommand(tabId, 'Emulation.setDeviceMetricsOverride', previousOverride);
+      else await sendCommand(tabId, 'Emulation.clearDeviceMetricsOverride');
+      await settledGeometry(tabId, {width:before.viewport_width, height:before.viewport_height});
     }
+    await sendCommand(tabId, 'Runtime.evaluate', {
+      expression: `window.scrollTo({left: ${before.scroll_x}, top: ${before.scroll_y}, behavior: 'instant'})`,
+    });
   }
+  const after = await settledGeometry(tabId);
+  if (JSON.stringify(before) !== JSON.stringify(after)) throw new Error('Page geometry changed during capture; screenshot was not saved.');
+  return {
+    dataBase64,
+    capture: {
+      page_range: clip ? 'clip' : fullPage ? 'full' : 'viewport',
+      clip: clip || (fullPage
+        ? { x: 0, y: 0, width: captured.page_width, height: captured.page_height }
+        : { x: captured.scroll_x, y: captured.scroll_y, width: captured.viewport_width, height: captured.viewport_height }),
+      viewport: { width: captured.viewport_width, height: captured.viewport_height },
+      device_scale_factor: deviceScaleFactor || captured.device_scale_factor,
+      page_dimensions_unchanged: true, before, after,
+    },
+  };
 }
 
 export async function printToPdf(tabId) {
@@ -716,6 +874,7 @@ export async function handleJavascriptDialog(tabId, { accept = true, promptText 
 export function registerDebuggerListeners() {
   chrome.tabs.onRemoved.addListener((tabId) => {
     attached.delete(tabId);
+    viewportOverrides.delete(tabId);
     screencastConsumers.delete(tabId);
     disposeNetworkSession(tabId);
     const trace = traceWaiters.get(tabId);
@@ -727,6 +886,7 @@ export function registerDebuggerListeners() {
   chrome.debugger.onDetach.addListener((source) => {
     if (source.tabId) {
       attached.delete(source.tabId);
+      viewportOverrides.delete(source.tabId);
       screencastConsumers.delete(source.tabId);
       disposeNetworkSession(source.tabId);
       const trace = traceWaiters.get(source.tabId);

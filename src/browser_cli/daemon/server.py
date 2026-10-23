@@ -103,8 +103,13 @@ class BrowserDaemonServer:
                 error_code="DAEMON_PROTOCOL_ERROR",
                 error_message=str(exc),
             )
-        writer.write((json.dumps(response.to_dict()) + "\n").encode("utf-8"))
-        await writer.drain()
-        writer.close()
-        with contextlib.suppress(Exception):
-            await writer.wait_closed()
+        try:
+            writer.write((json.dumps(response.to_dict()) + "\n").encode("utf-8"))
+            await writer.drain()
+        except (ConnectionError, OSError):
+            # A client timeout/disconnect does not cancel or replay browser work.
+            logger.debug("Client disconnected before the daemon response was delivered")
+        finally:
+            writer.close()
+            with contextlib.suppress(Exception):
+                await writer.wait_closed()

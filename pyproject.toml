@@ -12,6 +12,7 @@ dependencies = [
   "playwright>=1.52,<2",
   "websockets>=12,<16",
   "tomli>=1.2.0; python_version<'3.11'",
+  "pillow>=12.3.0",
 ]
 
 [project.scripts]
@@ -33,6 +34,7 @@ include-package-data = true
 
 [tool.setuptools.package-data]
 "browser_cli.packaged_skills" = ["*/SKILL.md"]
+"browser_cli.task_runtime" = ["node/*.mjs", "node/*.json"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

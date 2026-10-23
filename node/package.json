@@ -1,0 +1,8 @@
+{
+  "name": "browser-cli-client",
+  "version": "0.1.0",
+  "description": "Structured Node.js client for the Browser CLI daemon.",
+  "type": "module",
+  "exports": "./browser-cli-client.mjs",
+  "private": true
+}

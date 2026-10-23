@@ -5,6 +5,7 @@ from __future__ import annotations
 from types import TracebackType
 from typing import Any
 
+from browser_cli.browser.launch_preflight import ensure_browser_launch_allowed
 from browser_cli.browser.models import BrowserLaunchConfig
 from browser_cli.browser.snapshot import capture_snapshot
 from browser_cli.browser.stealth import (
@@ -36,6 +37,7 @@ class BrowserSession:
         await self.close()
 
     async def start(self) -> None:
+        ensure_browser_launch_allowed()
         try:
             from playwright.async_api import async_playwright
         except ImportError as exc:  # pragma: no cover - dependency problem

@@ -11,6 +11,11 @@ from browser_cli.browser.service import BrowserService
 from browser_cli.profiles.discovery import ChromeEnvironment
 
 
+@pytest.fixture(autouse=True)
+def _allow_mock_browser_launch(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("browser_cli.browser.service.ensure_browser_launch_allowed", lambda: None)
+
+
 class _FakePage:
     def __init__(
         self,

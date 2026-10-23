@@ -22,6 +22,22 @@ class BrowserCliTaskClient:
     def command(self, action: str, **args: Any) -> dict[str, Any]:
         return self.invoke(action, **args)
 
+    def batch(
+        self,
+        commands: list[dict[str, Any]],
+        *,
+        context: dict[str, Any] | None = None,
+        stop_on_error: bool = True,
+        result_mode: str = "all",
+    ) -> dict[str, Any]:
+        return self.invoke(
+            "batch",
+            commands=commands,
+            context=context,
+            stop_on_error=stop_on_error,
+            result_mode=result_mode,
+        )
+
     def read(
         self,
         url: str,
@@ -100,8 +116,25 @@ class BrowserCliTaskClient:
     def verify_value(self, ref: str, expected: str) -> dict[str, Any]:
         return self.invoke("verify-value", ref=ref, expected=expected)
 
-    def screenshot(self, path: str, *, full_page: bool = False) -> dict[str, Any]:
-        return self.invoke("screenshot", path=path, full_page=full_page)
+    def screenshot(
+        self,
+        path: str,
+        *,
+        full_page: bool = False,
+        clip: dict[str, float] | None = None,
+        viewport_width: int | None = None,
+        viewport_height: int | None = None,
+        device_scale_factor: float | None = None,
+    ) -> dict[str, Any]:
+        return self.invoke(
+            "screenshot",
+            path=path,
+            full_page=full_page,
+            clip=clip,
+            viewport_width=viewport_width,
+            viewport_height=viewport_height,
+            device_scale_factor=device_scale_factor,
+        )
 
     def close(self) -> dict[str, Any]:
         return self.invoke("close")

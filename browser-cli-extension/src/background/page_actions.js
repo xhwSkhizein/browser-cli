@@ -1,3 +1,4 @@
+import { setViewport } from '../debugger.js';
 import {
   captureHtmlJs,
   generateSnapshotJs,
@@ -56,12 +57,8 @@ export function createPageHandlers(context) {
       return { url: tab.url || '', title: tab.title || '' };
     },
     async resize(payload) {
-      const tab = await context.getManagedTab(payload.tab_id);
-      await chrome.windows.update(tab.windowId, {
-        width: Number(payload.width),
-        height: Number(payload.height),
-      });
-      return { width: Number(payload.width), height: Number(payload.height) };
+      await context.getManagedTab(payload.tab_id);
+      return await setViewport(payload.tab_id, Number(payload.width), Number(payload.height));
     },
     async eval(payload) {
       await context.getManagedTab(payload.tab_id);

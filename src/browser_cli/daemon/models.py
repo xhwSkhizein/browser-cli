@@ -12,6 +12,7 @@ class DaemonRequest:
     args: dict[str, Any]
     agent_id: str
     request_id: str
+    runtime_version: str | None = None
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> DaemonRequest:
@@ -20,6 +21,7 @@ class DaemonRequest:
             args=dict(payload.get("args") or {}),
             agent_id=str(payload.get("agent_id") or "").strip(),
             request_id=str(payload.get("request_id") or "").strip(),
+            runtime_version=payload.get("runtime_version"),
         )
 
 

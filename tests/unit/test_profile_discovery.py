@@ -134,6 +134,13 @@ def test_discover_default_profile_dir() -> None:
     assert result == home / ".browser-cli" / "default-profile"
 
 
+def test_managed_profile_follows_configured_runtime_home(monkeypatch, tmp_path) -> None:
+    runtime_home = tmp_path / "isolated-runtime"
+    monkeypatch.setenv("BROWSER_CLI_HOME", str(runtime_home))
+    assert discover_default_profile_dir() == runtime_home / "default-profile"
+    assert discover_default_profile_dir(tmp_path) == tmp_path / ".browser-cli" / "default-profile"
+
+
 def test_discover_chrome_environment_uses_managed_profile_root(monkeypatch, tmp_path: Path) -> None:
     executable = tmp_path / "Google Chrome"
     executable.write_text("", encoding="utf-8")

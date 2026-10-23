@@ -15,5 +15,7 @@ if command -v node >/dev/null 2>&1; then
   while IFS= read -r js_file; do
     node --check "$js_file"
   done < <(find browser-cli-extension -type f -name '*.js' | sort)
-  node --test browser-cli-extension/tests/*.test.js
+  node --check src/browser_cli/task_runtime/node/client.mjs
+  node --check node/smoke-extension.mjs
+  node --test browser-cli-extension/tests/*.test.js node/tests/*.test.mjs
 fi

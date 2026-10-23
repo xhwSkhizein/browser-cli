@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 from browser_cli import error_codes
 from browser_cli.daemon.app import BrowserDaemonApp
+from browser_cli.daemon.execution import BrowserExecutionCoordinator
 from browser_cli.daemon.models import DaemonRequest
 
 
@@ -71,6 +72,7 @@ class _FakeState:
     def __init__(self) -> None:
         self.tabs = _FakeTabs()
         self.browser_service = _FakeBrowserService()
+        self.execution = BrowserExecutionCoordinator()
 
 
 def _execute(request: DaemonRequest) -> dict[str, object]:

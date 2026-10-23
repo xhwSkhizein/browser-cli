@@ -371,6 +371,27 @@ The integration coverage is fixture-driven and local-first. It exercises:
 - cookies, storage save/load, and `X_AGENT_ID` isolation
 - task runtime and automation publishing/service flows
 
+## Controlled captures and Node.js automation
+
+Use `browser-cli screenshot output.png --clip 0,120,800,600 --dpr 2` for a page
+rectangle, or add `--viewport-width 1280 --viewport-height 720` for a temporary
+viewport that is restored after capture. Responses include actual image dimensions
+and capture geometry. Full-page captures preserve the current page viewport.
+
+`browser-cli batch --file commands.json --context-file context.json` runs ordered
+actions in a disposable context with fixed viewport, DPR, CSS zoom, locale,
+timezone, and fonts. The context closes after success or failure. `--result-mode
+last` and `--result-mode summary` keep results compact.
+
+A dependency-free Node.js client ships with the Python package; discover its ESM
+entrypoint and the actual daemon socket with `browser-cli paths --json`.
+`status --json` and `doctor --json` report service, extension, configuration,
+managed-profile, and output-directory health separately. Runtime status remains
+independent of filesystem permissions in the calling process.
+
+See [the capture and automation API guide](docs/automation-api-zh.md) for complete
+CLI and Node.js examples, JSON contracts, context defaults, and driver transitions.
+
 ## Acknowledgements
 
 This project is deeply inspired by
