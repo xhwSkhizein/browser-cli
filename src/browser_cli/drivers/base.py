@@ -30,6 +30,7 @@ class BrowserDriver(ABC):
         url: str | None = None,
         wait_until: str = "load",
         timeout_seconds: float | None = None,
+        observe_network: bool = True,
     ) -> dict[str, Any]: ...
 
     @abstractmethod

@@ -386,6 +386,7 @@ class BrowserService:
         url: str | None = None,
         wait_until: str = "load",
         timeout_seconds: float | None = None,
+        observe_network: bool = True,
     ) -> dict[str, Any]:
         page_id = self._next_page_id()
         return await self._active_driver().new_tab(
@@ -393,6 +394,7 @@ class BrowserService:
             url=url,
             wait_until=wait_until,
             timeout_seconds=timeout_seconds,
+            observe_network=observe_network,
         )
 
     async def read_page(
@@ -446,7 +448,10 @@ class BrowserService:
         scroll_bottom: bool,
     ) -> dict[str, Any]:
         page = await self.new_tab(
-            url=url, wait_until="load", timeout_seconds=self.READ_NAVIGATION_TIMEOUT_SECONDS
+            url=url,
+            wait_until="load",
+            timeout_seconds=self.READ_NAVIGATION_TIMEOUT_SECONDS,
+            observe_network=False,
         )
         page_id = str(page["page_id"])
         try:

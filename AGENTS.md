@@ -28,6 +28,11 @@ the implementation, and where should a change land first.
 - Managed profile mode uses Browser CLI's dedicated Chrome data root at `~/.browser-cli/default-profile`.
 - `BROWSER_CLI_HOME` relocates that managed profile to `<runtime-home>/default-profile` as well as sockets and artifacts; independent runtimes must not share the default profile accidentally.
 - Extension mode is the preferred real-Chrome backend when the Browser CLI extension is connected and healthy.
+- Extension workspaces reuse an existing normal Chrome window and label owned tabs with a native Browser CLI tab group; create a window only when none is available. Group membership never grants tab ownership, and workspace close/rebuild must remove only owned tabs, including tabs moved to other windows.
+- Extension reload/rebuild must rediscover and reuse the open green Browser CLI group; consolidate same-window duplicates without closing or adopting their pages. Ungroup only owned tabs before removing them so repeated reads/teardown do not accumulate saved-group entries. Closed saved groups are not exposed by the Chrome extension API.
+- Extension tabs open in the background, fallback windows are unfocused, and adding tabs preserves an existing group's collapsed state. Agent target selection (including driver rebinding) must not activate Chrome tabs or call Playwright bring_to_front; only an explicit foreground operation may do so.
+- One-shot read tabs skip eager debugger/network attachment because they close before exposing interactive commands. Interactive tabs retain network observation from the first navigation; never detach live sessions at command boundaries or lose viewport, trace, video, or network-history state. Failed opens must close their owned tab, and late screencast acknowledgements must never reattach after teardown.
+- Background extension video may receive no CDP screencast frames until Chrome composites the hidden page. `debugger.js::startScreencastRendering` requests one-pixel surface captures at the recording cadence without activation or viewport changes; stop/remove/detach must stop and drain that loop without reattaching. Validate actual decoded video frames, not merely the existence of a WebM file.
 - `browser-cli status` is the first-line lifecycle diagnosis command.
 - `browser-cli status --json` is the stable agent-facing runtime status surface.
 - `status --json` classifies runtime health; `doctor --json` classifies environment health. Both expose separate `health` entries for service, extension, configuration, managed profile, and output directory. Filesystem probes describe the caller's permissions and must not override daemon-owned presentation.
@@ -166,6 +171,8 @@ the implementation, and where should a change land first.
   `src/browser_cli/extension/protocol.py`
 - Browser extension entrypoints:
   `browser-cli-extension/src/background.js`, `browser-cli-extension/src/protocol.js`, `browser-cli-extension/src/page_runtime.js`
+- Extension-owned tab groups, existing-window selection, and workspace teardown:
+  `browser-cli-extension/src/background/workspace_tabs.js`, `browser-cli-extension/src/background/workspace.js`
 - Extension popup runtime observer UI and pure view model:
   `browser-cli-extension/popup.html`, `browser-cli-extension/src/popup.js`, `browser-cli-extension/src/popup_view.js`
 

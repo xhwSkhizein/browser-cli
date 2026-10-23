@@ -71,6 +71,7 @@ class PlaywrightDriver(BrowserDriver):
         url: str | None = None,
         wait_until: str = "load",
         timeout_seconds: float | None = None,
+        observe_network: bool = True,
     ) -> dict[str, Any]:
         return await self._service.new_tab(
             page_id=page_id,
@@ -97,8 +98,7 @@ class PlaywrightDriver(BrowserDriver):
         return results
 
     async def switch_tab(self, page_id: str) -> dict[str, Any]:
-        page = self._service._require_page(page_id)  # noqa: SLF001
-        await page.bring_to_front()
+        # Target selection must not raise a page during driver restoration.
         return await self._service.get_page_summary(page_id)
 
     async def get_page_summary(self, page_id: str) -> dict[str, Any]:
