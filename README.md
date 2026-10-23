@@ -144,6 +144,30 @@ For real-Chrome execution:
 Once connected, `browser-cli status` reports extension capability state and the
 daemon can prefer the extension backend at safe idle points.
 
+Extension mode opens agent pages in a green **Browser CLI** tab group in an
+existing normal Chrome window. It creates a window only if none is available.
+Workspace close and rebuild affect only Browser CLI-created tabs, even if you
+move tabs between groups or windows. Your other tabs stay open.
+After an extension reload or workspace rebuild, new pages reuse the existing
+green Browser CLI group. Duplicate Browser CLI groups in that window are merged
+without closing their pages or treating those pages as agent-owned. Temporary
+pages leave their group before closing so Chrome does not accumulate saved
+groups after repeated reads. Closed groups already saved by Chrome are outside
+the extension API and can be removed through Chrome's tab-group menu.
+
+New extension tabs, one-shot reads and workspace placeholders open in the
+background. Adding pages preserves a collapsed tab group, and a fallback window
+opens without requesting focus. `switch-tab` selects the page for subsequent
+agent commands; it does not select the tab you see in Chrome. Click a tab in the
+Browser CLI group when you want to view it. Debugging notices, site-generated
+dialogs and the browser's own UI can still affect the window.
+
+One-shot `read` and workspace placeholder pages do not attach the debugger.
+Interactive pages retain full CDP capabilities and network observation from
+their first navigation, so Chrome's debugging notice can remain visible while
+those pages are managed. Reload the unpacked extension after updating its files;
+this version adds the `tabGroups` permission.
+
 ## Quick Start
 
 If you installed Browser CLI with uv, use the dedicated installed-user guide at

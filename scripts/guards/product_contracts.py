@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 from pathlib import Path
 
@@ -119,6 +120,8 @@ def run(_root: Path) -> list[Finding]:
     findings.extend(_check_action_specs())
     findings.extend(_check_extension_required_capabilities())
     findings.extend(_check_extension_env_vars())
+    findings.extend(_check_extension_workspace_contract(_root))
+    findings.extend(_check_background_tab_contract(_root))
     node_manifest = _root / "src/browser_cli/task_runtime/node/package.json"
     if (
         json.loads(node_manifest.read_text(encoding="utf-8")).get("browserCliRuntimeVersion")
@@ -132,6 +135,56 @@ def run(_root: Path) -> list[Finding]:
             )
         )
     return findings
+
+
+def _check_extension_workspace_contract(root: Path) -> list[Finding]:
+    extension = root / "browser-cli-extension"
+    manifest = json.loads((extension / "manifest.json").read_text(encoding="utf-8"))
+    workspace_sources = [
+        extension / "src/background/workspace.js",
+        extension / "src/background/workspace_tabs.js",
+    ]
+    if "tabGroups" not in manifest.get("permissions", []) or any(
+        "chrome.windows.remove" in path.read_text(encoding="utf-8") for path in workspace_sources
+    ):
+        return [
+            Finding(
+                "error",
+                "CONTRACT028",
+                "Extension workspaces must support native tab groups and never close an entire shared window.",
+            )
+        ]
+    return []
+
+
+def _check_background_tab_contract(root: Path) -> list[Finding]:
+    workspace = root / "browser-cli-extension/src/background/workspace_tabs.js"
+    source = workspace.read_text(encoding="utf-8")
+    foreground = "active: true" in source or "focused: true" in source
+    for path in [
+        root / "src/browser_cli/drivers/playwright_driver.py",
+        root / "src/browser_cli/drivers/_extension/page_actions.py",
+    ]:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.AsyncFunctionDef) or node.name != "switch_tab":
+                continue
+            foreground |= any(
+                isinstance(child, ast.Attribute)
+                and child.attr == "bring_to_front"
+                or isinstance(child, ast.Constant)
+                and child.value == "activate-tab"
+                for child in ast.walk(node)
+            )
+    if foreground:
+        return [
+            Finding(
+                "error",
+                "CONTRACT029",
+                "Background tab creation and agent target restoration must not request foreground activation.",
+            )
+        ]
+    return []
 
 
 def _check_read_contract(parser: argparse.ArgumentParser) -> list[Finding]:

@@ -54,7 +54,7 @@ Use this checklist before calling Browser CLI done on a real workstation.
 - Run `browser-cli status` and confirm the backend section shows whether any required extension capabilities are missing.
 - Confirm the popup summary, execution path, workspace ownership, and recovery sections reflect the same daemon state class as `browser-cli status`.
 - Run `browser-cli open https://example.com`.
-- Confirm Browser CLI creates or reuses a dedicated workspace window rather than attaching to arbitrary user tabs.
+- Confirm Browser CLI reuses an existing normal Chrome window and opens its own background tabs in one green Browser CLI group.
 - Confirm the response metadata reports `meta.driver = extension`.
 - Disable the extension or disconnect it, then issue another command.
 - Confirm Browser CLI falls back at a safe idle point and the response metadata reports `meta.state_reset = true`.
@@ -67,6 +67,11 @@ Use this checklist before calling Browser CLI done on a real workstation.
 - Confirm `Refresh Status` updates the runtime summary without mutating Browser CLI state.
 - Confirm `Reconnect Extension` retries the extension transport and refreshes the runtime snapshot.
 - Confirm `Rebuild Workspace` only rebuilds Browser CLI-owned workspace state and does not touch arbitrary user tabs.
+- With a personal tab already open, create two agent tabs and confirm they share a green `Browser CLI` group in the existing window. Move a personal tab into the group and an agent tab to another window; workspace rebuild/stop must close only the agent tabs and preserve the personal tab and window.
+- Reload the extension and rebuild repeatedly with a personal page in the group: subsequent opens must reuse the group and preserve that page without granting it ownership. Seed multiple green `Browser CLI` groups in the same window, then open an agent page: all pages must survive in one group, with ownership unchanged. Other group names, colors, shared groups and window placement must be preserved. Repeat one-shot reads and check Chrome's saved-group list as well as the open tab strip; closing owned pages must ungroup them first. Closed saved groups from earlier builds require Chrome's own tab-group menu because they are not exposed by the extension API.
+- Run one-shot HTML and snapshot reads with no other debugger consumer: no debugger attachment should occur. Ordinary interactive tabs must still observe the first navigation's network requests; resizing, screenshot geometry, trace and video must retain their existing behavior. Failed opens must leave no orphan debugging tab.
+- Keep a personal tab A active while the agent opens tabs B/C, reads, switches its target, fills/clicks and captures page B. Tab A must remain active, commands must reach the selected agent page, and new pages must not unfold a user-collapsed group. Also check target restoration after driver rebinding does not bring any tab to the foreground.
+- For a live foreground regression check, run `node node/smoke-background-tabs.mjs` (requires `ffmpeg`, or set `BROWSER_CLI_FFMPEG`), open its printed sentinel URL in the existing Chrome window, leave that tab selected, then POST to the printed start URL. It checks background actions, first-navigation network history, read, screenshot, PDF, trace and decoded video frames while observing whether the sentinel tab ever becomes hidden.
 
 ## Daemon Checks
 

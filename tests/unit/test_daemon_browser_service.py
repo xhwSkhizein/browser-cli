@@ -90,7 +90,9 @@ class _FakeDriverBase:
         url: str | None = None,
         wait_until: str = "load",
         timeout_seconds: float | None = None,
+        observe_network: bool = True,
     ) -> dict:
+        self.last_observe_network = observe_network
         _ = wait_until
         _ = timeout_seconds
         url = url or "about:blank"
@@ -796,3 +798,26 @@ def test_isolated_context_preserves_extension_tabs(_patched_browser_service, fai
             await service.stop()
 
     asyncio.run(scenario())
+
+
+def test_one_shot_read_skips_network_observation_but_interactive_open_keeps_it(
+    _patched_browser_service: _FakeExtensionHub,
+) -> None:
+    async def _scenario() -> None:
+        _patched_browser_service.connect()
+        service = browser_service_module.BrowserService(TabRegistry())
+        await service.ensure_started()
+
+        async def _capture(page_id: str) -> dict[str, str]:
+            return {"page_id": page_id, "html": "<html>read</html>"}
+
+        service._extension.capture_html = _capture  # type: ignore[method-assign]  # noqa: SLF001
+        result = await service.read_page(url="https://example.com/read", output_mode="html")
+        assert result["body"] == "<html>read</html>"
+        assert service._extension.last_observe_network is False  # noqa: SLF001
+        assert not service._extension.pages  # noqa: SLF001
+        await service.new_tab(url="https://example.com/interactive")
+        assert service._extension.last_observe_network is True  # noqa: SLF001
+        await service.stop()
+
+    asyncio.run(_scenario())

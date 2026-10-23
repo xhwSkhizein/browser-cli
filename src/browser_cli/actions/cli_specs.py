@@ -108,8 +108,8 @@ def get_action_specs() -> list[ActionSpec]:
         ),
         ActionSpec(
             "switch-tab",
-            "Switch the active tab.",
-            "Switch to a visible tab by page id.",
+            "Select this agent's target tab.",
+            "Select an agent-visible tab by page id without bringing it to the foreground.",
             _add_page_id_arguments,
             _default_request,
         ),
