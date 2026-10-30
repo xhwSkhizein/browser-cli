@@ -5,12 +5,14 @@ from __future__ import annotations
 from argparse import Namespace
 from typing import Any
 
+from browser_cli import error_codes
 from browser_cli.commands.status import collect_status_report, status_report_to_json_data
 from browser_cli.daemon.client import ensure_daemon_running, send_command, wait_for_daemon_stop
 from browser_cli.errors import (
     ExtensionCapabilityIncompleteError,
     ExtensionUnavailableError,
     InvalidInputError,
+    OperationFailedError,
 )
 from browser_cli.outputs.json import render_json_payload
 
@@ -55,6 +57,14 @@ def _recover() -> dict[str, Any]:
     actions: list[str] = []
     current = before
     recommended = str(current["recovery"]["recommended_action"])
+    if recommended == "reload-extension":
+        raise OperationFailedError(
+            "The Chrome extension is connected but its browser API probe failed. "
+            "Allow automatic extension recovery to finish. If it remains unhealthy, "
+            "use Reload Extension in the popup or reload Browser CLI Bridge in chrome://extensions. "
+            "Restarting the daemon cannot repair the extension context.",
+            error_code=error_codes.EXTENSION_RUNTIME_UNHEALTHY,
+        )
     if recommended in {"reload", "reconnect-extension"}:
         send_command("stop", {}, start_if_needed=False)
         wait_for_daemon_stop()

@@ -14,6 +14,28 @@ from browser_cli.commands.recovery import (
 from browser_cli.errors import OperationFailedError
 
 
+def test_recover_reports_extension_fault_without_restarting_healthy_daemon(capsys) -> None:
+    with (
+        patch("browser_cli.commands.recovery.ensure_daemon_running"),
+        patch(
+            "browser_cli.commands.recovery.collect_stable_status_data",
+            return_value=_status_data("unknown", "reload-extension"),
+        ),
+        patch("browser_cli.commands.recovery.send_command") as send_command,
+    ):
+        assert main(["recover", "--json"]) == 75
+        captured = capsys.readouterr()
+        payload = json.loads(captured.out)
+        assert captured.err == ""
+    assert payload["ok"] is False
+    assert payload["error_code"] == "EXTENSION_RUNTIME_UNHEALTHY"
+    assert (
+        payload["next_action"]
+        == "reload the Browser CLI extension, then run browser-cli doctor --json"
+    )
+    send_command.assert_not_called()
+
+
 def _status_data(binding: str, recommended: str = "none") -> dict[str, object]:
     return {
         "status": "degraded" if recommended != "none" else "healthy",

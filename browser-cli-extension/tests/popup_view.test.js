@@ -3,6 +3,18 @@ import assert from 'node:assert/strict'
 
 import { buildPopupViewModel } from '../src/popup_view.js'
 
+test('unusable extension offers a reload rather than a WebSocket reconnect', () => {
+  const view = buildPopupViewModel({connectionStatus: 'connected', presentation: {
+    overall_state: 'degraded', available_actions: ['refresh-status', 'reload-extension'],
+    summary_reason: 'Chrome tabs.query is unavailable.',
+  }})
+  const action = view.actions.find(item => item.domId === 'reconnectNow')
+  assert.equal(action.id, 'reload-extension')
+  assert.equal(action.label, 'Reload Extension')
+  assert.equal(action.enabled, true)
+  assert.equal(view.actions.find(item => item.id === 'rebuild-workspace-binding').enabled, false)
+})
+
 test('buildPopupViewModel exposes runtime summary and actions', () => {
   const view = buildPopupViewModel({
     daemonHost: '127.0.0.1',

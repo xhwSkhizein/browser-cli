@@ -16,6 +16,7 @@ def build_runtime_presentation(raw_status: dict[str, Any]) -> dict[str, Any]:
     binding_state = str(workspace_window_state.get("binding_state") or "absent")
     extension_connected = bool(extension.get("connected"))
     capability_complete = bool(extension.get("capability_complete"))
+    runtime_health = dict(extension.get("runtime_health") or {})
     stability = dict(raw_status.get("stability") or {})
     cleanup_failures = int(stability.get("cleanup_failures") or 0)
     last_cleanup_error = str(stability.get("last_cleanup_error") or "").strip() or None
@@ -38,7 +39,15 @@ def build_runtime_presentation(raw_status: dict[str, Any]) -> dict[str, Any]:
     summary_reason = "Browser CLI runtime is healthy."
     recovery_guidance = ["Browser CLI can continue normally."]
 
-    if not browser_started:
+    if extension_connected and runtime_health.get("status") == "fail":
+        overall_state = "degraded"
+        summary_reason = str(runtime_health.get("message") or "Extension runtime probe failed.")
+        recovery_guidance = [
+            "The extension is connected but cannot execute browser operations.",
+            "Allow automatic extension recovery to finish, then run browser-cli doctor --json.",
+            "If recovery fails, reload Browser CLI Bridge in chrome://extensions; restarting the daemon does not reload the extension.",
+        ]
+    elif not browser_started:
         summary_reason = "Browser runtime is idle and will start on the next browser command."
         recovery_guidance = ["Run a browser command to initialize runtime state."]
     elif active_driver == "not-started":
@@ -76,7 +85,7 @@ def build_runtime_presentation(raw_status: dict[str, Any]) -> dict[str, Any]:
         else:
             summary_reason = "Browser CLI no longer has a trusted extension workspace binding."
         recovery_guidance = [
-            "Rebuild workspace binding to restore Browser CLI-owned tab tracking.",
+            "Run browser-cli workspace rebuild --json to restore Browser CLI-owned tab tracking.",
             "Reconnect the extension if workspace state does not recover.",
         ]
     elif cleanup_failures:
@@ -97,7 +106,9 @@ def build_runtime_presentation(raw_status: dict[str, Any]) -> dict[str, Any]:
             "last_cleanup_error": last_cleanup_error,
         },
         "recovery_guidance": recovery_guidance,
-        "available_actions": _available_actions(
+        "available_actions": ["refresh-status", "reload-extension"]
+        if runtime_health.get("status") == "fail" and extension_connected
+        else _available_actions(
             active_driver=active_driver,
             pending_rebind=pending_rebind,
             extension_connected=extension_connected,

@@ -260,12 +260,16 @@ def status_report_to_json_data(report: StatusReport) -> dict[str, Any]:
                 "state": report.daemon_state,
             },
             "extension": {
-                "status": "pass"
+                "status": "fail"
+                if report.backend["extension_connected"]
+                and report.backend.get("extension_runtime_health", {}).get("status") == "fail"
+                else "pass"
                 if report.backend["extension_connected"]
                 and report.backend["extension_capability_complete"]
                 else "warn",
                 "connected": bool(report.backend["extension_connected"]),
                 "capability_complete": bool(report.backend["extension_capability_complete"]),
+                "runtime_health": dict(report.backend.get("extension_runtime_health") or {}),
             },
             **report.directories,
         },
@@ -278,6 +282,7 @@ def status_report_to_json_data(report: StatusReport) -> dict[str, Any]:
             "active_driver": report.backend["active_driver"],
             "extension_connected": bool(report.backend["extension_connected"]),
             "extension_capability_complete": bool(report.backend["extension_capability_complete"]),
+            "extension_runtime_health": dict(report.backend.get("extension_runtime_health") or {}),
             "extension_listener": {
                 "host": app_paths.extension_host,
                 "port": app_paths.extension_port,
@@ -313,6 +318,8 @@ def _recommended_action(
     workspace_binding: str,
     available_actions: list[str],
 ) -> str:
+    if "reload-extension" in available_actions:
+        return "reload-extension"
     if report.daemon_state in {"stale", "incompatible"} or report.overall_status == "broken":
         return "reload"
     if (
@@ -401,6 +408,7 @@ def _build_backend_section(
         "active_driver": live_payload.get("active_driver") or "not-started",
         "extension_connected": bool(extension.get("connected")),
         "extension_capability_complete": bool(extension.get("capability_complete")),
+        "extension_runtime_health": dict(extension.get("runtime_health") or {}),
         "extension_missing_capabilities": (
             ", ".join(sorted(str(item) for item in (extension.get("missing_capabilities") or [])))
             or "none"

@@ -1,17 +1,19 @@
 import { flushAllPendingVideoArtifacts, flushPendingVideoArtifactsForTab } from './video_actions.js';
+import {queryRuntimeTabs} from '../runtime_health.js';
 
 function artifactRequestedPath(artifact) {
   return String(artifact?.metadata?.requested_path || '');
 }
 
-async function buildWorkspaceStatus(context) {
+export async function buildWorkspaceStatus(context) {
   const windowId = context.state.workspaceWindowId;
   if (windowId === null) {
+    await queryRuntimeTabs();
     return { window_id: null, tab_count: 0, managed_tab_count: 0, binding_state: 'absent' };
   }
 
   try {
-    const tabs = await chrome.tabs.query({ windowId });
+    const tabs = await queryRuntimeTabs({ windowId });
     const managedTabs = tabs.filter(
       (tab) => tab.id !== undefined && context.state.managedTabIds.has(tab.id),
     );
@@ -22,9 +24,12 @@ async function buildWorkspaceStatus(context) {
       binding_state: managedTabs.length > 0 ? 'tracked' : 'stale',
     };
   } catch (_error) {
+    if (_error?.code === 'EXTENSION_RUNTIME_UNHEALTHY') throw _error;
+    if (!/No window with id/i.test(String(_error?.message))) throw _error;
     context.state.workspaceWindowId = null;
     context.state.managedTabIds.clear();
     context.state.pageIdByTabId.clear();
+    await context.saveWorkspaceBinding();
     return { window_id: null, tab_count: 0, managed_tab_count: 0, binding_state: 'absent' };
   }
 }
@@ -43,6 +48,7 @@ export function createWorkspaceHandlers(context) {
       context.state.workspaceWindowId = null;
       context.state.managedTabIds.clear();
       context.state.pageIdByTabId.clear();
+      await context.saveWorkspaceBinding();
       return {
         closed: true,
         video_paths: artifacts.map(artifactRequestedPath).filter(Boolean),
@@ -64,6 +70,7 @@ export function createWorkspaceHandlers(context) {
       context.state.workspaceWindowId = null;
       context.state.managedTabIds.clear();
       context.state.pageIdByTabId.clear();
+      await context.saveWorkspaceBinding();
       await context.ensureWorkspaceWindow('about:blank');
       return {
         rebuilt: true,
@@ -77,6 +84,7 @@ export function createWorkspaceHandlers(context) {
       if (payload.page_id) {
         context.state.pageIdByTabId.set(tab.id, String(payload.page_id));
       }
+      await context.saveWorkspaceBinding();
       return {
         tab_id: tab.id,
         url: tab.url || '',
@@ -115,7 +123,12 @@ export function createWorkspaceHandlers(context) {
       const pageId = context.pageIdForTab(tab.id);
       const artifacts = await flushPendingVideoArtifactsForTab(context, meta.requestId, payload.tab_id);
       await chrome.tabs.remove(tab.id);
-      context.untrackTab(tab.id);
+      await context.untrackTab(tab.id).catch(error => {
+        // Chrome confirmed destruction. Stale storage cannot restore a removed
+        // target, so persistence failure must not turn this into a failed close.
+        context.state.runtimeState = context.state.runtimeState || {};
+        context.state.runtimeState.lastError = `Page closed; workspace cleanup failed: ${String(error?.message || error)}`;
+      });
       return {
         url: tab.url || '',
         title: tab.title || '',

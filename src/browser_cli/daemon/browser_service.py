@@ -185,7 +185,9 @@ class BrowserService:
                 "ok": False,
                 "error_code": exc.error_code or error_codes.WORKSPACE_BINDING_LOST,
                 "message": exc.message,
-                "next_action": "browser-cli recover --json",
+                "next_action": "browser-cli doctor --json"
+                if exc.error_code == error_codes.EXTENSION_RUNTIME_UNHEALTHY
+                else "browser-cli recover --json",
             }
         except Exception as exc:
             logger.warning("Workspace binding preflight failed unexpectedly", exc_info=True)
@@ -277,9 +279,22 @@ class BrowserService:
         extension_details = dict(extension_health.details)
         playwright_details = dict(playwright_health.details)
         workspace_window_state = dict(extension_details.get("workspace_window_state") or {})
+        runtime_health: dict[str, Any] = {"status": "unavailable"}
         if self._driver_name == "extension" or bool(extension_details.get("connected")):
-            with contextlib.suppress(Exception):
-                workspace_window_state = await self._extension.workspace_status()
+            try:
+                workspace_window_state = await asyncio.wait_for(
+                    self._extension.workspace_status(), timeout=2.0
+                )
+                runtime_health = {"status": "pass", "probe": "workspace-status"}
+            except Exception as exc:
+                runtime_health = {
+                    "status": "fail",
+                    "error_code": getattr(exc, "error_code", None)
+                    or error_codes.EXTENSION_RUNTIME_UNHEALTHY,
+                    "message": str(exc) or "Extension runtime probe timed out.",
+                }
+                # The handshake snapshot is not live evidence of a working binding.
+                workspace_window_state = {"binding_state": "unknown"}
         profile_source: str | None = None
         profile_dir: str | None = None
         profile_directory: str | None = None
@@ -302,11 +317,12 @@ class BrowserService:
                 "details": playwright_details,
             },
             "extension": {
-                "available": extension_health.available,
+                "available": extension_health.available and runtime_health["status"] != "fail",
                 "connected": bool(extension_details.get("connected")),
                 "capability_complete": bool(extension_details.get("capability_complete")),
                 "missing_capabilities": list(extension_details.get("missing_capabilities") or []),
                 "details": extension_details,
+                "runtime_health": runtime_health,
             },
             "workspace_window_state": workspace_window_state,
             "last_transition": (

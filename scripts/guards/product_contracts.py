@@ -9,6 +9,7 @@ from pathlib import Path
 from browser_cli.actions import get_action_specs
 from browser_cli.cli.main import build_parser
 from browser_cli.constants import EXTENSION_HOST_ENV, EXTENSION_PORT_ENV
+from browser_cli.daemon.runtime_presentation import build_runtime_presentation
 from browser_cli.daemon.transport import DAEMON_RUNTIME_VERSION
 from browser_cli.extension.protocol import REQUIRED_EXTENSION_CAPABILITIES
 from scripts.guards.common import Finding
@@ -132,6 +133,29 @@ def run(_root: Path) -> list[Finding]:
     findings.extend(_check_action_specs())
     findings.extend(_check_extension_required_capabilities())
     findings.extend(_check_extension_env_vars())
+    presentation = build_runtime_presentation(
+        {
+            "browser_started": True,
+            "active_driver": "extension",
+            "extension": {
+                "connected": True,
+                "capability_complete": True,
+                "runtime_health": {"status": "fail", "message": "probe failed"},
+            },
+            "workspace_window_state": {"binding_state": "tracked"},
+        }
+    )
+    if (
+        presentation["overall_state"] == "healthy"
+        or "reload-extension" not in presentation["available_actions"]
+    ):
+        findings.append(
+            Finding(
+                "error",
+                "CONTRACT028",
+                "A connected extension and cached binding must not hide a failed live runtime probe.",
+            )
+        )
     node_manifest = _root / "src/browser_cli/task_runtime/node/package.json"
     if (
         json.loads(node_manifest.read_text(encoding="utf-8")).get("browserCliRuntimeVersion")

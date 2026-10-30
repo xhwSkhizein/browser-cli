@@ -17,13 +17,20 @@ import { createPageHandlers } from './background/page_actions.js';
 import { sendFramedMessage } from './background/response_framing.js';
 import { createTraceHandlers } from './background/trace_actions.js';
 import { createVideoHandlers } from './background/video_actions.js';
-import { createWorkspaceHandlers } from './background/workspace.js';
+import { buildWorkspaceStatus, createWorkspaceHandlers } from './background/workspace.js';
+import { createWorkspaceBinding } from './background/workspace_binding.js';
+import {assertRuntimeApis, createRuntimeRecovery, queryRuntimeTabs} from './runtime_health.js';
 
 const RECONNECT_ALARM = 'browser-cli-bridge-reconnect';
 const INITIAL_RECONNECT_BACKOFF_MS = 1000;
 const KEEPALIVE_INTERVAL_MS = 20 * 1000;
 const MAX_RECONNECT_BACKOFF_MS = 30000;
 const RUNTIME_REQUEST_TIMEOUT_MS = 1500;
+let connecting;
+let activeRequests = 0;
+let checkingRuntime = false;
+const runtimeRecovery = createRuntimeRecovery({canReload: () => activeRequests === 0
+  && state.videoSessions.size === 0 && state.traceSessions.size === 0});
 
 const state = {
   ws: null,
@@ -40,6 +47,7 @@ const state = {
     lastConnectedAt: null,
   },
 };
+const workspaceBinding = createWorkspaceBinding(state);
 
 function requiredCapabilityGap() {
   const supported = new Set(SUPPORTED_CAPABILITIES);
@@ -129,12 +137,26 @@ function stopKeepAlive() {
 
 function startKeepAlive(socket) {
   stopKeepAlive();
-  state.keepAliveIntervalId = setInterval(() => {
-    if (state.ws !== socket || socket.readyState !== WebSocket.OPEN) {
+  state.keepAliveIntervalId = setInterval(async () => {
+    if (state.ws !== socket) return;
+    if (socket.readyState !== WebSocket.OPEN) {
       stopKeepAlive();
       return;
     }
     socket.send(JSON.stringify({ type: 'heartbeat' }));
+    if (activeRequests === 0 && !checkingRuntime) {
+      checkingRuntime = true;
+      try {
+        await queryRuntimeTabs();
+      } catch (error) {
+        if (state.ws === socket) {
+          state.runtimeState.lastError = error.message;
+          void runtimeRecovery.recover();
+        }
+      } finally {
+        checkingRuntime = false;
+      }
+    }
   }, KEEPALIVE_INTERVAL_MS);
 }
 
@@ -186,11 +208,22 @@ async function rebuildWorkspaceBinding() {
   return await buildStatusSnapshot();
 }
 
-async function connect() {
+function connect() {
+  if (connecting) return connecting;
+  connecting = connectOnce().catch((error) => {
+    setConnectionStatus('disconnected', {error: String(error?.message || error)});
+    if (error?.code === 'EXTENSION_RUNTIME_UNHEALTHY') void runtimeRecovery.recover();
+    scheduleReconnect();
+  }).finally(() => { connecting = undefined; });
+  return connecting;
+}
+
+async function connectOnce() {
   if (state.ws && (state.ws.readyState === WebSocket.OPEN || state.ws.readyState === WebSocket.CONNECTING)) {
     return;
   }
   const config = await loadDaemonConfig();
+  await workspaceBinding.restore();
   setConnectionStatus('probing');
   const reachable = await probeDaemon(config.host, config.port);
   if (!reachable) {
@@ -203,13 +236,25 @@ async function connect() {
   const socket = new WebSocket(buildWsUrl(config.host, config.port));
   state.ws = socket;
   socket.onopen = async () => {
+    if (state.ws !== socket) return;
     state.reconnectBackoffMs = INITIAL_RECONNECT_BACKOFF_MS;
     setConnectionStatus('connected');
     startKeepAlive(socket);
     const platform = await chrome.runtime.getPlatformInfo().catch(() => ({ os: 'unknown' }));
-    if (socket.readyState !== WebSocket.OPEN) {
+    if (state.ws !== socket || socket.readyState !== WebSocket.OPEN) {
       return;
     }
+    let workspaceWindowState;
+    try {
+      workspaceWindowState = await getWorkspaceWindowState();
+    } catch (error) {
+      if (state.ws !== socket) return;
+      state.runtimeState.lastError = String(error?.message || error);
+      if (error?.code === 'EXTENSION_RUNTIME_UNHEALTHY') void runtimeRecovery.recover();
+      socket.close();
+      return;
+    }
+    if (state.ws !== socket || socket.readyState !== WebSocket.OPEN) return;
     socket.send(JSON.stringify({
       type: 'hello',
       protocol_version: PROTOCOL_VERSION,
@@ -217,11 +262,12 @@ async function connect() {
       browser_name: 'Google Chrome',
       browser_version: platform.os || 'unknown',
       capabilities: SUPPORTED_CAPABILITIES,
-      workspace_window_state: await getWorkspaceWindowState(),
+      workspace_window_state: workspaceWindowState,
       extension_instance_id: chrome.runtime.id,
     }));
   };
   socket.onmessage = async (event) => {
+    if (state.ws !== socket) return;
     let payload;
     try {
       payload = JSON.parse(event.data);
@@ -232,11 +278,14 @@ async function connect() {
       return;
     }
     const response = await handleRequest(payload);
-    if (state.ws && state.ws.readyState === WebSocket.OPEN) {
-      sendFramedMessage(state.ws, response);
+    if (state.ws === socket && socket.readyState === WebSocket.OPEN) {
+      sendFramedMessage(socket, response);
+      if (response.error_code === 'EXTENSION_RUNTIME_UNHEALTHY'
+        && payload.action !== 'workspace-status') void runtimeRecovery.recover();
     }
   };
   socket.onclose = () => {
+    if (state.ws !== socket) return;
     stopKeepAlive();
     if (state.ws === socket) {
       state.ws = null;
@@ -246,6 +295,7 @@ async function connect() {
     state.reconnectBackoffMs = Math.min(state.reconnectBackoffMs * 2, MAX_RECONNECT_BACKOFF_MS);
   };
   socket.onerror = () => {
+    if (state.ws !== socket) return;
     state.runtimeState.lastError = `WebSocket handshake failed for ${config.host}:${config.port}`;
     if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
       socket.close();
@@ -259,6 +309,7 @@ async function reconnectNow() {
   if (state.ws && (state.ws.readyState === WebSocket.OPEN || state.ws.readyState === WebSocket.CONNECTING)) {
     const current = state.ws;
     current.onclose = () => {
+      if (state.ws !== current) return;
       stopKeepAlive();
       state.ws = null;
       setConnectionStatus('disconnected');
@@ -271,21 +322,15 @@ async function reconnectNow() {
 }
 
 async function getWorkspaceWindowState() {
+  await workspaceBinding.restore();
   if (state.workspaceWindowId === null) {
-    return { window_id: null, tab_count: 0 };
+    return { window_id: null, tab_count: 0, managed_tab_count: 0, binding_state: 'absent' };
   }
-  try {
-    const tabs = await chrome.tabs.query({ windowId: state.workspaceWindowId });
-    return { window_id: state.workspaceWindowId, tab_count: tabs.length };
-  } catch (_error) {
-    state.workspaceWindowId = null;
-    state.managedTabIds.clear();
-    state.pageIdByTabId.clear();
-    return { window_id: null, tab_count: 0 };
-  }
+  return await buildWorkspaceStatus(context);
 }
 
 async function ensureWorkspaceWindow(url = 'about:blank') {
+  await workspaceBinding.restore();
   if (state.workspaceWindowId !== null) {
     try {
       await chrome.windows.get(state.workspaceWindowId);
@@ -309,6 +354,7 @@ async function ensureWorkspaceWindow(url = 'about:blank') {
       state.managedTabIds.add(tab.id);
     }
   }
+  await workspaceBinding.save();
   return state.workspaceWindowId;
 }
 
@@ -366,6 +412,7 @@ async function openTab(url) {
     throw new Error('Workspace tab creation failed');
   }
   state.managedTabIds.add(tab.id);
+  await workspaceBinding.save();
   await ensureNetworkSession(tab.id);
   if (url) {
     await chrome.tabs.update(tab.id, { url });
@@ -389,12 +436,15 @@ function pageIdForTab(tabId) {
   return state.pageIdByTabId.get(tabId) || null;
 }
 
-function untrackTab(tabId) {
+async function untrackTab(tabId) {
+  const wasManaged = state.managedTabIds.has(tabId);
   state.managedTabIds.delete(tabId);
   state.pageIdByTabId.delete(tabId);
   state.traceSessions.delete(tabId);
   state.videoSessions.delete(tabId);
   disposeNetworkSession(tabId);
+  if (wasManaged) await workspaceBinding.save();
+  else await workspaceBinding.flush();
 }
 
 const context = {
@@ -409,6 +459,7 @@ const context = {
   runLocatorAction,
   pageIdForTab,
   untrackTab,
+  saveWorkspaceBinding: () => workspaceBinding.save(),
 };
 
 const handlers = {
@@ -433,7 +484,11 @@ async function dispatch(action, payload, meta) {
 
 async function handleRequest(payload) {
   const id = String(payload.id || '');
+  activeRequests += 1;
   try {
+    await workspaceBinding.restore();
+    if (payload.action === 'workspace-status') assertRuntimeApis();
+    else await queryRuntimeTabs();
     const data = await dispatch(payload.action, payload.payload || {}, { requestId: id });
     return { type: 'response', id, ok: true, data };
   } catch (error) {
@@ -441,9 +496,12 @@ async function handleRequest(payload) {
       type: 'response',
       id,
       ok: false,
-      error_code: 'EXTENSION_ACTION_FAILED',
+      error_code: error?.code === 'EXTENSION_RUNTIME_UNHEALTHY'
+        ? error.code : 'EXTENSION_ACTION_FAILED',
       error_message: error instanceof Error ? error.message : String(error),
     };
+  } finally {
+    activeRequests -= 1;
   }
 }
 
@@ -463,7 +521,9 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
-  untrackTab(tabId);
+  void workspaceBinding.restore().then(() => untrackTab(tabId)).catch(error => {
+    state.runtimeState.lastError = String(error?.message || error);
+  });
 });
 
 chrome.windows.onRemoved.addListener((windowId) => {
@@ -476,6 +536,9 @@ chrome.windows.onRemoved.addListener((windowId) => {
     state.pageIdByTabId.clear();
     state.traceSessions.clear();
     state.videoSessions.clear();
+    void workspaceBinding.save().catch(error => {
+      state.runtimeState.lastError = String(error?.message || error);
+    });
   }
 });
 
@@ -498,8 +561,21 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     void reconnectNow().then(async () => sendResponse(await buildStatusSnapshot()));
     return true;
   }
+  if (message?.type === 'reload-extension') {
+    // Status is optional. Read it before arming the reload so the popup's
+    // response can be sent before the extension restarts.
+    void buildStatusSnapshot().catch(() => ({})).then(async snapshot => {
+      const accepted = await runtimeRecovery.recover({force: true});
+      sendResponse({...snapshot, lastError: accepted
+        ? 'Reloading the extension. Refresh status after it reconnects.'
+        : 'Wait for the current browser operation to finish before reloading the extension.'});
+    }).catch(error => sendResponse({lastError: String(error?.message || error)}));
+    return true;
+  }
   if (message?.type === 'rebuild-workspace') {
-    void rebuildWorkspaceBinding().then(sendResponse);
+    void rebuildWorkspaceBinding().then(sendResponse).catch(error => {
+      sendResponse({error: String(error?.message || error), connectionStatus: state.runtimeState.connectionStatus});
+    });
     return true;
   }
   return false;
