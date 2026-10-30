@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
+from browser_cli.outputs.files import write_json_artifact
 from browser_cli.task_runtime.client import BrowserCliTaskClient
 from browser_cli.task_runtime.models import FlowContext, SnapshotResult
 from browser_cli.task_runtime.read import ReadResult
@@ -158,8 +158,7 @@ class Flow:
 
     def write_json_artifact(self, relative_path: str, payload: Any) -> Path:
         output_path = (self.artifacts_dir / relative_path).resolve()
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        write_json_artifact(output_path, payload)
         return output_path
 
     def screenshot(

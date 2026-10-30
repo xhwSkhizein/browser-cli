@@ -6,6 +6,7 @@ import asyncio
 from typing import Any
 
 from browser_cli.daemon.client import send_command
+from browser_cli.errors import BatchFailedError
 from browser_cli.profiles.discovery import ChromeEnvironment
 from browser_cli.task_runtime.models import SnapshotResult
 from browser_cli.task_runtime.read import ReadRequest, ReadResult, run_read_request
@@ -30,13 +31,19 @@ class BrowserCliTaskClient:
         stop_on_error: bool = True,
         result_mode: str = "all",
     ) -> dict[str, Any]:
-        return self.invoke(
+        response = send_command(
             "batch",
-            commands=commands,
-            context=context,
-            stop_on_error=stop_on_error,
-            result_mode=result_mode,
+            {
+                "commands": commands,
+                "context": context,
+                "stop_on_error": stop_on_error,
+                "result_mode": result_mode,
+            },
         )
+        data = response["data"]
+        if data.get("success") is not True:
+            raise BatchFailedError(response)
+        return data
 
     def read(
         self,

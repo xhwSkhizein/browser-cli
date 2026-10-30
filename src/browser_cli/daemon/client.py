@@ -84,15 +84,37 @@ async def _send_command_async(action: str, args: dict[str, Any]) -> dict[str, An
         "agent_id": resolve_agent_id(),
         "request_id": uuid.uuid4().hex,
     }
-    writer.write((json.dumps(request_payload) + "\n").encode("utf-8"))
-    await writer.drain()
-    raw = await reader.readline()
-    writer.close()
-    with contextlib.suppress(Exception):
-        await writer.wait_closed()
+    try:
+        writer.write((json.dumps(request_payload) + "\n").encode("utf-8"))
+        await writer.drain()
+        try:
+            raw = await reader.readline()
+        except ValueError as exc:
+            raise OperationFailedError(
+                "Daemon response exceeded the response size limit. The action may have run.",
+                error_code="RESPONSE_TOO_LARGE",
+            ) from exc
+    finally:
+        writer.close()
+        with contextlib.suppress(Exception):
+            await writer.wait_closed()
     if not raw:
         raise DaemonNotAvailableError("Browser daemon closed the connection without a response.")
-    payload = json.loads(raw.decode("utf-8"))
+    try:
+        payload = json.loads(raw.decode("utf-8"))
+        if (
+            not raw.endswith(b"\n")
+            or not isinstance(payload, dict)
+            or not isinstance(payload.get("ok"), bool)
+        ):
+            raise ValueError("Incomplete or invalid response envelope.")
+        if not isinstance(payload.get("data"), dict) or not isinstance(payload.get("meta"), dict):
+            raise ValueError("Response requires data and meta objects.")
+    except (ValueError, UnicodeError) as exc:
+        raise OperationFailedError(
+            "Invalid or incomplete daemon response. The action may have run.",
+            error_code="INVALID_RESPONSE",
+        ) from exc
     if payload.get("ok"):
         return payload
     raise _error_from_payload(payload)
@@ -250,6 +272,12 @@ def _wait_for_pid_exit(pid: int, *, timeout_seconds: float) -> bool:
 
 
 def _error_from_payload(payload: dict[str, Any]) -> BrowserCliError:
+    exc = _typed_error_from_payload(payload)
+    exc.payload = {**exc.payload, **payload}
+    return exc
+
+
+def _typed_error_from_payload(payload: dict[str, Any]) -> BrowserCliError:
     error_code = str(payload.get("error_code") or "OPERATION_FAILED")
     message = str(payload.get("error_message") or "Daemon command failed.")
     if error_code == "INVALID_INPUT":

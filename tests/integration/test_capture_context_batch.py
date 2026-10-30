@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 import pytest
 from PIL import Image
+from tests.browser_runtime import get_test_browser_executable
 from tests.integration.fixture_server import run_fixture_server
 
 from browser_cli.browser.context import ContextOptions
@@ -21,7 +22,7 @@ from browser_cli.daemon.app import BrowserDaemonApp
 from browser_cli.daemon.models import DaemonRequest
 from browser_cli.daemon.server import BrowserDaemonServer
 from browser_cli.daemon.transport import DAEMON_RUNTIME_VERSION
-from browser_cli.profiles.discovery import ChromeEnvironment, discover_chrome_executable
+from browser_cli.profiles.discovery import ChromeEnvironment
 
 pytestmark = pytest.mark.integration
 
@@ -42,7 +43,7 @@ def browser_runtime(tmp_path_factory):
         app = BrowserDaemonApp()
         app.state.browser_service.configure_environment(
             ChromeEnvironment(
-                executable_path=discover_chrome_executable(),
+                executable_path=get_test_browser_executable(),
                 user_data_dir=root / "profile",
                 profile_directory="Default",
                 source="managed",

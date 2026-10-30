@@ -1,5 +1,6 @@
 """Thin Python runtime for Browser CLI-backed tasks."""
 
+from browser_cli.outputs.files import write_json_artifact
 from browser_cli.task_runtime.client import BrowserCliTaskClient
 from browser_cli.task_runtime.entrypoint import (
     load_task_entrypoint,
@@ -28,4 +29,5 @@ __all__ = [
     "run_task_entrypoint",
     "validate_task_dir",
     "validate_task_metadata",
+    "write_json_artifact",
 ]

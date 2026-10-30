@@ -40,6 +40,7 @@ the implementation, and where should a change land first.
 - Screenshots return actual image dimensions and capture geometry. Full-page/rectangle capture must not resize the page; explicit temporary viewports restore viewport and scroll in `finally`. A successful capture confirms identical before/after page geometry.
 - The extension's optional `screenshot-controls` capability gates controlled captures; stale extensions must fail before capture instead of ignoring parameters.
 - The packaged Node.js client lives under `browser_cli.task_runtime/node`; `browser-cli paths --json` exposes `node_client` and `socket_path`. It uses the same daemon action protocol and agent scoping as Python, never a second runtime. Every Node request checks daemon `runtime_version` before browser work; mismatch returns `DAEMON_INCOMPATIBLE` with upgrade/reload guidance. The packaged `package.json` runtime version must match `daemon/transport.py`, enforced by the product guard.
+- Node `runtime-status` requests carrying `chrome_environment` must reach the daemon. Only plain status reads (with no arguments besides `warmup: false`) may reuse the compatibility probe; dropping configuration can make a test launch desktop Chrome instead of its selected shell.
 - `browser-cli reload` is the runtime reset command; page reload remains public as `browser-cli page-reload`.
 - `browser-cli workspace rebuild --json` is the precise non-interactive extension workspace binding repair command.
 - `browser-cli recover --json` is the broader agent recovery command and may reload before rebuilding workspace binding.
@@ -49,6 +50,11 @@ the implementation, and where should a change land first.
 - `v1` targets stable Google Chrome first and should not silently swap browser families.
 - `v2` uses one daemon-managed browser instance.
 - `v2` command output is JSON-first.
+- All CLI errors, including argument errors, return `ok/data/meta` JSON on stdout with `error_code` and `error_message`; successful content-first output and help retain their formats.
+- Browser actions accept `--json` and client-side `--output`. `eval` and `eval-on` also accept `--file PATH` (`-` reads stdin). JSON exports atomically save the complete `data.result` for eval actions or `data` for other actions, returning only file metadata; transport limits still apply.
+- Batch step failures exit 75 in the CLI while preserving protocol-level `ok` and step-level `data.success`. Python and Node high-level `batch()` raise `BATCH_FAILED` with partial results in the exception payload; raw `invoke`/`request` callers inspect step success themselves.
+- One-off browser tasks do not require task metadata or publication. Start with `status --json`, keep one stable `X_AGENT_ID`, serialize dependent same-tab actions, and save full results before returning compact summaries.
+- Busy errors identify the same agent's blocking request and report `execution_state=not_started`. Timeout/disconnect failures remain uncertain and must never trigger automatic replay. A local export failure may report `execution_state=completed` because the browser action already ran.
 - `v2` uses `X_AGENT_ID` to isolate tab visibility and active-tab state.
 - `v2` must not expose session concepts or global `--page` targeting flags.
 - Semantic refs should follow bridgic-style reconstruction rather than DOM marker lookup.
@@ -180,6 +186,8 @@ the implementation, and where should a change land first.
 
 - User-facing output rendering:
   `src/browser_cli/outputs/render.py`, `src/browser_cli/outputs/json.py`
+- Caller-side atomic JSON artifact writing shared by CLI and Python tasks:
+  `src/browser_cli/outputs/files.py`; Python tasks may import `write_json_artifact` from `browser_cli.task_runtime`. The packaged Node client exports `writeJsonArtifact`.
 - Packaged Browser CLI skill assets shipped with the installed wheel:
   `src/browser_cli/packaged_skills/*`
 - Error taxonomy and exit codes:
@@ -269,6 +277,7 @@ the implementation, and where should a change land first.
   inspect `scripts/guards/architecture.py`, `scripts/guards/product_contracts.py`, and `scripts/guards/docs_sync.py` before making the change final.
 - If repo-local branch protection appears inactive in a clone:
   inspect `.githooks/pre-commit`, `.githooks/pre-push`, and `git config --local core.hooksPath`; the hooks are repo-owned but activation is clone-local.
+- Repeated Chrome icons in the macOS Dock after tests -> desktop Chrome availability probes and integration launches register recent-app entries -> inspect `scripts/browser_test_support.py`, `tests/browser_runtime.py`, and `tests/integration/conftest.py`. Use the pinned Chrome Headless Shell for macOS tests and the existing Chrome extension smoke for real-Chrome coverage; do not rewrite Dock preferences or Chrome app metadata.
 
 ## Architectural Boundaries
 
@@ -281,7 +290,7 @@ the implementation, and where should a change land first.
 - `browser_cli.daemon` owns the long-lived daemon, socket transport, request/response protocol, browser lifecycle, runtime status, and command dispatch.
 - `browser_cli.drivers` owns the explicit backend contract plus `playwright_driver` and `extension_driver`. Drivers consume daemon-built locator specs, not raw refs.
 - `browser_cli.extension` owns the extension transport, handshake, heartbeat, required-capability checks, and artifact assembly from WebSocket chunks.
-- `browser_cli.outputs` owns final rendering for content-first and JSON-first surfaces.
+- `browser_cli.outputs` owns final rendering for content-first and JSON-first surfaces and caller-side atomic JSON artifact writing.
 - `browser_cli.packaged_skills` owns the Browser CLI skill assets that are shipped in installed distributions and consumed by `browser-cli install-skills`.
 - `browser_cli.profiles` owns Chrome executable discovery, managed profile directories, profile naming, and lock detection.
 - `browser_cli.refs` owns semantic ref models, snapshot generation, latest-snapshot registry state, and locator reconstruction.
@@ -325,13 +334,16 @@ public interactive commands.
 - `scripts/guards/python_compatibility.py` owns the static Python 3.10 compatibility check; keep new syntax and stdlib-API regression rules there so local 3.12 development fails before CI does.
 - Integration socket fixtures must create the socket parent before each bind. Cover both short homes (socket under `<home>/run`) and long homes (hashed socket under the existing temporary directory); testing only the latter can hide missing-directory setup bugs.
 - Tests and task fixtures must resolve repo assets relative to the checked-out repository, not a developer-specific absolute workspace path; CI runners will fail on hard-coded local paths first.
+- Pytest collection, including `pytest --collect-only`, must never launch a browser. Check real host launch permissions and test-browser dependencies once in the integration session fixture; unavailable prerequisites are setup errors, not passing or skipped browser tests.
+- `scripts/browser_test_support.py` selects the test executable. macOS tests require the exact Chrome Headless Shell revision from that Python environment's Playwright registry and must not fall back to a desktop `.app`. Linux integration tests retain stable Chrome coverage. Product Chrome discovery is unchanged.
+- `tests/browser_runtime.py` configures disposable daemon profiles through the existing `chrome_environment` protocol before CLI browser actions, including after reload. Keep the user's `HOME` intact and isolate tests with `BROWSER_CLI_HOME`.
 - `scripts/lint.sh` owns repository lint execution.
 - `scripts/test.sh` owns repository test execution.
 - `scripts/guard.sh` owns architecture, product-contract, and doc-sync guards.
 - `scripts/check.sh` runs lint, tests, and guard in the expected order.
 - The guard implementations live under `scripts/guards/`.
 - Repo-local test runs should refresh the editable package with `uv sync --dev --reinstall-package browser-control-and-automation-cli` before `pytest`; otherwise daemon compatibility checks can drift after local commits because `setuptools-scm` version metadata lags behind the current checkout.
-- Installed-wheel smoke validation uses `uv run python scripts/smoke_installed_wheel.py dist/<wheel>.whl`; it checks launch permissions first, installs into a temporary venv outside the repo, prepares that Playwright version's ffmpeg in an isolated cache, discovers the packaged Node client, cold-starts a temporary daemon, captures an isolated screenshot, and validates step failure handling.
+- Installed-wheel smoke validation uses `uv run python scripts/smoke_installed_wheel.py dist/<wheel>.whl`; it checks launch permissions first, installs into a temporary venv outside the repo, prepares that environment's matching headless shell on macOS plus ffmpeg in an isolated cache, discovers the packaged Node client, cold-starts a temporary daemon, captures an isolated screenshot, and validates step failure handling.
 - Release builds should use `uv build --no-sources --clear` so stale `dist/` artifacts are not accidentally published alongside the current package.
 - After each code change, run lint and guard as part of the full validation flow.
 - After each code change, run lint, tests, and guard.

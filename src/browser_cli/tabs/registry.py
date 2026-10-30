@@ -6,7 +6,7 @@ import asyncio
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 
 from browser_cli.errors import BusyTabError, NoActiveTabError, TabNotFoundError
 
@@ -213,7 +213,7 @@ class TabRegistry:
             if record is None or record.owner_agent_id != agent_id:
                 raise NoActiveTabError()
             if record.busy and record.busy.request_id != request_id:
-                raise BusyTabError()
+                raise BusyTabError(blocked_by=asdict(record.busy))
             record.busy = BusyState(
                 request_id=request_id,
                 command=command,
@@ -240,7 +240,7 @@ class TabRegistry:
             if record is None or record.owner_agent_id != agent_id:
                 raise TabNotFoundError()
             if record.busy and record.busy.request_id != request_id:
-                raise BusyTabError()
+                raise BusyTabError(blocked_by=asdict(record.busy))
             record.busy = BusyState(
                 request_id=request_id,
                 command=command,

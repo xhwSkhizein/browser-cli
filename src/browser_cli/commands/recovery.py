@@ -14,7 +14,7 @@ from browser_cli.errors import (
     ExtensionUnavailableError,
     InvalidInputError,
 )
-from browser_cli.outputs.json import render_json_error, render_json_payload
+from browser_cli.outputs.json import render_json_payload
 
 
 def run_workspace_command(args: Namespace) -> str:
@@ -25,7 +25,8 @@ def run_workspace_command(args: Namespace) -> str:
     try:
         return _run_workspace_rebuild_json()
     except BrowserCliError as exc:
-        return render_json_error(exc, next_action=_next_action_for_error(exc))
+        exc.payload["next_action"] = _next_action_for_error(exc)
+        raise
 
 
 def run_recover_command(args: Namespace) -> str:
@@ -34,7 +35,8 @@ def run_recover_command(args: Namespace) -> str:
     try:
         return render_json_payload({"ok": True, "data": _recover(), "meta": {"action": "recover"}})
     except BrowserCliError as exc:
-        return render_json_error(exc, next_action=_next_action_for_error(exc))
+        exc.payload["next_action"] = _next_action_for_error(exc)
+        raise
 
 
 def collect_stable_status_data() -> dict[str, Any]:

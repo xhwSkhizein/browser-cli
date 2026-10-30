@@ -15,18 +15,22 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from browser_cli.browser.launch_preflight import ensure_browser_launch_allowed
+from browser_test_support import resolve_browser_test_executable
 
 NODE_SCENARIO = """
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {pathToFileURL} from 'node:url';
 import {join} from 'node:path';
-const [command, url] = process.argv.slice(2);
+const [command, url, executablePath] = process.argv.slice(2);
 const {data: paths} = JSON.parse(execFileSync(command, ['paths', '--json'], {encoding:'utf8'}));
 const {BrowserCliClient, DAEMON_RUNTIME_VERSION} = await import(pathToFileURL(paths.node_client).href);
 // Leave socketPath unset to exercise installed path discovery and cold startup.
 const client = new BrowserCliClient({command, home:paths.home});
 try {
+  const configured = await client.request('runtime-status', {chrome_environment:{executable_path:executablePath,
+    user_data_dir:join(paths.home, 'default-profile'), profile_directory:'Default', source:'managed'}});
+  assert.equal(configured.data.profile_dir, join(paths.home, 'default-profile'), 'Test-browser configuration must reach the daemon before any launch');
   const result = await client.batch([
     {action:'open', args:{url}},
     {action:'screenshot', args:{path:'wheel-smoke.png'}},
@@ -36,10 +40,15 @@ try {
   const shot = result.data.results[0].data;
   assert.deepEqual(shot.screenshot_size, {width:1280, height:960});
   assert.deepEqual(shot.capture.before, shot.capture.after);
-  const failed = await client.batch([
+  let failed;
+  await assert.rejects(client.batch([
     {action:'resize', args:{width:0, height:10}},
     {action:'open', args:{url}},
-  ], {context:{}, resultMode:'summary'});
+  ], {context:{}, resultMode:'summary'}), error => {
+    assert.equal(error.code, 'BATCH_FAILED');
+    failed = error.payload;
+    return true;
+  });
   assert.equal(failed.ok, true);
   assert.equal(failed.data.success, false);
   assert.equal(failed.data.completed_count, 1);
@@ -103,9 +112,13 @@ def run(wheel: Path) -> dict[str, object]:
         execute([uv, "venv", "--python", sys.executable, str(venv)])
         python = venv / "bin" / "python"
         execute([uv, "pip", "install", "--python", str(python), str(wheel)])
-        # Managed Chrome records video, so a fresh install needs Playwright's
-        # matching ffmpeg runtime even when Chrome is already installed.
-        execute([str(python), "-m", "playwright", "install", "ffmpeg"])
+        # Use the wheel environment's matching runtime, not the repo's cached
+        # revision. The shell also installs the ffmpeg needed for video.
+        if sys.platform == "darwin":
+            execute([str(python), "-m", "playwright", "install", "--only-shell", "chromium"])
+        else:
+            execute([str(python), "-m", "playwright", "install", "ffmpeg"])
+        test_browser = resolve_browser_test_executable(python=python, env=env)
         command = venv / "bin" / "browser-cli"
         paths = json.loads(execute([str(command), "paths", "--json"]))["data"]
         if not Path(paths["node_client"]).is_relative_to(venv):
@@ -118,10 +131,21 @@ def run(wheel: Path) -> dict[str, object]:
         try:
             result = json.loads(
                 execute(
-                    [node, str(scenario), str(command), f"http://127.0.0.1:{server.server_port}/"]
+                    [
+                        node,
+                        str(scenario),
+                        str(command),
+                        f"http://127.0.0.1:{server.server_port}/",
+                        str(test_browser),
+                    ]
                 )
             )
-            return {"wheel": wheel.name, "clean_install": True, **result}
+            return {
+                "wheel": wheel.name,
+                "clean_install": True,
+                "test_browser": str(test_browser),
+                **result,
+            }
         finally:
             subprocess.run(
                 [str(command), "stop"], cwd=root, env=env, capture_output=True, timeout=20

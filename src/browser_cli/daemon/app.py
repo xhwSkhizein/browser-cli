@@ -172,6 +172,7 @@ class BrowserDaemonApp:
             meta = {
                 "action": request.action,
                 "agent_id": agent_id,
+                "request_id": request.request_id,
                 "runtime_version": DAEMON_RUNTIME_VERSION,
             }
             if command_started:
@@ -222,6 +223,7 @@ class BrowserDaemonApp:
         meta = {
             "action": request.action,
             "agent_id": request.agent_id,
+            "request_id": request.request_id,
             "driver": self._state.browser_service.active_driver_name,
             "runtime_version": DAEMON_RUNTIME_VERSION,
         }
@@ -231,6 +233,8 @@ class BrowserDaemonApp:
             error_code=exc.error_code,
             error_message=exc.message,
             meta=meta,
+            execution_state=exc.payload.get("execution_state"),
+            blocked_by=exc.payload.get("blocked_by"),
         )
 
     async def _handle_stop(self, request: DaemonRequest) -> dict[str, Any]:

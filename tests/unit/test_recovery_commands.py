@@ -4,6 +4,7 @@ import json
 from argparse import Namespace
 from unittest.mock import patch
 
+from browser_cli.cli.main import main
 from browser_cli.commands.recovery import (
     _next_action_for_error,
     run_recover_command,
@@ -83,7 +84,7 @@ def test_recover_json_can_reload_then_rebuild() -> None:
     assert payload["data"]["recovered"] is True
 
 
-def test_workspace_rebuild_json_failure_returns_structured_error() -> None:
+def test_workspace_rebuild_json_failure_returns_structured_error(capsys) -> None:
     with (
         patch("browser_cli.commands.recovery.ensure_daemon_running"),
         patch(
@@ -91,14 +92,18 @@ def test_workspace_rebuild_json_failure_returns_structured_error() -> None:
             return_value=_status_data("absent", "reconnect-extension"),
         ),
     ):
-        payload = json.loads(
-            run_workspace_command(Namespace(workspace_subcommand="rebuild", json=True))
-        )
+        assert main(["workspace", "rebuild", "--json"]) == 75
+        captured = capsys.readouterr()
+        payload = json.loads(captured.out)
+        assert captured.err == ""
 
     assert payload == {
         "ok": False,
+        "data": {},
         "error_code": "EXTENSION_UNAVAILABLE",
-        "message": "Browser CLI extension is not connected.",
+        "error_message": "Browser CLI extension is not connected.",
+        "execution_state": "unknown",
+        "meta": {"action": "workspace", "agent_id": "public"},
         "next_action": "connect or reload the Browser CLI extension",
     }
 

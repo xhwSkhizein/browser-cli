@@ -113,10 +113,11 @@ def test_missing_command_returns_usage_error(capsys) -> None:
     exit_code = main([])
     captured = capsys.readouterr()
     assert exit_code == 2
-    assert "usage:" in captured.out
+    assert json.loads(captured.out)["error_code"] == "INVALID_INPUT"
+    assert captured.err == ""
 
 
-def test_runtime_error_maps_to_stderr_and_exit_code(capsys) -> None:
+def test_runtime_error_maps_to_json_and_exit_code(capsys) -> None:
     with patch(
         "browser_cli.cli.main.run_read_command",
         side_effect=ProfileUnavailableError("profile locked"),
@@ -125,10 +126,13 @@ def test_runtime_error_maps_to_stderr_and_exit_code(capsys) -> None:
 
     captured = capsys.readouterr()
     assert exit_code == 73
-    assert "profile locked" in captured.err
+    payload = json.loads(captured.out)
+    assert payload["error_message"] == "profile locked"
     assert (
-        "Next: close Browser CLI-owned Chrome windows or inspect browser-cli status" in captured.err
+        payload["next_action"]
+        == "close Browser CLI-owned Chrome windows or inspect browser-cli status"
     )
+    assert captured.err == ""
 
 
 def test_json_mode_error_renders_json_to_stdout(capsys) -> None:
@@ -144,9 +148,11 @@ def test_json_mode_error_renders_json_to_stdout(capsys) -> None:
     payload = json.loads(captured.out)
     assert payload == {
         "ok": False,
+        "data": {},
         "error_code": "CHROME_EXECUTABLE_NOT_FOUND",
-        "message": "Chrome missing",
-        "meta": {"action": "doctor"},
+        "error_message": "Chrome missing",
+        "execution_state": "unknown",
+        "meta": {"action": "doctor", "agent_id": "public"},
         "next_action": "install stable Google Chrome and re-run browser-cli doctor --json",
     }
 

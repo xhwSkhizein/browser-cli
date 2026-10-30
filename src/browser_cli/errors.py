@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
 from . import error_codes, exit_codes
 
@@ -14,6 +15,7 @@ class BrowserCliError(Exception):
     message: str
     exit_code: int = exit_codes.INTERNAL_ERROR
     error_code: str = error_codes.INTERNAL_ERROR
+    payload: dict[str, Any] = field(default_factory=dict, kw_only=True)
 
     def __str__(self) -> str:
         return self.message
@@ -57,6 +59,7 @@ class DaemonNotAvailableError(BrowserCliError):
 class NoActiveTabError(BrowserCliError):
     def __init__(self, message: str = "No active tab is available for this agent.") -> None:
         super().__init__(message, exit_codes.TEMPORARY_FAILURE, error_codes.NO_ACTIVE_TAB)
+        self.payload = {"execution_state": "not_started"}
 
 
 class NoVisibleTabsError(BrowserCliError):
@@ -65,13 +68,18 @@ class NoVisibleTabsError(BrowserCliError):
 
 
 class BusyTabError(BrowserCliError):
-    def __init__(self, message: str | None = None) -> None:
+    def __init__(
+        self, message: str | None = None, *, blocked_by: dict[str, Any] | None = None
+    ) -> None:
         super().__init__(
             message
-            or "The current active tab is already being operated on. Create a new tab or retry after the other command finishes.",
+            or "The current active tab is already being operated on. Wait for the other command to finish before retrying.",
             exit_codes.TEMPORARY_FAILURE,
             error_codes.AGENT_ACTIVE_TAB_BUSY,
         )
+        self.payload = {"execution_state": "not_started"}
+        if blocked_by is not None:
+            self.payload["blocked_by"] = blocked_by
 
 
 class TabNotFoundError(BrowserCliError):
@@ -114,6 +122,12 @@ class AmbiguousRefError(BrowserCliError):
 class OperationFailedError(BrowserCliError):
     def __init__(self, message: str, *, error_code: str = error_codes.OPERATION_FAILED) -> None:
         super().__init__(message, exit_codes.TEMPORARY_FAILURE, error_code)
+
+
+class BatchFailedError(OperationFailedError):
+    def __init__(self, payload: dict[str, Any]) -> None:
+        super().__init__("One or more batch steps failed.", error_code=error_codes.BATCH_FAILED)
+        self.payload = payload
 
 
 class WorkspaceBindingLostError(OperationFailedError):

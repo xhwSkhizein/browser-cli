@@ -7,6 +7,10 @@ from pathlib import Path
 from scripts.guards.common import Finding, discover_top_level_packages, read_section
 
 REQUIRED_AGENT_PHRASES = [
+    "All CLI errors, including argument errors, return `ok/data/meta` JSON on stdout",
+    "Batch step failures exit 75 in the CLI",
+    "One-off browser tasks do not require task metadata or publication.",
+    "`src/browser_cli/outputs/files.py`",
     "`browser-cli batch` executes ordered actions with compact result modes.",
     "Screenshots return actual image dimensions and capture geometry.",
     "The packaged Node.js client lives under `browser_cli.task_runtime/node`",
@@ -26,10 +30,15 @@ REQUIRED_AGENT_PHRASES = [
     "`scripts/test.sh`",
     "`scripts/guard.sh`",
     "`scripts/check.sh`",
+    "`pytest --collect-only`",
+    "`scripts/browser_test_support.py`",
+    "Chrome Headless Shell",
     "`browser-cli install-skills` installs the packaged Browser CLI skills into `~/.agents/skills` by default and `--target` overrides the destination root.",
 ]
 
 REQUIRED_README_PHRASES = [
+    "browser-cli eval --file extract.js --output items.json",
+    "Failed steps produce CLI exit code 75",
     "Python 3.10+",
     "uv sync --dev",
     "uv tool install browser-control-and-automation-cli",

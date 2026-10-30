@@ -1,17 +1,99 @@
 from __future__ import annotations
 
+import asyncio
+import json
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from browser_cli.daemon import client
-from browser_cli.errors import DaemonNotAvailableError
+from browser_cli.errors import DaemonNotAvailableError, OperationFailedError
 
 
 class _FakeProcess:
     def __init__(self, pid: int) -> None:
         self.pid = pid
+
+
+@pytest.mark.parametrize(
+    "raw", [b'{"ok":', b'{"ok":true,"data":{},"meta":{}}', b"[]\n", b'{"ok":true}\n', b"\xff\n"]
+)
+def test_incomplete_or_invalid_daemon_response_is_rejected_and_connection_closed(raw):
+    async def scenario():
+        reader = asyncio.StreamReader()
+        reader.feed_data(raw)
+        reader.feed_eof()
+        writer = MagicMock()
+        writer.drain = AsyncMock()
+        writer.wait_closed = AsyncMock()
+        with (
+            patch(
+                "browser_cli.daemon.client.asyncio.open_unix_connection",
+                AsyncMock(return_value=(reader, writer)),
+            ),
+            pytest.raises(OperationFailedError) as caught,
+        ):
+            await client._send_command_async("eval", {"code": "() => 1"})
+        assert caught.value.error_code == "INVALID_RESPONSE"
+        writer.close.assert_called_once()
+        writer.wait_closed.assert_awaited_once()
+
+    asyncio.run(scenario())
+
+
+def test_oversized_daemon_response_is_structured_and_not_replayed():
+    async def scenario():
+        reader = asyncio.StreamReader(limit=16)
+        reader.feed_data(b"x" * 100)
+        reader.feed_eof()
+        writer = MagicMock()
+        writer.drain = AsyncMock()
+        writer.wait_closed = AsyncMock()
+        with (
+            patch(
+                "browser_cli.daemon.client.asyncio.open_unix_connection",
+                AsyncMock(return_value=(reader, writer)),
+            ) as connect,
+            pytest.raises(OperationFailedError) as caught,
+        ):
+            await client._send_command_async("eval", {})
+        assert caught.value.error_code == "RESPONSE_TOO_LARGE"
+        connect.assert_awaited_once()
+        writer.close.assert_called_once()
+
+    asyncio.run(scenario())
+
+
+def test_daemon_errors_retain_request_and_runtime_metadata():
+    payload = {
+        "ok": False,
+        "data": {},
+        "error_code": "AGENT_ACTIVE_TAB_BUSY",
+        "error_message": "Busy",
+        "meta": {"agent_id": "owner", "request_id": "r2", "state_reset": True},
+        "execution_state": "not_started",
+        "blocked_by": {"command": "cookies", "request_id": "r1"},
+    }
+
+    async def scenario():
+        reader = asyncio.StreamReader()
+        reader.feed_data((json.dumps(payload) + "\n").encode())
+        reader.feed_eof()
+        writer = MagicMock()
+        writer.drain = AsyncMock()
+        writer.wait_closed = AsyncMock()
+        with (
+            patch(
+                "browser_cli.daemon.client.asyncio.open_unix_connection",
+                AsyncMock(return_value=(reader, writer)),
+            ),
+            pytest.raises(Exception) as caught,
+        ):
+            await client._send_command_async("eval", {})
+        assert caught.value.payload == payload
+
+    asyncio.run(scenario())
 
 
 def test_build_daemon_command_includes_home(tmp_path: Path) -> None:

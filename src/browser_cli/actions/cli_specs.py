@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import sys
 from argparse import ArgumentParser, Namespace
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -293,14 +294,14 @@ def get_action_specs() -> list[ActionSpec]:
             "Evaluate JavaScript.",
             "Evaluate JavaScript in the page context.",
             _add_eval_arguments,
-            _default_request,
+            _eval_request,
         ),
         ActionSpec(
             "eval-on",
             "Evaluate JavaScript on a ref.",
             "Evaluate JavaScript on an element ref.",
             _add_eval_on_arguments,
-            _default_request,
+            _eval_request,
         ),
         ActionSpec(
             "wait",
@@ -657,12 +658,37 @@ def _add_mouse_button_arguments(parser: ArgumentParser) -> None:
 
 
 def _add_eval_arguments(parser: ArgumentParser) -> None:
-    parser.add_argument("code", help='Arrow function JavaScript like "() => document.title".')
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument(
+        "code", nargs="?", help='Arrow function JavaScript like "() => document.title".'
+    )
+    source.add_argument(
+        "--file", dest="code_file", help="Read UTF-8 JavaScript from a file; - reads stdin."
+    )
 
 
 def _add_eval_on_arguments(parser: ArgumentParser) -> None:
     parser.add_argument("ref", help="Element ref from the latest snapshot.")
-    parser.add_argument("code", help='Arrow function JavaScript like "(el) => el.textContent".')
+    _add_eval_arguments(parser)
+
+
+def _eval_request(args: Namespace) -> dict[str, Any]:
+    code = args.code
+    if args.code_file is not None:
+        try:
+            code = (
+                sys.stdin.read()
+                if args.code_file == "-"
+                else Path(args.code_file).expanduser().read_text(encoding="utf-8")
+            )
+        except (OSError, UnicodeError) as exc:
+            raise ValueError(f"Cannot read JavaScript: {exc}") from exc
+    if not code or not code.strip():
+        raise ValueError("JavaScript code must not be empty.")
+    payload = {"code": code}
+    if getattr(args, "ref", None) is not None:
+        payload["ref"] = args.ref
+    return payload
 
 
 def _add_wait_arguments(parser: ArgumentParser) -> None:
@@ -870,6 +896,8 @@ def _default_request(args: Namespace) -> dict[str, Any]:
         "action_name",
         "action_start_if_needed",
         "action_request_builder",
+        "json",
+        "output",
     }
     payload: dict[str, Any] = {}
     for key, value in vars(args).items():

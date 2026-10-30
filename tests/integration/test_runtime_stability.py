@@ -5,7 +5,6 @@ from pathlib import Path
 import pytest
 from tests.integration.fixture_server import run_fixture_server
 from tests.integration.test_daemon_actions import (
-    _can_launch_daemon_browser,
     _configure_runtime,
     _run_cli_json,
     _run_cli_text,
@@ -15,7 +14,6 @@ from tests.integration.test_daemon_actions import (
 pytestmark = pytest.mark.integration
 
 
-@pytest.mark.skipif(not _can_launch_daemon_browser(), reason="Stable Chrome runtime unavailable")
 def test_daemon_residency_loop_keeps_runtime_status_consistent(
     monkeypatch, tmp_path: Path, capsys
 ) -> None:

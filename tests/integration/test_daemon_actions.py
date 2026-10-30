@@ -1,18 +1,16 @@
 from __future__ import annotations
 
-import asyncio
+import hashlib
 import json
 import socket
-import sys
-import tempfile
 import threading
 import time
 from pathlib import Path
 
 import pytest
+from tests.browser_runtime import prepare_daemon_browser
 from tests.integration.fixture_server import run_fixture_server
 
-from browser_cli.browser.launch_preflight import ensure_browser_launch_allowed
 from browser_cli.cli.main import main
 from browser_cli.daemon.client import send_command
 from browser_cli.errors import (
@@ -21,41 +19,6 @@ from browser_cli.errors import (
     NoSnapshotContextError,
     StaleSnapshotError,
 )
-from browser_cli.profiles.discovery import discover_chrome_executable
-
-
-def _can_launch_daemon_browser() -> bool:
-    try:
-        ensure_browser_launch_allowed()
-        executable_path = discover_chrome_executable()
-    except Exception:
-        return False
-
-    try:
-        from playwright.async_api import async_playwright
-    except ImportError:
-        return False
-
-    async def _probe() -> bool:
-        playwright = await async_playwright().start()
-        with tempfile.TemporaryDirectory() as tmp:
-            user_data_dir = Path(tmp) / "user-data"
-            user_data_dir.mkdir(parents=True)
-            try:
-                context = await playwright.chromium.launch_persistent_context(
-                    user_data_dir=str(user_data_dir),
-                    executable_path=str(executable_path),
-                    headless=True,
-                )
-                await context.close()
-                return True
-            except Exception:
-                return False
-            finally:
-                await playwright.stop()
-
-    return asyncio.run(_probe())
-
 
 pytestmark = pytest.mark.integration
 
@@ -73,15 +36,6 @@ def _configure_runtime(
     agent_id: str = "agent-a",
     search_url_template: str | None = None,
 ) -> None:
-    real_home = Path.home()
-    if not (
-        real_home / "Library" / "Caches" / "ms-playwright"
-    ).exists() and sys.platform.startswith("linux"):
-        playwright_cache = real_home / ".cache" / "ms-playwright"
-    else:
-        playwright_cache = real_home / "Library" / "Caches" / "ms-playwright"
-    monkeypatch.setenv("PLAYWRIGHT_BROWSERS_PATH", str(playwright_cache))
-    monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("BROWSER_CLI_HOME", str(tmp_path / ".browser-cli-runtime"))
     monkeypatch.setenv("X_AGENT_ID", agent_id)
     monkeypatch.setenv("BROWSER_CLI_HEADLESS", "1")
@@ -91,6 +45,7 @@ def _configure_runtime(
 
 
 def _run_cli_json(args: list[str], capsys) -> dict:
+    prepare_daemon_browser()
     exit_code = main(args)
     captured = capsys.readouterr()
     assert exit_code == 0, captured.err
@@ -120,7 +75,52 @@ def _snapshot_refs(capsys) -> list[dict]:
     return _run_cli_json(["snapshot"], capsys)["data"]["refs_summary"]
 
 
-@pytest.mark.skipif(not _can_launch_daemon_browser(), reason="Stable Chrome runtime unavailable")
+def test_complete_cli_export_and_failure_contract(monkeypatch, tmp_path: Path, capsys) -> None:
+    _configure_runtime(monkeypatch, tmp_path)
+    with run_fixture_server() as base_url:
+        prepare_daemon_browser()
+        assert main(["eval", "() => 1"]) == 75
+        error = json.loads(capsys.readouterr().out)
+        assert error["error_code"] == "NO_ACTIVE_TAB"
+        assert error["execution_state"] == "not_started"
+        assert error["meta"]["agent_id"] == "agent-a"
+        assert error["meta"]["request_id"]
+
+        _run_cli_json(["open", f"{base_url}/static"], capsys)
+        script = tmp_path / "extract.js"
+        script.write_text(
+            '() => [{title: \'中文 "quotes" \\\\ \\n\'.repeat(20000), url: "https://example.com/?signed=private"}]',
+            encoding="utf-8",
+        )
+        output = tmp_path / "items.json"
+        exported = _run_cli_json(["eval", "--file", str(script), "--output", str(output)], capsys)
+        saved = output.read_bytes()
+        assert len(saved) > 200_000
+        value = json.loads(saved)
+        assert value[0]["title"] == '中文 "quotes" \\ \n' * 20000
+        artifact = exported["data"]["artifact"]
+        assert artifact["sha256"] == hashlib.sha256(saved).hexdigest()
+        assert artifact["bytes"] == len(saved)
+        assert artifact["result_type"] == "array"
+        assert "signed=private" not in json.dumps(exported)
+
+        commands = [
+            {"action": "eval", "args": {"code": "() => { window.exportCounter = 1; return 1; }"}},
+            {"action": "resize", "args": {"width": 0, "height": 10}},
+            {"action": "eval", "args": {"code": "() => ++window.exportCounter"}},
+        ]
+        assert main(["batch", "--commands", json.dumps(commands)]) == 75
+        captured = capsys.readouterr()
+        failed = json.loads(captured.out)
+        assert captured.err == ""
+        assert failed["ok"] is True
+        assert failed["data"]["success"] is False
+        assert failed["data"]["completed_count"] == 2
+        assert failed["data"]["failed_indices"] == [1]
+        assert _run_cli_json(["eval", "() => window.exportCounter"], capsys)["data"]["result"] == 1
+        _stop_daemon(capsys)
+
+
 def test_status_and_reload_lifecycle_commands(monkeypatch, tmp_path: Path, capsys) -> None:
     with run_fixture_server() as base_url:
         _configure_runtime(monkeypatch, tmp_path)
@@ -142,7 +142,6 @@ def test_status_and_reload_lifecycle_commands(monkeypatch, tmp_path: Path, capsy
         _stop_daemon(capsys)
 
 
-@pytest.mark.skipif(not _can_launch_daemon_browser(), reason="Stable Chrome runtime unavailable")
 def test_navigation_and_lifecycle_commands(monkeypatch, tmp_path: Path, capsys) -> None:
     with run_fixture_server() as base_url:
         _configure_runtime(
@@ -209,7 +208,6 @@ def test_navigation_and_lifecycle_commands(monkeypatch, tmp_path: Path, capsys) 
         _stop_daemon(capsys)
 
 
-@pytest.mark.skipif(not _can_launch_daemon_browser(), reason="Stable Chrome runtime unavailable")
 def test_snapshot_html_and_element_interaction_commands(
     monkeypatch, tmp_path: Path, capsys
 ) -> None:
@@ -336,7 +334,6 @@ def test_snapshot_html_and_element_interaction_commands(
         _stop_daemon(capsys)
 
 
-@pytest.mark.skipif(not _can_launch_daemon_browser(), reason="Stable Chrome runtime unavailable")
 def test_semantic_ref_recovers_after_rerender_and_iframe(
     monkeypatch, tmp_path: Path, capsys
 ) -> None:
@@ -373,7 +370,6 @@ def test_semantic_ref_recovers_after_rerender_and_iframe(
         _stop_daemon(capsys)
 
 
-@pytest.mark.skipif(not _can_launch_daemon_browser(), reason="Stable Chrome runtime unavailable")
 def test_semantic_ref_errors_are_explicit(monkeypatch, tmp_path: Path, capsys) -> None:
     with run_fixture_server() as base_url:
         _configure_runtime(monkeypatch, tmp_path)
@@ -402,7 +398,6 @@ def test_semantic_ref_errors_are_explicit(monkeypatch, tmp_path: Path, capsys) -
         _stop_daemon(capsys)
 
 
-@pytest.mark.skipif(not _can_launch_daemon_browser(), reason="Stable Chrome runtime unavailable")
 def test_keyboard_mouse_wait_and_eval_commands(monkeypatch, tmp_path: Path, capsys) -> None:
     with run_fixture_server() as base_url:
         _configure_runtime(monkeypatch, tmp_path)
@@ -499,7 +494,6 @@ def test_keyboard_mouse_wait_and_eval_commands(monkeypatch, tmp_path: Path, caps
         _stop_daemon(capsys)
 
 
-@pytest.mark.skipif(not _can_launch_daemon_browser(), reason="Stable Chrome runtime unavailable")
 def test_capture_network_dialog_storage_trace_and_video_commands(
     monkeypatch, tmp_path: Path, capsys
 ) -> None:
@@ -644,7 +638,6 @@ def test_capture_network_dialog_storage_trace_and_video_commands(
         _stop_daemon(capsys)
 
 
-@pytest.mark.skipif(not _can_launch_daemon_browser(), reason="Stable Chrome runtime unavailable")
 def test_agent_visibility_isolation(monkeypatch, tmp_path: Path, capsys) -> None:
     with run_fixture_server() as base_url:
         _configure_runtime(monkeypatch, tmp_path, agent_id="agent-a")
@@ -665,7 +658,6 @@ def test_agent_visibility_isolation(monkeypatch, tmp_path: Path, capsys) -> None
         _stop_daemon(capsys)
 
 
-@pytest.mark.skipif(not _can_launch_daemon_browser(), reason="Stable Chrome runtime unavailable")
 def test_busy_active_tab_returns_explicit_error(monkeypatch, tmp_path: Path, capsys) -> None:
     _configure_runtime(monkeypatch, tmp_path, agent_id="agent-a")
     with run_fixture_server() as base_url:
@@ -684,8 +676,12 @@ def test_busy_active_tab_returns_explicit_error(monkeypatch, tmp_path: Path, cap
         thread = threading.Thread(target=_run_long_eval)
         thread.start()
         time.sleep(0.15)
-        with pytest.raises(BusyTabError):
+        with pytest.raises(BusyTabError) as caught:
             send_command("html")
+        assert caught.value.payload["execution_state"] == "not_started"
+        assert caught.value.payload["blocked_by"]["command"] == "eval"
+        assert caught.value.payload["blocked_by"]["agent_id"] == "agent-a"
+        assert caught.value.payload["meta"]["request_id"]
         thread.join(timeout=5)
         assert result_box["payload"]["ok"] is True
 
