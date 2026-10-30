@@ -9,7 +9,12 @@ import pytest
 
 from browser_cli import __version__
 from browser_cli.commands.reload import run_reload_command
-from browser_cli.commands.status import StatusReport, collect_status_report, run_status_command
+from browser_cli.commands.status import (
+    StatusReport,
+    collect_status_report,
+    run_status_command,
+    status_report_to_json_data,
+)
 from browser_cli.daemon.transport import DAEMON_RUNTIME_VERSION
 from browser_cli.errors import DaemonNotAvailableError, OperationFailedError
 
@@ -31,6 +36,33 @@ def _fake_paths(tmp_path: Path):
             return f"ws://{self.extension_host}:{self.extension_port}{self.extension_ws_path}"
 
     return _Paths()
+
+
+@pytest.mark.parametrize(
+    ("connected", "probe_status", "expected"),
+    [(False, "fail", "warn"), (True, "fail", "fail"), (True, "pass", "pass")],
+)
+def test_extension_health_distinguishes_disconnect_from_failed_api_probe(
+    tmp_path, connected, probe_status, expected
+):
+    report = StatusReport(
+        overall_status="degraded",
+        daemon_state="running",
+        runtime={},
+        daemon={"state": "running", "pid": 123, "socket_reachable": True},
+        backend={
+            "active_driver": "extension",
+            "browser_started": True,
+            "extension_connected": connected,
+            "extension_capability_complete": True,
+            "extension_runtime_health": {"status": probe_status},
+        },
+        browser={},
+        guidance=[],
+    )
+    with patch("browser_cli.commands.status.get_app_paths", return_value=_fake_paths(tmp_path)):
+        data = status_report_to_json_data(report)
+    assert data["health"]["extension"]["status"] == expected
 
 
 def test_collect_status_report_when_stopped(tmp_path: Path) -> None:

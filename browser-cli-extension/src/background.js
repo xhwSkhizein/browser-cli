@@ -135,6 +135,7 @@ function stopKeepAlive() {
   }
 }
 
+/** Probe idle browser APIs while keeping obsolete sockets from changing state. */
 function startKeepAlive(socket) {
   stopKeepAlive();
   state.keepAliveIntervalId = setInterval(async () => {
@@ -168,6 +169,7 @@ async function loadDaemonConfig() {
   };
 }
 
+/** Combine daemon presentation with extension observations for the popup. */
 async function buildStatusSnapshot({ runtimeSnapshot = undefined } = {}) {
   const config = await loadDaemonConfig();
   let runtimeError = null;
@@ -208,6 +210,7 @@ async function rebuildWorkspaceBinding() {
   return await buildStatusSnapshot();
 }
 
+/** Share concurrent startup and reconnect requests without replaying actions. */
 function connect() {
   if (connecting) return connecting;
   connecting = connectOnce().catch((error) => {
@@ -218,6 +221,7 @@ function connect() {
   return connecting;
 }
 
+/** Restore trusted ownership before creating and handshaking one daemon socket. */
 async function connectOnce() {
   if (state.ws && (state.ws.readyState === WebSocket.OPEN || state.ws.readyState === WebSocket.CONNECTING)) {
     return;
@@ -235,6 +239,7 @@ async function connectOnce() {
   setConnectionStatus('connecting');
   const socket = new WebSocket(buildWsUrl(config.host, config.port));
   state.ws = socket;
+  /** Publish a handshake only while this socket still owns the connection. */
   socket.onopen = async () => {
     if (state.ws !== socket) return;
     state.reconnectBackoffMs = INITIAL_RECONNECT_BACKOFF_MS;
@@ -266,6 +271,7 @@ async function connectOnce() {
       extension_instance_id: chrome.runtime.id,
     }));
   };
+  /** Deliver a response only on the socket that received its request. */
   socket.onmessage = async (event) => {
     if (state.ws !== socket) return;
     let payload;
@@ -284,6 +290,7 @@ async function connectOnce() {
         && payload.action !== 'workspace-status') void runtimeRecovery.recover();
     }
   };
+  /** Schedule reconnect only for the current socket, ignoring stale callbacks. */
   socket.onclose = () => {
     if (state.ws !== socket) return;
     stopKeepAlive();
@@ -294,6 +301,7 @@ async function connectOnce() {
     scheduleReconnect();
     state.reconnectBackoffMs = Math.min(state.reconnectBackoffMs * 2, MAX_RECONNECT_BACKOFF_MS);
   };
+  /** Record handshake failure without disturbing a replacement connection. */
   socket.onerror = () => {
     if (state.ws !== socket) return;
     state.runtimeState.lastError = `WebSocket handshake failed for ${config.host}:${config.port}`;
@@ -303,6 +311,7 @@ async function connectOnce() {
   };
 }
 
+/** Replace the active connection while retaining persisted workspace ownership. */
 async function reconnectNow() {
   state.reconnectBackoffMs = INITIAL_RECONNECT_BACKOFF_MS;
   stopKeepAlive();
@@ -321,6 +330,7 @@ async function reconnectNow() {
   await connect();
 }
 
+/** Report verified workspace state after any pending ownership restoration. */
 async function getWorkspaceWindowState() {
   await workspaceBinding.restore();
   if (state.workspaceWindowId === null) {
@@ -329,6 +339,7 @@ async function getWorkspaceWindowState() {
   return await buildWorkspaceStatus(context);
 }
 
+/** Reuse the dedicated workspace or create and persist its initial managed tab. */
 async function ensureWorkspaceWindow(url = 'about:blank') {
   await workspaceBinding.restore();
   if (state.workspaceWindowId !== null) {
@@ -387,6 +398,7 @@ async function waitForLoad(tabId, timeoutSeconds = 30) {
   throw new Error('Timed out waiting for tab load');
 }
 
+/** Open a workspace-owned tab and prepare its browser observation hooks. */
 async function openTab(url) {
   if (state.workspaceWindowId === null) {
     await ensureWorkspaceWindow('about:blank');
@@ -436,6 +448,7 @@ function pageIdForTab(tabId) {
   return state.pageIdByTabId.get(tabId) || null;
 }
 
+/** Drop a removed tab's in-memory resources and persist cleanup in mutation order. */
 async function untrackTab(tabId) {
   const wasManaged = state.managedTabIds.has(tabId);
   state.managedTabIds.delete(tabId);
@@ -482,6 +495,7 @@ async function dispatch(action, payload, meta) {
   return await handler(payload, meta);
 }
 
+/** Validate live Chrome APIs and dispatch once while blocking unsafe recovery. */
 async function handleRequest(payload) {
   const id = String(payload.id || '');
   activeRequests += 1;
@@ -562,7 +576,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
   if (message?.type === 'reload-extension') {
-    void buildStatusSnapshot().then(async snapshot => {
+    // Status is optional. Read it before arming the reload so the popup's
+    // response can be sent before the extension restarts.
+    void buildStatusSnapshot().catch(() => ({})).then(async snapshot => {
       const accepted = await runtimeRecovery.recover({force: true});
       sendResponse({...snapshot, lastError: accepted
         ? 'Reloading the extension. Refresh status after it reconnects.'

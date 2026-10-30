@@ -97,3 +97,50 @@ test('unusable APIs reject an action before mutation and obsolete sockets cannot
   assert.equal(current.readyState, WebSocket.OPEN);
   assert.equal(mutations, 0);
 });
+
+test('reload acknowledges before reloading even if offline status and browser APIs fail', async t => {
+  const messages = [];
+  const events = [];
+  const event = {addListener() {}};
+  const noop = () => {};
+  const binding = {version: 1, window_id: 91,
+    tabs: [{tab_id: 5, page_id: 'owned', target_id: 'target-five'}]};
+  const originalTimeout = globalThis.setTimeout;
+  t.mock.method(globalThis, 'setTimeout', (fn, delay, ...args) => delay === 100
+    ? setImmediate(fn, ...args) : originalTimeout(fn, delay, ...args));
+  t.mock.method(globalThis, 'fetch', async url => {
+    if (url.endsWith('/runtime-status')) {
+      await new Promise(resolve => setImmediate(resolve));
+      await new Promise(resolve => setImmediate(resolve));
+      throw new Error('daemon unreachable');
+    }
+    return {status: 503, ok: false};
+  });
+  globalThis.chrome = {
+    runtime: {onInstalled: event, onStartup: event,
+      onMessage: {addListener: fn => messages.push(fn)},
+      reload: () => events.push('reload')},
+    storage: {local: {get: async key => key === 'browserCliWorkspaceBinding'
+      ? {[key]: binding} : {}, set: async () => {}}},
+    alarms: {create: noop, onAlarm: event},
+    tabs: {query: async () => [{id: 5, windowId: 91}], get: noop, create: noop,
+      update: noop, remove: noop, onRemoved: event},
+    windows: {get: noop, create: noop, remove: noop, onRemoved: event},
+    scripting: {executeScript: noop},
+    debugger: {getTargets: async () => [{id: 'target-five', tabId: 5, type: 'page'}],
+      attach: noop, sendCommand: noop, onEvent: event, onDetach: event},
+  };
+  t.after(() => { delete globalThis.chrome; });
+  await import(`../src/background.js?reload-test=${Date.now()}`);
+  await new Promise(resolve => setImmediate(resolve));
+  chrome.tabs.query = undefined;
+  const response = await new Promise(resolve => {
+    assert.equal(messages[0]({type: 'reload-extension'}, {}, value => {
+      events.push('response');
+      resolve(value);
+    }), true);
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.match(response.lastError, /Reloading the extension/);
+  assert.deepEqual(events, ['response', 'reload']);
+});

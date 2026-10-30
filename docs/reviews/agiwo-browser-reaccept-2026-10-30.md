@@ -118,6 +118,10 @@ PR #23 的 review 指出恢复命令重复维护错误提示映射，并为没�
 
 完整组合复核还发现：`BrowserService` 使用共享变量保存命令元数据，关闭页的并发请求会覆盖原 `eval` 的信息。新增用例复现后，改用每个异步任务独立的 `ContextVar` 保存元数据，保留 driver 切换诊断，生命周期计数仍在所有任务间共享。取消错误文案同时明确页面可能仅被预留清理，避免在浏览器关闭尚未确认时宣称已经关闭。
 
-修复后的完整组合执行 `uv build --no-sources --clear` 和 `./scripts/check.sh`，均退出 0：434 项 Python 测试、51 项 Node 测试通过，lint 和 guard 通过。源码回归日志为 `/private/tmp/browser-cli-pr25-review-check.log`；PR #24 同步修复后的独立完整回归为 421 项 Python 测试通过。PR #23 的本地首次完整回归只有旧分支打包产物一致性检查失败，保留原验收包并重建该分支后，四项打包检查全部通过，其余 416 项已通过；远端最新提交的七项 CI 作业均成功。
+首轮 review 跟进后的完整组合执行 `uv build --no-sources --clear` 和 `./scripts/check.sh`，均退出 0：434 项 Python 测试、51 项 Node 测试通过，lint 和 guard 通过。源码回归日志为 `/private/tmp/browser-cli-pr25-review-check.log`；PR #24 同步修复后的独立完整回归为 421 项 Python 测试通过。PR #23 的本地首次完整回归只有旧分支打包产物一致性检查失败，保留原验收包并重建该分支后，四项打包检查全部通过，其余 416 项已通过；远端最新提交的七项 CI 作业均成功。
+
+整组自动 review 随后指出三项扩展边界问题，已在 PR #24 修复并同步到最终组合：可选状态收集失败不再阻断手动扩展重载，并保留重载前向 popup 回包的顺序；Chrome 已确认移除页面后，持久化失败记录在 `lastError`，不再误报关闭失败，而真正的 Chrome 移除失败仍向上返回；扩展断连保持 `warn`，仅在已连接且 live API probe 失败时报告 `fail`。三项问题均先由新增回归复现，再验证修复；同时补充扩展及 Node 接口的契约说明。
+
+最终组合再次执行构建和 `./scripts/check.sh`，均退出 0：437 项 Python、54 项 Node 测试全部通过，lint 和 guard 通过。PR #24 自身的完整回归为 424 项 Python、54 项 Node 测试通过。日志为 `/private/tmp/browser-cli-pr25-final-check.log` 和 `/private/tmp/browser-cli-pr24-final-check.log`，本地证据保留在原证据目录的 `ci-review/` 下。
 
 这些补充不表示已重新安装本机常驻 CLI，也不表示重跑了第 4 节的 Agiwo 实装脚本。最终远端 CI 和 review 状态以 [PR #23](https://github.com/xhwSkhizein/browser-cli/pull/23)、[PR #24](https://github.com/xhwSkhizein/browser-cli/pull/24)、[PR #25](https://github.com/xhwSkhizein/browser-cli/pull/25) 为准。

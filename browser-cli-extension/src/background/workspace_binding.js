@@ -3,6 +3,7 @@ import {ExtensionRuntimeError, queryRuntimeTabs} from '../runtime_health.js';
 const STORAGE_KEY = 'browserCliWorkspaceBinding';
 const STORAGE_VERSION = 1;
 
+/** Resolve live debugger identities so recycled numeric tab IDs gain no ownership. */
 async function liveTargetIds() {
   let timeoutId;
   try {
@@ -28,16 +29,19 @@ async function liveTargetIds() {
 
 // Local storage survives extension reloads; a Chrome target ID prevents recycled
 // numeric tab/window IDs from granting ownership of an unrelated browser page.
+/** Persist and restore only verified ownership of the dedicated browser workspace. */
 export function createWorkspaceBinding(state) {
   let restored = false;
   let restoring;
   let writing = Promise.resolve();
 
+  /** Serialize mutations so a delayed write cannot resurrect removed ownership. */
   function enqueueWrite(operation) {
     writing = writing.catch(() => {}).then(operation);
     return writing;
   }
 
+  /** Snapshot current ownership now, then persist it with live target identities. */
   function save() {
     const windowId = state.workspaceWindowId;
     const tabs = [...state.managedTabIds].map(tabId => ({
@@ -61,6 +65,7 @@ export function createWorkspaceBinding(state) {
     });
   }
 
+  /** Validate window membership and target identity before exposing saved ownership. */
   async function restoreSavedBinding() {
     const stored = await chrome.storage.local.get(STORAGE_KEY);
     const binding = stored[STORAGE_KEY];
@@ -103,6 +108,7 @@ export function createWorkspaceBinding(state) {
   return {
     save,
     flush: () => writing,
+    /** Share one restore attempt and allow retry after a transient API failure. */
     restore() {
       if (restored) return Promise.resolve();
       if (!restoring) {
