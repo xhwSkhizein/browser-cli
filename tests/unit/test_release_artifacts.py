@@ -66,6 +66,11 @@ def test_source_distribution_contains_new_extension_modules_and_acceptance_tests
             "src/browser_cli/browser/raster.py",
             "tests/unit/test_tiled_capture.py",
             "tests/unit/test_capture_runtime_fixture.py",
+            "scripts/browser_test_support.py",
+            "scripts/smoke_installed_wheel.py",
+            "tests/browser_runtime.py",
+            "tests/integration/conftest.py",
+            "tests/unit/test_test_browser_runtime.py",
         ):
             content = archive.extractfile(f"{prefix}/{relative}")
             assert content is not None

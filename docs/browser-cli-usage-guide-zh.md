@@ -1,5 +1,66 @@
 # Browser CLI 使用导引
 
+## 一次性任务的最短入口
+
+一次性采集可以直接完成任务并交付结果文件。需要复用时，再编写
+`task.py` 和 `task.meta.json`；需要长期运行时，再配置和发布 automation。
+
+1. 用 `browser-cli status --json` 检查现有服务，健康时复用；需要诊断环境时再用 `doctor --json`。
+2. 在任务的各次调用中保持同一个 `X_AGENT_ID`。它隔离标签页归属，Cookie 和存储仍然共享。
+3. 单次读取正文用 `read`；需要登录态和连续操作时用 `open`、聚焦的 `snapshot` 和 `eval`。
+4. 同一活动页上的依赖操作串行执行，或放进短 `batch`。batch 执行期间会阻挡其他浏览器动作，且不回滚副作用。
+5. 按已知条件等待，例如 `wait --text`、`network-wait` 或 `verify-*`；大结果完整保存到文件，只向模型返回统计和路径。
+
+把提取逻辑保存在 `extract.js`，内容是一段返回 JSON 值的箭头函数，例如：
+
+```javascript
+() => [...document.querySelectorAll('h2')].map(el => el.textContent)
+```
+
+然后执行：
+
+```bash
+browser-cli eval --file extract.js --output items.json
+```
+
+也可以用 `--file -` 从 stdin 读取代码；`eval-on REF` 同样支持代码文件。
+`eval` 和 `eval-on` 的文件内容就是完整的 `data.result`，其他浏览器动作保存
+完整的 `data`。终端只返回 `data.artifact`，包括绝对路径、字节数、SHA-256、
+结果类型和来源字段，不展开正文或签名地址。文件由调用方写入，权限仅限所有者，
+写完临时文件后才原子替换目标文件；写入失败保留已有文件。
+文件出口仍受后台响应大小上限约束，超限或不完整响应会明确失败。
+
+所有 CLI 错误都会在 stdout 返回 JSON，使用 `ok/data/meta`、`error_code` 和
+`error_message`，同时返回非零退出码。浏览器动作默认返回 JSON，也统一接受
+`--json`。帮助信息仍由 `--help` 返回文本，`read` 的正常输出仍可以是页面正文。
+
+batch 的顶层 `ok` 表示请求处理是否正常，`data.success` 表示步骤是否全部成功。
+步骤失败时 CLI 退出码为 75，即使使用了 `--continue-on-error`。
+`batch --output results.json` 可以保存部分结果，终端仍会报告 `success`、完成数量和
+失败下标；需要保留每步结果时使用 `--result-mode all`。
+Python 和 Node 的高层 `batch()` 会抛出 `BATCH_FAILED`，异常的 `payload` 中保留部分结果。
+低层 `invoke` / `request` 保留原始行为，由调用者检查步骤结果。
+
+Busy 错误的 `blocked_by` 会说明当前占用命令、请求编号和开始时间，
+`execution_state=not_started` 表示这次动作还没有执行。等待前一个动作完成后再决定是否重试。
+超时或断连的执行结果可能不明，不能自动重放点击、提交或整个 batch。
+文件写入失败若报告 `execution_state=completed`，表示浏览器动作已经完成，失败发生在本地保存阶段。
+
+独立 Python 脚本也可以直接使用客户端和同一个文件出口：
+
+```python
+from pathlib import Path
+from browser_cli.task_runtime import BrowserCliTaskClient, write_json_artifact
+
+client = BrowserCliTaskClient()
+items = client.eval(Path("extract.js").read_text(encoding="utf-8"))
+artifact = write_json_artifact("items.json", items)
+print({"count": len(items), "artifact": artifact})
+```
+
+先校验完整结果，再输出业务摘要。命令成功只证明浏览器动作完成，分页是否走完、
+业务状态是否正常和字段是否齐全仍由采集逻辑核对。
+
 ## 先把位置摆正
 
 如果你把 Browser CLI 当成“给人手敲命令的浏览器工具”，你一开始就看偏了。它真正擅长的事，是让 Agent 在真实浏览器里读页面、操作页面、记住状态、复用流程。
@@ -41,9 +102,9 @@ Browser CLI 正好补这三个缺口。
 
 Agent 拿到这类目标后，通常会这样工作：
 
-1. 先用 `browser-cli read` 或 `browser-cli snapshot` 看页面。
+1. 先用 `browser-cli status --json` 检查服务，再用 `read` 或 `snapshot` 看页面。
 2. 再用 `open`、`click`、`fill`、`page-reload` 之类的命令推进流程。
-3. 确认步骤稳定后，把动作写进 `task.py`。
+3. 一次性任务保存结果即可；需要复用时，把稳定动作写进 `task.py`。
 4. 需要长期运行时，再发布成 automation。
 
 人不必站在旁边一条条敲命令。人只需要给出方向、权限和边界。

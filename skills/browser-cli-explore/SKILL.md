@@ -1,88 +1,72 @@
 ---
 name: browser-cli-explore
-description: Explore real websites with Browser CLI, validate task mode, and distill durable feedback into task metadata.
+description: Use when a Browser CLI task needs site exploration or validation, including one-off extraction and reusable task authoring.
 ---
 
 # Browser CLI Explore
 
 ## Overview
 
-Use `browser-cli` to explore a site, test candidate paths, and distill only the
-durable findings needed to build a reusable task. The primary output of this
-skill is structured knowledge in `task.meta.json`, not final task code.
+Choose the delivery scope first: a one-off task ends with verified output files
+and a concise report; reusable task authoring also captures durable findings in
+`task.meta.json`.
 
-## When to Use
+## Quick Entry
 
-Use this skill when:
+1. Run `browser-cli status --json`; reuse a healthy runtime. Use `doctor --json`
+   for environment diagnosis and the reported recovery guidance for failures.
+2. Keep one stable `X_AGENT_ID` across calls. It isolates visible tabs, while
+   cookies and storage remain shared. Do not generate a new identity per command.
+3. Use `read` for one-shot content; use `open`, focused `snapshot`, and `eval`
+   for persistent state.
+4. Run dependent same-tab actions sequentially or in a short `batch --file`.
+   Batches exclude other browser actions and do not roll back side effects.
+5. Prefer text/network conditions and `verify-*` to fixed sleeps. Check business
+   status, pagination completion, required fields, and final counts explicitly.
 
-- a web task still needs exploration or validation
-- the page depends on real browser state, cookies, login, or rendering
-- the next useful artifact is better task metadata, not yet final `task.py`
+For full extraction, put an arrow function in `extract.js` and run:
 
-Do not use this skill when:
+```bash
+browser-cli eval --file extract.js --output items.json
+```
 
-- the success path is already validated end to end
-- the work is only task-code refactoring with no evidence gap
-- the task is pure API work with no Browser CLI dependency
+`--file -` reads stdin. The file contains the complete JSON value; stdout returns
+only its absolute path, bytes, SHA-256, type, and source in `data.artifact`.
+Validate locally and report counts or short samples.
+Do not truncate serialized JSON or print cookies and signed URLs into summaries.
 
-## Hard Rules
+All CLI errors are JSON on stdout with nonzero exit codes. Batch step failures
+exit 75 even when top-level `ok` is true; inspect `data.success`. Python/Node
+high-level `batch()` raises `BATCH_FAILED` and retains partial results in
+`payload`. Raw `invoke`/`request` requires an explicit success check. Use
+`--result-mode all` when every step result must be saved.
 
-- browser-cli is the primary browser execution path
-- choose the task mode before broad exploration
-- choose the smallest reliable Browser CLI signal before escalating to larger captures
-- capture only observations that change the next decision
-- update `task.meta.json` as a rolling feedback sink
-- treat these metadata sections as required destinations for durable knowledge:
-  `environment`, `success_path`, `recovery_hints`, `failures`, `knowledge`
-- stop once the evidence is strong enough for deterministic implementation
-- Do not record raw logs, chat transcripts, or exploratory dead ends in metadata
-- Do not turn one lucky run into stable knowledge without a verification step
+Busy with `execution_state=not_started` is a rejection before execution:
+wait for the blocking command before deciding to retry. Timeouts/disconnects
+can leave the result unknown; do not replay side effects. A local save error
+with `execution_state=completed` means the browser action already ran.
+Repair the destination and check page state before deciding whether another
+extraction is safe; do not automatically rerun the browser action after a save error.
 
-## Phase Order
+## Explore and Finish
 
-1. Confirm the site-specific preflight assumptions:
-   login state, cookies, locale, browser profile, writable artifacts, Python env
-2. Choose the task mode:
-   `ref-driven`, `content-first`, `lazy-scroll`, `login-state-first`, or
-   `browser-state/network-assisted`
-3. Explore with the smallest reliable Browser CLI signal
-4. Capture durable findings into `task.meta.json`
-5. Stop when the success path, waits, refs, and failure lessons are clear enough
-   for `task.py`
+Keep browser interactions on Browser CLI. Confirm login/profile assumptions,
+then choose ref-driven, content-first, lazy-scroll, login-state-first, or
+browser-state/network-assisted exploration. Prefer compact `eval` for decisions,
+interactive/viewport-scoped `snapshot` for semantic refs, and `html` when the DOM
+is the artifact. Widen captures only when evidence is missing.
 
-## Signal Selection
+One-off work ends when the complete requested file is verified and its count,
+path, and relevant caveats are reported. Task assets and publishing are unnecessary.
 
-- Start with persistent exploration primitives: `open`, focused `snapshot`, `click`, `wait`, `verify-*`, and compact `eval`/`eval-on`.
-- Prefer `eval` when the task needs compact structured data. Return the smallest JSON payload that answers the next decision.
-- Use `snapshot` when the task needs semantic refs. Start with interactive and viewport-scoped capture when possible, then widen only if evidence is missing.
-- Use `html` when the rendered DOM itself is the artifact or a DOM-specific diagnostic is required.
-- Treat `read` as a one-shot content-first capture. It is useful for single-pass HTML or snapshot output, not as the default loop for interactive exploration.
-- If full-page snapshot or HTML capture is large or unstable, step back and switch to compact in-page extraction instead of pushing more page text through the agent.
+For reusable work, verify observations before capturing them in `task.meta.json`:
 
-## Metadata Capture Rules
+- `environment`: site, login, profile and browser assumptions
+- `success_path`: validated steps, refs, waits, assertions and artifacts
+- `recovery_hints`: retryable steps, alternate paths and stale-ref handling
+- `failures`: repeatable failure modes and remedies
+- `knowledge`: stable selectors, pagination, loading and output interpretation
 
-- `environment`: site, entry URL, login requirements, profile assumptions,
-  browser assumptions
-- `success_path`: validated steps, key refs, assertions, artifacts
-- `recovery_hints`: retryable steps, alternate paths, stale-ref strategy, wait
-  points, anti-bot recovery
-- `failures`: repeatable failure modes and the lesson each one teaches
-- `knowledge`: stable selectors/roles, semantic-ref notes, pagination,
-  lazy-load, anti-bot, and output interpretation rules
-
-## Done Criteria
-
-This skill is complete when:
-
-- the task mode is known
-- the stable path is understood
-- the fragile points are documented
-- `task.meta.json` contains enough evidence for `browser-cli-converge`
-
-## Common Mistakes
-
-- exploring with direct Playwright instead of Browser CLI
-- starting exploration with full-page HTML when refs or compact eval would answer the question
-- jumping straight from browsing to `task.py`
-- keeping the useful lessons only in chat
-- recording logs instead of reusable metadata
+Exclude raw logs, transcripts and exploratory dead ends. Stop when the metadata
+supports deterministic implementation with `browser-cli-converge`. Skip this
+skill for pure API work or refactoring without an evidence gap.

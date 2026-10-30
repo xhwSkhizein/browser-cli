@@ -132,6 +132,21 @@ uv sync --dev
 The CLI targets stable Google Chrome. Playwright Chromium is mainly useful for
 local integration testing and is installed through the repo environment.
 
+On macOS, browser integration tests use Playwright's dedicated Chrome Headless
+Shell so test runs do not add desktop Chrome icons to the Dock. Install the
+revision required by the locked environment before running browser tests:
+
+```bash
+uv run playwright install --only-shell chromium
+```
+
+Collection and unit tests do not launch browsers. Integration setup checks host
+permissions and the exact test runtime once; a missing shell fails with setup
+instructions instead of falling back to desktop Chrome. Test daemons use temporary
+profiles without changing your home directory or Dock settings. Linux integration
+tests continue to cover stable Chrome, and `node/smoke-extension.mjs` checks an
+already connected real Chrome extension without launching another browser.
+
 ### Optional: Extension Mode
 
 For real-Chrome execution:
@@ -184,6 +199,54 @@ X_AGENT_ID=agent-a browser-cli tabs
 X_AGENT_ID=agent-b browser-cli open https://example.org
 X_AGENT_ID=agent-b browser-cli tabs
 ```
+
+### One-off extraction for agents
+
+Start with `browser-cli status --json` and reuse a healthy runtime. Keep one
+stable `X_AGENT_ID` across the task's commands; it isolates tabs while browser
+cookies and storage remain shared. A one-off task can finish with its output
+files; `task.py`, `task.meta.json`, and publishing are optional reuse steps.
+
+For a complete local JSON export, put the page JavaScript in a file:
+
+```bash
+browser-cli eval --file extract.js --output items.json
+```
+
+`extract.js` contains an arrow function such as
+`() => [...document.querySelectorAll('h2')].map(el => el.textContent)`.
+`--file -` reads JavaScript from stdin; `eval-on REF` supports the same sources.
+The file contains the complete `data.result` JSON value for `eval`/`eval-on`;
+other browser actions export their complete `data` object. Stdout returns an
+`artifact` with its absolute path, byte count, SHA-256, result type, and source.
+Files are written by the client, atomically, with owner-only permissions. A save
+failure preserves an existing file. Export does not increase transport limits.
+
+Run dependent actions on the same active tab sequentially, or use a short
+`browser-cli batch --file commands.json`. Batches exclude other browser actions
+while running and do not roll back side effects. Prefer `wait --text`,
+`network-wait`, and `verify-*` to fixed sleeps.
+
+All CLI errors, including argument errors, use `ok/data/meta`, `error_code`, and
+`error_message` JSON on stdout and a nonzero exit code. Browser actions already
+return JSON by default and also accept `--json`. `--help` remains text. Busy
+errors report `execution_state: "not_started"` and the blocking request; a
+timeout or disconnect leaves execution uncertain and must not trigger replay.
+
+For batch, top-level `ok` describes request handling; `data.success` describes
+step success. Failed steps produce CLI exit code 75, including with
+`--continue-on-error`. `batch --output` saves partial results and returns
+`success` and counts alongside the artifact descriptor. Use `--result-mode all`
+when every successful step result must be retained.
+
+Python `BrowserCliTaskClient.batch()` and Node `BrowserCliClient.batch()` raise
+`BATCH_FAILED` on step failure; the exception's `payload` retains partial
+results. Low-level Python `invoke('batch', ...)` and Node `request('batch', ...)`
+leave that check to the caller. Standalone scripts can save full values with
+Python `browser_cli.task_runtime.write_json_artifact(path, value)` or Node
+`writeJsonArtifact(path, value)` from the packaged client, then print only the
+returned descriptor. See the [Chinese usage guide](docs/browser-cli-usage-guide-zh.md)
+for the one-off workflow and recovery rules.
 
 ## Task And Automation Model
 
@@ -388,6 +451,23 @@ entrypoint and the actual daemon socket with `browser-cli paths --json`.
 `status --json` and `doctor --json` report service, extension, configuration,
 managed-profile, and output-directory health separately. Runtime status remains
 independent of filesystem permissions in the calling process.
+
+`browser-cli doctor --json` also checks live runtime health through the daemon.
+The extension check executes a read-only Chrome tab query, even when no workspace
+exists. A connected extension with unusable browser APIs reports a failed check
+and recovery guidance. Workspace binding loss appears as a separate runtime warning.
+The extension checks itself while idle and can reload an unusable context once
+per five minutes. Automatic recovery waits for active operations and recordings;
+it never repeats a failed browser action. If recovery cannot finish, the popup's
+Reload Extension action reloads the extension itself.
+
+Workspace bindings are saved locally and restored automatically when the extension
+or its background worker restarts. Existing owned tabs keep their page IDs; no
+manual workspace rebuild is needed while the original workspace remains available.
+Recovery verifies each tab's Chrome debugger target identity and window membership,
+excludes unrelated tabs, and respects an explicitly closed workspace. If the owned
+window has actually disappeared, the next browser command uses the normal workspace
+rebuild and reports the resulting state reset.
 
 See [the capture and automation API guide](docs/automation-api-zh.md) for complete
 CLI and Node.js examples, JSON contracts, context defaults, and driver transitions.

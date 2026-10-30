@@ -6,7 +6,7 @@ import asyncio
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 
 from browser_cli.errors import BusyTabError, NoActiveTabError, TabNotFoundError
 
@@ -204,6 +204,7 @@ class TabRegistry:
         request_id: str,
         command: str,
     ) -> AsyncIterator[TabRecord]:
+        """Claim the agent's active tab immediately and release it on scope exit."""
         page_id: str
         async with self._lock:
             page_id = self._active_tab_by_agent.get(agent_id, "")
@@ -213,7 +214,7 @@ class TabRegistry:
             if record is None or record.owner_agent_id != agent_id:
                 raise NoActiveTabError()
             if record.busy and record.busy.request_id != request_id:
-                raise BusyTabError()
+                raise BusyTabError(blocked_by=asdict(record.busy))
             record.busy = BusyState(
                 request_id=request_id,
                 command=command,
@@ -235,12 +236,13 @@ class TabRegistry:
         request_id: str,
         command: str,
     ) -> TabRecord:
+        """Claim an owned page; the caller must release it after the operation."""
         async with self._lock:
             record = self._tabs.get(page_id)
             if record is None or record.owner_agent_id != agent_id:
                 raise TabNotFoundError()
             if record.busy and record.busy.request_id != request_id:
-                raise BusyTabError()
+                raise BusyTabError(blocked_by=asdict(record.busy))
             record.busy = BusyState(
                 request_id=request_id,
                 command=command,

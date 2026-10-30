@@ -16,8 +16,11 @@ def test_render_json_error_uses_next_action() -> None:
     )
     assert payload == {
         "ok": False,
+        "data": {},
+        "meta": {},
         "error_code": "WORKSPACE_BINDING_LOST",
-        "message": "Workspace binding was lost.",
+        "error_message": "Workspace binding was lost.",
+        "execution_state": "unknown",
         "next_action": "browser-cli workspace rebuild --json",
     }
 
@@ -32,8 +35,10 @@ def test_render_json_error_can_include_action_meta() -> None:
     )
     assert payload == {
         "ok": False,
+        "data": {},
         "error_code": "WORKSPACE_BINDING_LOST",
-        "message": "Workspace binding was lost.",
+        "error_message": "Workspace binding was lost.",
+        "execution_state": "unknown",
         "meta": {"action": "workspace-rebuild"},
         "next_action": "browser-cli workspace rebuild --json",
     }

@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:net';
-import { mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, readFileSync, readdirSync, mkdirSync, statSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
-import { BrowserCliClient, BrowserCliError } from '../browser-cli-client.mjs';
+import { BrowserCliClient, BrowserCliError, writeJsonArtifact } from '../browser-cli-client.mjs';
 
 const runtimeVersion = '2026-10-22-capture-context-batch-v2';
 
@@ -21,7 +22,8 @@ async function daemon(t, handle, clientOptions = {}) {
       input += chunk;
       if (input.includes('\n')) {
         const request = JSON.parse(input.split('\n')[0]);
-        if (request.action === 'runtime-status' && !request.args.warmup) {
+        if (request.action === 'runtime-status' && !request.args.warmup
+          && Object.keys(request.args).every(key => key === 'warmup')) {
           const payload = rejectRuntime
             ? {ok:false, data:{}, meta:{runtime_version:daemonRuntimeVersion()}, error_code:'DAEMON_INCOMPATIBLE'}
             : success({ runtime_version: daemonRuntimeVersion() });
@@ -40,6 +42,21 @@ async function daemon(t, handle, clientOptions = {}) {
 }
 
 const success = (data = {}) => ({ ok: true, data, meta: { action: 'eval', runtime_version: runtimeVersion } });
+
+test('status configuration reaches the daemon instead of being replaced by the compatibility probe', async t => {
+  const requests = [];
+  const {client} = await daemon(t, (request, socket) => {
+    requests.push(request);
+    socket.end(JSON.stringify(success({runtime_version:runtimeVersion, profile_dir:'/test/profile'})) + '\n');
+  });
+  const args = {chrome_environment:{executable_path:'/test/chrome-headless-shell', user_data_dir:'/test/profile'}};
+  const result = await client.request('runtime-status', args);
+  assert.equal(requests.length, 1, 'Browser configuration was swallowed and the next action can launch desktop Chrome');
+  assert.deepEqual(requests[0].args, args);
+  assert.equal(result.data.profile_dir, '/test/profile');
+  await client.status();
+  assert.equal(requests.length, 1, 'Plain status reads should still reuse the compatibility probe');
+});
 
 test('requests share an agent, preserve envelopes, and accept chunked UTF-8 JSON', async (t) => {
   const requests = [];
@@ -62,10 +79,43 @@ test('batch forwards context, compact results, and preserves step failures', asy
     socket.end(JSON.stringify(success({ success: false, failed_indices: [1], results: [{ ok: false, error_code: 'INVALID_INPUT' }] })) + '\n');
   });
   const commands = [{ action: 'open', args: { url: 'https://example.com' } }];
-  const response = await client.batch(commands, { context: { locale: 'zh-CN' }, resultMode: 'summary', stopOnError: false });
+  await assert.rejects(client.batch(commands, { context: { locale: 'zh-CN' }, resultMode: 'summary', stopOnError: false }), error => {
+    assert.equal(error.code, 'BATCH_FAILED');
+    assert.equal(error.payload.ok, true);
+    assert.equal(error.payload.data.success, false);
+    assert.deepEqual(error.payload.data.failed_indices, [1]);
+    return true;
+  });
   assert.equal(request.action, 'batch');
   assert.deepEqual(request.args, { commands, context: { locale: 'zh-CN' }, result_mode: 'summary', stop_on_error: false });
-  assert.equal(response.data.success, false);
+  const response = await client.request('batch', { commands });
+  assert.equal(response.data.success, false, 'Raw requests preserve partial results without throwing');
+});
+
+test('JSON artifacts preserve complete Unicode data and describe saved bytes', t => {
+  const dir = mkdtempSync('/tmp/bcli-export-');
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const value = [{ title: '中文 "quotes" \\ newline\n'.repeat(20_000), url: 'https://example.com/?signed=private' }];
+  const path = join(dir, 'nested', '完整结果.json');
+  const info = writeJsonArtifact(path, value);
+  const bytes = readFileSync(path);
+  assert.ok(bytes.length > 200_000);
+  assert.deepEqual(JSON.parse(bytes.toString('utf8')), value);
+  assert.deepEqual(info, {path, bytes:bytes.length, sha256:createHash('sha256').update(bytes).digest('hex'), result_type:'array'});
+  assert.equal(statSync(path).mode & 0o777, 0o600);
+});
+
+test('artifact failures preserve the existing destination and remove temporary files', t => {
+  const dir = mkdtempSync('/tmp/bcli-export-');
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const path = join(dir, 'result.json');
+  writeFileSync(path, 'previous');
+  assert.throws(() => writeJsonArtifact(path, 1n), error => error.code === 'OUTPUT_WRITE_FAILED');
+  assert.equal(readFileSync(path, 'utf8'), 'previous');
+  const directory = join(dir, 'directory');
+  mkdirSync(directory);
+  assert.throws(() => writeJsonArtifact(directory, {}), error => error.code === 'OUTPUT_WRITE_FAILED');
+  assert.deepEqual(readdirSync(dir).sort(), ['directory', 'result.json']);
 });
 
 test('daemon errors keep machine-readable codes and payloads', async (t) => {

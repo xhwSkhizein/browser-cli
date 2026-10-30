@@ -4,12 +4,14 @@ import json
 from argparse import Namespace
 from unittest.mock import patch
 
+import pytest
+
+from browser_cli.cli.main import main
 from browser_cli.commands.recovery import (
-    _next_action_for_error,
     run_recover_command,
     run_workspace_command,
 )
-from browser_cli.errors import ExtensionPortInUseError, WorkspaceBindingLostError
+from browser_cli.errors import OperationFailedError
 
 
 def _status_data(binding: str, recommended: str = "none") -> dict[str, object]:
@@ -83,7 +85,7 @@ def test_recover_json_can_reload_then_rebuild() -> None:
     assert payload["data"]["recovered"] is True
 
 
-def test_workspace_rebuild_json_failure_returns_structured_error() -> None:
+def test_workspace_rebuild_json_failure_returns_structured_error(capsys) -> None:
     with (
         patch("browser_cli.commands.recovery.ensure_daemon_running"),
         patch(
@@ -91,24 +93,37 @@ def test_workspace_rebuild_json_failure_returns_structured_error() -> None:
             return_value=_status_data("absent", "reconnect-extension"),
         ),
     ):
-        payload = json.loads(
-            run_workspace_command(Namespace(workspace_subcommand="rebuild", json=True))
-        )
+        assert main(["workspace", "rebuild", "--json"]) == 75
+        captured = capsys.readouterr()
+        payload = json.loads(captured.out)
+        assert captured.err == ""
 
     assert payload == {
         "ok": False,
+        "data": {},
         "error_code": "EXTENSION_UNAVAILABLE",
-        "message": "Browser CLI extension is not connected.",
+        "error_message": "Browser CLI extension is not connected.",
+        "execution_state": "unknown",
+        "meta": {"action": "workspace", "agent_id": "public"},
         "next_action": "connect or reload the Browser CLI extension",
     }
 
 
-def test_recovery_next_action_covers_binding_and_port_errors() -> None:
-    assert (
-        _next_action_for_error(WorkspaceBindingLostError("lost"))
-        == "run browser-cli workspace rebuild --json"
-    )
-    assert (
-        _next_action_for_error(ExtensionPortInUseError("busy"))
-        == "set BROWSER_CLI_EXTENSION_PORT to a free port or stop the process using it"
-    )
+@pytest.mark.parametrize(
+    ("arguments", "operation"),
+    [
+        (["recover", "--json"], "_recover"),
+        (["workspace", "rebuild", "--json"], "_run_workspace_rebuild_json"),
+    ],
+)
+def test_recovery_error_without_hint_omits_next_action(arguments, operation, capsys) -> None:
+    with patch(
+        f"browser_cli.commands.recovery.{operation}",
+        side_effect=OperationFailedError("fixture recovery failure"),
+    ):
+        assert main(arguments) == 75
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert captured.err == ""
+    assert payload["error_code"] == "OPERATION_FAILED"
+    assert "next_action" not in payload

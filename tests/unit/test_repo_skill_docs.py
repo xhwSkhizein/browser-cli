@@ -36,20 +36,21 @@ def test_agents_points_to_browser_cli_delivery_skill() -> None:
     assert ALLOWED_DEPENDENCIES["packaged_skills"] == set()
 
 
-def test_browser_cli_explore_skill_records_feedback_into_task_metadata() -> None:
+def test_browser_cli_explore_skill_supports_one_off_results_and_reusable_metadata() -> None:
     skill_text = _read("skills/browser-cli-explore/SKILL.md")
 
     assert "task.meta.json" in skill_text
-    assert "browser-cli is the primary browser execution path" in skill_text
-    assert "Signal Selection" in skill_text
-    assert "Treat `read` as a one-shot content-first capture" in skill_text
-    assert "Prefer `eval` when the task needs compact structured data" in skill_text
+    assert "Keep browser interactions on Browser CLI" in skill_text
+    assert "Use `read` for one-shot content" in skill_text
+    assert "Prefer compact `eval` for decisions" in skill_text
+    assert "browser-cli eval --file extract.js --output items.json" in skill_text
+    assert "Task assets and publishing are unnecessary" in skill_text
     assert "environment" in skill_text
     assert "success_path" in skill_text
     assert "recovery_hints" in skill_text
     assert "failures" in skill_text
     assert "knowledge" in skill_text
-    assert "Do not record raw logs" in skill_text
+    assert "Exclude raw logs" in skill_text
 
 
 def test_browser_cli_converge_skill_centers_task_py_and_flow_validation() -> None:

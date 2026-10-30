@@ -40,6 +40,7 @@ REQUIRED_EXTENSION_TRACE_VIDEO = {
 
 
 def run(_root: Path) -> list[Finding]:
+    """Check the parser and packaged clients against the public CLI contract."""
     findings: list[Finding] = []
     parser = build_parser()
     top_level_commands = _subcommand_parsers(parser)
@@ -105,6 +106,8 @@ def run(_root: Path) -> list[Finding]:
             "--page-range",
         },
         "batch": {"--commands", "--file", "--context", "--context-file", "--result-mode"},
+        "eval": {"--file", "--output", "--json"},
+        "eval-on": {"--file", "--output", "--json"},
     }.items():
         if name in top_level_commands and not expected.issubset(
             _custom_option_strings(top_level_commands[name])
@@ -114,6 +117,16 @@ def run(_root: Path) -> list[Finding]:
                     "error",
                     "CONTRACT026",
                     f"'{name}' must preserve its controlled automation options.",
+                )
+            )
+    for spec in get_action_specs():
+        action_parser = top_level_commands[spec.cli_name or spec.name]
+        if not {"--json", "--output"}.issubset(_custom_option_strings(action_parser)):
+            findings.append(
+                Finding(
+                    "error",
+                    "CONTRACT029",
+                    f"Action '{spec.name}' must expose JSON output and local file export.",
                 )
             )
     findings.extend(_check_action_specs())

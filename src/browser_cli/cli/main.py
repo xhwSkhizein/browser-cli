@@ -8,6 +8,7 @@ from collections.abc import Sequence
 
 from browser_cli import __version__, exit_codes
 from browser_cli.actions import get_action_specs
+from browser_cli.agent_scope import resolve_agent_id
 from browser_cli.cli.error_hints import next_hint_for_error
 from browser_cli.commands.action import run_action_command
 from browser_cli.commands.automation import run_automation_command
@@ -24,12 +25,21 @@ from browser_cli.commands.runs import (
 )
 from browser_cli.commands.status import run_status_command
 from browser_cli.commands.task import run_task_command
-from browser_cli.errors import BrowserCliError
-from browser_cli.outputs.json import render_json_error
+from browser_cli.errors import BrowserCliError, InvalidInputError
+from browser_cli.outputs.json import CommandResult, render_json_error
+
+
+class CliArgumentParser(argparse.ArgumentParser):
+    def error(self, message: str) -> None:
+        """Raise an unstarted input error for the shared JSON error renderer."""
+        error = InvalidInputError(message)
+        error.payload = {"execution_state": "not_started"}
+        raise error
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="browser-cli")
+    """Register local commands and the daemon action catalog on one parser."""
+    parser = CliArgumentParser(prog="browser-cli")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
 
     subparsers = parser.add_subparsers(dest="command", metavar="COMMAND")
@@ -336,6 +346,16 @@ def build_parser() -> argparse.ArgumentParser:
             description=spec.description,
         )
         spec.add_arguments(action_parser)
+        action_parser.add_argument(
+            "--json",
+            action="store_true",
+            default=True,
+            help="Return JSON (the default for browser actions).",
+        )
+        action_parser.add_argument(
+            "--output",
+            help="Atomically save the complete JSON value; return only file metadata.",
+        )
         action_parser.set_defaults(
             handler=run_action_command,
             action_name=spec.name,
@@ -346,41 +366,41 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    """Execute a command and render typed failures as structured JSON."""
     parser = build_parser()
+    arguments = list(argv) if argv is not None else sys.argv[1:]
+    action = arguments[0] if arguments and not arguments[0].startswith("-") else None
     try:
-        args = parser.parse_args(list(argv) if argv is not None else None)
+        args = parser.parse_args(arguments)
+        action = getattr(args, "action_name", None) or getattr(args, "command", None)
+        if not hasattr(args, "handler"):
+            error = InvalidInputError("A command is required. Use browser-cli --help.")
+            error.payload = {"execution_state": "not_started"}
+            raise error
+        result = args.handler(args)
     except SystemExit as exc:
         code = exc.code if isinstance(exc.code, int) else exit_codes.USAGE_ERROR
         return code
-
-    if not hasattr(args, "handler"):
-        parser.print_help()
-        return exit_codes.USAGE_ERROR
-
-    try:
-        result = args.handler(args)
     except BrowserCliError as exc:
         hint = next_hint_for_error(exc)
-        if getattr(args, "json", False):
-            sys.stdout.write(
-                render_json_error(
-                    exc,
-                    action=str(getattr(args, "command", "") or "") or None,
-                    next_action=hint,
-                )
-            )
-            return exc.exit_code
-        sys.stderr.write(f"Error: {exc}\n")
-        if hint:
-            sys.stderr.write(f"Next: {hint}\n")
+        sys.stdout.write(
+            render_json_error(exc, action=action, agent_id=resolve_agent_id(), next_action=hint)
+        )
         return exc.exit_code
     except KeyboardInterrupt:
-        sys.stderr.write("Error: interrupted.\n")
+        error = BrowserCliError(
+            "Interrupted. The action may have run.", exit_codes.TEMPORARY_FAILURE, "INTERRUPTED"
+        )
+        sys.stdout.write(render_json_error(error, action=action, agent_id=resolve_agent_id()))
         return exit_codes.TEMPORARY_FAILURE
     except Exception as exc:  # pragma: no cover - last-resort guard
-        sys.stderr.write(f"Error: unexpected failure: {exc}\n")
+        error = BrowserCliError(f"Unexpected failure: {exc}")
+        sys.stdout.write(render_json_error(error, action=action, agent_id=resolve_agent_id()))
         return exit_codes.INTERNAL_ERROR
 
+    if isinstance(result, CommandResult):
+        sys.stdout.write(result.stdout)
+        return result.exit_code
     if result:
         sys.stdout.write(result)
     return exit_codes.SUCCESS

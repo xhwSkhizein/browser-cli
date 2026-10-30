@@ -1,9 +1,9 @@
 import { spawn } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { createHash, randomUUID } from 'node:crypto';
+import { closeSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { createConnection } from 'node:net';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 export const DAEMON_RUNTIME_VERSION = JSON.parse(
@@ -16,6 +16,42 @@ export class BrowserCliError extends Error {
     this.name = 'BrowserCliError';
     this.code = payload.error_code || 'BROWSER_CLI_ERROR';
     this.payload = payload;
+  }
+}
+
+/** Write the complete JSON value locally and return a compact file descriptor. */
+export function writeJsonArtifact(path, value) {
+  let temporary;
+  let descriptor;
+  try {
+    const serialized = JSON.stringify(value, (_key, item) => {
+      if ((typeof item === 'number' && !Number.isFinite(item))
+        || item === undefined || ['bigint', 'function', 'symbol'].includes(typeof item)) {
+        throw new TypeError('Value cannot be represented as complete JSON.');
+      }
+      return item;
+    }, 2);
+    if (serialized === undefined) throw new TypeError('Value cannot be represented as JSON.');
+    const content = Buffer.from(`${serialized}\n`, 'utf8');
+    const destination = resolve(path);
+    mkdirSync(dirname(destination), { recursive: true });
+    temporary = join(dirname(destination), `.browser-cli-${randomUUID()}.tmp`);
+    descriptor = openSync(temporary, 'wx', 0o600);
+    writeFileSync(descriptor, content);
+    fsyncSync(descriptor);
+    closeSync(descriptor);
+    descriptor = undefined;
+    renameSync(temporary, destination);
+    temporary = undefined;
+    const resultType = value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value;
+    return { path: destination, bytes: content.length, sha256: createHash('sha256').update(content).digest('hex'), result_type: resultType };
+  } catch (error) {
+    throw new BrowserCliError(`Cannot save JSON artifact: ${error.message}`, { error_code: 'OUTPUT_WRITE_FAILED' });
+  } finally {
+    if (descriptor !== undefined) { try { closeSync(descriptor); } catch {} }
+    if (temporary !== undefined) {
+      try { unlinkSync(temporary); } catch {}
+    }
   }
 }
 
@@ -71,10 +107,14 @@ export class BrowserCliClient {
       throw new TypeError('batch requires 1 to 500 { action, args } objects.');
     }
     if (context !== undefined && !isObject(context)) throw new TypeError('context must be an object.');
-    return this.request('batch', {
+    const response = await this.request('batch', {
       commands, ...(context === undefined ? {} : { context }),
       stop_on_error: stopOnError, result_mode: resultMode,
     }, requestOptions);
+    if (response.data.success !== true) {
+      throw new BrowserCliError('One or more batch steps failed.', { ...response, error_code: 'BATCH_FAILED' });
+    }
+    return response;
   }
 
   async status(options = {}) {
@@ -131,7 +171,8 @@ export class BrowserCliClient {
     if (status.data.runtime_version !== DAEMON_RUNTIME_VERSION) {
       throw this.#incompatible(status.data.runtime_version);
     }
-    if (request.action === 'runtime-status' && !request.args.warmup) return status;
+    if (request.action === 'runtime-status' && !request.args.warmup
+      && Object.keys(request.args).every(key => key === 'warmup')) return status;
     const result = await this.#send(request, timeoutMs);
     if (result.meta.runtime_version !== DAEMON_RUNTIME_VERSION) {
       throw this.#incompatible(result.meta.runtime_version);
