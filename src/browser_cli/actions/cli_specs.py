@@ -118,14 +118,14 @@ def get_action_specs() -> list[ActionSpec]:
         ActionSpec(
             "close-tab",
             "Close a tab.",
-            "Close the active tab or a visible tab by page id.",
+            "Close an agent-owned tab, interrupting any operation on it. Earlier side effects are not rolled back.",
             _add_optional_page_id_arguments,
             _default_request,
         ),
         ActionSpec(
             "close",
             "Close the active tab.",
-            "Close the current active tab in this agent domain.",
+            "Close this agent's active tab, interrupting any operation on it. Earlier side effects are not rolled back.",
             _no_arguments,
             _default_request,
         ),

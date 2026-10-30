@@ -5,6 +5,7 @@ function artifactRequestedPath(artifact) {
   return String(artifact?.metadata?.requested_path || '');
 }
 
+/** Probe the bound window without discarding ownership on a transient API failure. */
 export async function buildWorkspaceStatus(context) {
   const windowId = context.state.workspaceWindowId;
   if (windowId === null) {
@@ -34,8 +35,10 @@ export async function buildWorkspaceStatus(context) {
   }
 }
 
+/** Bind workspace actions to shared ownership, recording, and persistence helpers. */
 export function createWorkspaceHandlers(context) {
   return {
+    /** Tear down workspace tracking after collecting pending recording artifacts. */
     async 'workspace-close'(_payload, meta) {
       const artifacts = await flushAllPendingVideoArtifacts(context, meta.requestId);
       if (context.state.workspaceWindowId !== null) {
@@ -58,6 +61,7 @@ export function createWorkspaceHandlers(context) {
     async 'workspace-status'() {
       return await buildWorkspaceStatus(context);
     },
+    /** Replace the dedicated workspace binding and retain emitted recordings. */
     async 'workspace-rebuild-binding'(_payload, meta) {
       const artifacts = await flushAllPendingVideoArtifacts(context, meta.requestId);
       if (context.state.workspaceWindowId !== null) {
@@ -79,6 +83,7 @@ export function createWorkspaceHandlers(context) {
         ...(await buildWorkspaceStatus(context)),
       };
     },
+    /** Open a managed tab and persist its daemon page identifier. */
     async 'open-tab'(payload) {
       const tab = await context.openTab(payload.url || 'about:blank');
       if (payload.page_id) {
@@ -118,6 +123,7 @@ export function createWorkspaceHandlers(context) {
         page_id: context.pageIdForTab(tab.id),
       };
     },
+    /** Preserve confirmed Chrome closure even if later persistence cleanup fails. */
     async 'close-tab'(payload, meta) {
       const tab = await context.getManagedTab(payload.tab_id);
       const pageId = context.pageIdForTab(tab.id);

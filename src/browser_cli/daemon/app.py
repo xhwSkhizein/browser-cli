@@ -6,8 +6,9 @@ import asyncio
 import logging
 import traceback
 from collections.abc import Awaitable, Callable
+from functools import partial
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from browser_cli import __version__, error_codes
 from browser_cli.browser.capture import CaptureOptions
@@ -123,14 +124,23 @@ class BrowserDaemonApp:
         return self._state
 
     async def execute(self, request: DaemonRequest) -> DaemonResponse:
+        """Coordinate browser work while keeping status and owned cleanup observable."""
         # Status remains observable during long batches. Browser actions retain
         # TabRegistry's immediate busy-tab errors instead of queuing per agent.
         observable = request.action in {"run-status", "run-logs", "run-cancel", "run-start-read"}
         observable |= request.action == "runtime-status" and not request.args.get("warmup")
         if observable and "chrome_environment" not in request.args:
             return await self._execute(request)
-        exclusive = request.action in {"batch", "stop", "workspace-rebuild-binding"}
-        async with self._state.execution.scope(exclusive=exclusive):
+        mode: Literal["shared", "batch", "exclusive", "cleanup"]
+        if request.action == "batch":
+            mode = "batch"
+        elif request.action in {"stop", "workspace-rebuild-binding"}:
+            mode = "exclusive"
+        elif request.action in {"close", "close-tab"}:
+            mode = "cleanup"
+        else:
+            mode = "shared"
+        async with self._state.execution.scope(mode=mode):
             return await self._execute(request)
 
     async def _execute(self, request: DaemonRequest) -> DaemonResponse:
@@ -145,6 +155,9 @@ class BrowserDaemonApp:
             )
         runtime_meta: dict[str, Any] = {}
         command_started = False
+        end_command = self._state.browser_service.end_command
+        if request.action in {"close", "close-tab"}:
+            end_command = partial(end_command, allow_rebind=False)
         try:
             if (
                 request.runtime_version is not None
@@ -156,6 +169,10 @@ class BrowserDaemonApp:
                 )
             if request.action == "batch" and "chrome_environment" in request.args:
                 raise InvalidInputError("batch cannot reconfigure the browser profile.")
+            if request.action in {"close", "close-tab"} and "chrome_environment" in request.args:
+                raise InvalidInputError(
+                    "Owned-page cleanup cannot reconfigure the browser profile."
+                )
             self._maybe_configure_browser_environment(request.args)
             if request.action not in {
                 "runtime-status",
@@ -180,7 +197,7 @@ class BrowserDaemonApp:
                 # Cleanup may fail or be canceled after decrementing the shared
                 # command count. The exception handlers must not run it twice.
                 command_started = False
-                runtime_meta = await self._state.browser_service.end_command()
+                runtime_meta = await end_command()
                 meta.update(runtime_meta)
                 if runtime_meta.get("driver_reason") == "extension-connected":
                     meta["runtime_note"] = "Browser CLI restored extension mode at a safe point."
@@ -196,15 +213,15 @@ class BrowserDaemonApp:
             return DaemonResponse.success(data, meta=meta)
         except asyncio.CancelledError:
             if command_started:
-                await self._state.browser_service.end_command()
+                await end_command()
             raise
         except BrowserCliError as exc:
             if command_started:
-                runtime_meta = await self._state.browser_service.end_command()
+                runtime_meta = await end_command()
             return self._error_response(exc, request=request, runtime_meta=runtime_meta)
         except Exception as exc:  # pragma: no cover - last-resort daemon guard
             if command_started:
-                runtime_meta = await self._state.browser_service.end_command()
+                runtime_meta = await end_command()
             logger.exception("Unexpected daemon failure in action=%s", request.action)
             return self._error_response(
                 OperationFailedError(
@@ -235,7 +252,7 @@ class BrowserDaemonApp:
             error_code=exc.error_code,
             error_message=exc.message,
             meta=meta,
-            execution_state=exc.payload.get("execution_state"),
+            execution_state=exc.payload.get("execution_state", "unknown"),
             blocked_by=exc.payload.get("blocked_by"),
         )
 
@@ -429,6 +446,7 @@ class BrowserDaemonApp:
         return {"page": page}
 
     async def _handle_tabs(self, request: DaemonRequest) -> dict[str, Any]:
+        """List only this agent's pages, including ordinary and closing claims."""
         tabs = await self._state.tabs.list_tabs(request.agent_id)
         current_active: str | None = None
         try:
@@ -454,12 +472,13 @@ class BrowserDaemonApp:
                     "url": record.url,
                     "title": record.title,
                     "active": record.page_id == current_active,
-                    "busy": record.busy is not None,
+                    "busy": record.busy is not None or record.closing is not None,
                 }
             )
         return {"tabs": results}
 
     async def _handle_switch_tab(self, request: DaemonRequest) -> dict[str, Any]:
+        """Switch an owned page while retaining its claim through summary capture."""
         page_id = self._require_str(request.args, "page_id")
         claimed = await self._state.tabs.claim_page(
             agent_id=request.agent_id,
@@ -469,30 +488,52 @@ class BrowserDaemonApp:
         )
         try:
             await self._state.tabs.set_active_tab(request.agent_id, page_id)
-        finally:
-            await self._state.tabs.release_tab(
-                page_id=claimed.page_id, request_id=request.request_id
-            )
-        return {"page": await self._state.browser_service.get_page_summary(page_id)}
-
-    async def _handle_close_tab(self, request: DaemonRequest) -> dict[str, Any]:
-        page_id = str(request.args.get("page_id") or "").strip()
-        if not page_id:
-            page_id = await self._state.tabs.current_active_page_id(request.agent_id)
-        claimed = await self._state.tabs.claim_page(
-            agent_id=request.agent_id,
-            page_id=page_id,
-            request_id=request.request_id,
-            command=request.action,
-        )
-        try:
-            result = await self._state.browser_service.close_tab(page_id)
-            await self._state.tabs.remove_tab(request.agent_id, page_id)
+            result = {"page": await self._state.browser_service.get_page_summary(page_id)}
+            await self._state.tabs.check_claim(page_id=page_id, request_id=request.request_id)
             return result
         finally:
             await self._state.tabs.release_tab(
                 page_id=claimed.page_id, request_id=request.request_id
             )
+
+    async def _handle_close_tab(self, request: DaemonRequest) -> dict[str, Any]:
+        """Confirm owned-page destruction before canceling its waiting operation."""
+        page_id = str(request.args.get("page_id") or "").strip()
+        if not page_id:
+            page_id = await self._state.tabs.current_active_page_id(request.agent_id)
+        claimed, running = await self._state.tabs.begin_close(
+            agent_id=request.agent_id,
+            page_id=page_id,
+            request_id=request.request_id,
+        )
+        try:
+            result = await self._state.browser_service.close_tab(page_id)
+            if result.get("closed") is not True:
+                raise OperationFailedError(
+                    "The browser did not confirm that the owned page was closed."
+                )
+            await self._state.tabs.remove_tab(request.agent_id, page_id)
+            if claimed.busy is not None:
+                drained = running is not None and running.done()
+                if (
+                    running is not None
+                    and running is not asyncio.current_task()
+                    and not running.done()
+                ):
+                    # Destroy the browser context first. Canceling a Python wait alone
+                    # cannot stop JavaScript or roll back earlier side effects.
+                    running.cancel()
+                    done, _ = await asyncio.wait({running}, timeout=0.1)
+                    drained = bool(done)
+                result["interruption"] = {
+                    "request_id": claimed.busy.request_id,
+                    "page_closed": True,
+                    "command_drained": drained,
+                    "execution_state": "unknown",
+                }
+            return result
+        finally:
+            await self._state.tabs.end_close(page_id=claimed.page_id, request_id=request.request_id)
 
     async def _handle_close(self, request: DaemonRequest) -> dict[str, Any]:
         return await self._handle_close_tab(request)
@@ -1063,12 +1104,14 @@ class BrowserDaemonApp:
         request: DaemonRequest,
         operation: Callable[[str], Awaitable[dict[str, Any]]],
     ) -> dict[str, Any]:
+        """Run under an owner claim and reject results superseded by page cleanup."""
         async with self._state.tabs.claim_active_tab(
             agent_id=request.agent_id,
             request_id=request.request_id,
             command=request.action,
         ) as tab:
             payload = await operation(tab.page_id)
+            await self._state.tabs.check_claim(page_id=tab.page_id, request_id=request.request_id)
             try:
                 latest = await self._state.browser_service.get_page_summary(tab.page_id)
                 await self._state.tabs.update_tab(
@@ -1078,6 +1121,7 @@ class BrowserDaemonApp:
                 )
             except BrowserCliError:
                 pass
+            await self._state.tabs.check_claim(page_id=tab.page_id, request_id=request.request_id)
             return payload
 
     @staticmethod

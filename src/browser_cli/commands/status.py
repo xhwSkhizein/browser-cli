@@ -244,6 +244,7 @@ def render_status_report(report: StatusReport) -> str:
 
 
 def status_report_to_json_data(report: StatusReport) -> dict[str, Any]:
+    """Render the stable agent status projection from collected runtime evidence."""
     app_paths = get_app_paths()
     workspace_binding = _workspace_binding_state(report)
     available_actions = list(report.presentation.get("available_actions") or [])
@@ -318,6 +319,7 @@ def _recommended_action(
     workspace_binding: str,
     available_actions: list[str],
 ) -> str:
+    """Choose the public recovery action from runtime and environment evidence."""
     if "reload-extension" in available_actions:
         return "reload-extension"
     if report.daemon_state in {"stale", "incompatible"} or report.overall_status == "broken":
@@ -386,6 +388,7 @@ def _classify_overall_status(
 def _build_backend_section(
     live_payload: dict[str, Any] | None, *, live_error: str | None
 ) -> dict[str, Any]:
+    """Expose driver availability, extension connection, and live probe results."""
     if not live_payload:
         return {
             "browser_started": False,

@@ -14,6 +14,7 @@ build/
 playwright-report/
 test-results/
 /runs/
+/artifacts/reaccept/
 tasks/**/artifacts/
 
 trash/

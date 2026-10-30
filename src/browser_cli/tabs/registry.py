@@ -7,8 +7,14 @@ import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass, field
+from typing import Any
 
-from browser_cli.errors import BusyTabError, NoActiveTabError, TabNotFoundError
+from browser_cli.errors import (
+    BusyTabError,
+    NoActiveTabError,
+    OperationCancelledError,
+    TabNotFoundError,
+)
 
 
 @dataclass(slots=True)
@@ -28,6 +34,7 @@ class TabRecord:
     url: str = ""
     title: str = ""
     busy: BusyState | None = None
+    closing: BusyState | None = None
     last_snapshot_refs: set[str] = field(default_factory=set)
     last_snapshot_id: str | None = None
     last_snapshot_ref_count: int = 0
@@ -40,6 +47,7 @@ class TabRegistry:
         self._tabs: dict[str, TabRecord] = {}
         self._active_tab_by_agent: dict[str, str] = {}
         self._lock = asyncio.Lock()
+        self._claim_tasks: dict[tuple[str, str], asyncio.Task[Any]] = {}
 
     async def add_tab(
         self,
@@ -75,10 +83,13 @@ class TabRegistry:
         last_snapshot_url: str | None = None,
         last_snapshot_at: float | None = None,
     ) -> TabRecord:
+        """Refresh a live page's metadata while rejecting pages reserved for closing."""
         async with self._lock:
             record = self._tabs.get(page_id)
             if record is None:
                 raise TabNotFoundError()
+            if record.closing is not None:
+                raise OperationCancelledError()
             record.last_used_at = time.time()
             if url is not None:
                 record.url = url
@@ -124,10 +135,13 @@ class TabRegistry:
             return self._copy_record(record)
 
     async def set_active_tab(self, agent_id: str, page_id: str) -> TabRecord:
+        """Activate an owned page unless cleanup has already reserved it."""
         async with self._lock:
             record = self._tabs.get(page_id)
             if record is None or record.owner_agent_id != agent_id:
                 raise TabNotFoundError()
+            if record.closing is not None:
+                raise OperationCancelledError()
             self._active_tab_by_agent[agent_id] = page_id
             record.last_used_at = time.time()
             return self._copy_record(record)
@@ -213,8 +227,9 @@ class TabRegistry:
             record = self._tabs.get(page_id)
             if record is None or record.owner_agent_id != agent_id:
                 raise NoActiveTabError()
-            if record.busy and record.busy.request_id != request_id:
-                raise BusyTabError(blocked_by=asdict(record.busy))
+            blocker = record.closing or record.busy
+            if blocker and blocker.request_id != request_id:
+                raise BusyTabError(blocked_by=asdict(blocker))
             record.busy = BusyState(
                 request_id=request_id,
                 command=command,
@@ -222,6 +237,9 @@ class TabRegistry:
                 started_at=time.time(),
             )
             record.last_used_at = time.time()
+            task = asyncio.current_task()
+            if task is not None:
+                self._claim_tasks[(page_id, request_id)] = task
             claimed = self._copy_record(record)
         try:
             yield claimed
@@ -241,8 +259,9 @@ class TabRegistry:
             record = self._tabs.get(page_id)
             if record is None or record.owner_agent_id != agent_id:
                 raise TabNotFoundError()
-            if record.busy and record.busy.request_id != request_id:
-                raise BusyTabError(blocked_by=asdict(record.busy))
+            blocker = record.closing or record.busy
+            if blocker and blocker.request_id != request_id:
+                raise BusyTabError(blocked_by=asdict(blocker))
             record.busy = BusyState(
                 request_id=request_id,
                 command=command,
@@ -250,10 +269,51 @@ class TabRegistry:
                 started_at=time.time(),
             )
             record.last_used_at = time.time()
+            task = asyncio.current_task()
+            if task is not None:
+                self._claim_tasks[(page_id, request_id)] = task
             return self._copy_record(record)
 
-    async def release_tab(self, *, page_id: str, request_id: str) -> None:
+    async def begin_close(
+        self, *, agent_id: str, page_id: str, request_id: str
+    ) -> tuple[TabRecord, asyncio.Task[Any] | None]:
+        """Reserve only the owner's page for destruction, even while it is busy."""
         async with self._lock:
+            record = self._tabs.get(page_id)
+            if record is None or record.owner_agent_id != agent_id:
+                raise TabNotFoundError()
+            if record.closing is not None:
+                raise BusyTabError(blocked_by=asdict(record.closing))
+            record.closing = BusyState(request_id, "close-tab", agent_id, time.time())
+            running = (
+                self._claim_tasks.get((page_id, record.busy.request_id)) if record.busy else None
+            )
+            return self._copy_record(record), running
+
+    async def end_close(self, *, page_id: str, request_id: str) -> None:
+        """Release a close reservation without releasing the original operation."""
+        async with self._lock:
+            record = self._tabs.get(page_id)
+            if record and record.closing and record.closing.request_id == request_id:
+                # A failed close keeps the original operation's claim intact.
+                record.closing = None
+
+    async def check_claim(self, *, page_id: str, request_id: str) -> None:
+        """Reject results whose page is closing, gone, or held by a different request."""
+        async with self._lock:
+            record = self._tabs.get(page_id)
+            if (
+                record is None
+                or record.closing
+                or not record.busy
+                or record.busy.request_id != request_id
+            ):
+                raise OperationCancelledError()
+
+    async def release_tab(self, *, page_id: str, request_id: str) -> None:
+        """Release only the matching request's page claim and task reference."""
+        async with self._lock:
+            self._claim_tasks.pop((page_id, request_id), None)
             record = self._tabs.get(page_id)
             if record is None:
                 return
@@ -269,6 +329,7 @@ class TabRegistry:
 
     @staticmethod
     def _copy_record(record: TabRecord) -> TabRecord:
+        """Copy tab state without exposing mutable snapshot reference sets."""
         return TabRecord(
             page_id=record.page_id,
             owner_agent_id=record.owner_agent_id,
@@ -277,6 +338,7 @@ class TabRegistry:
             url=record.url,
             title=record.title,
             busy=record.busy,
+            closing=record.closing,
             last_snapshot_refs=set(record.last_snapshot_refs),
             last_snapshot_id=record.last_snapshot_id,
             last_snapshot_ref_count=record.last_snapshot_ref_count,

@@ -59,6 +59,8 @@ the implementation, and where should a change land first.
 - Batch step failures exit 75 in the CLI while preserving protocol-level `ok` and step-level `data.success`. Python and Node high-level `batch()` raise `BATCH_FAILED` with partial results in the exception payload; raw `invoke`/`request` callers inspect step success themselves.
 - One-off browser tasks do not require task metadata or publication. Start with `status --json`, keep one stable `X_AGENT_ID`, serialize dependent same-tab actions, and save full results before returning compact summaries.
 - Busy errors identify the same agent's blocking request and report `execution_state=not_started`. Timeout/disconnect failures remain uncertain and must never trigger automatic replay. A local export failure may report `execution_state=completed` because the browser action already ran.
+- `close` and `close-tab` are owner-scoped cancellation controls, observable during batches. They reserve the owned page for closing, confirm browser destruction before canceling its daemon wait, and reject late results. They still wait for global stop or workspace rebuild; cleanup never starts a browser, rebuilds workspace binding, or rebinds drivers. Failed or unconfirmed closure retains the original busy claim. A successful close reports interruption separately; earlier side effects remain unknown and are never replayed.
+- Command runtime metadata is task-local in `daemon/browser_service.py`; concurrent cleanup must not overwrite another request's command or driver-transition diagnostics. Shared lifecycle counters still track all in-flight commands.
 - `v2` uses `X_AGENT_ID` to isolate tab visibility and active-tab state.
 - `v2` must not expose session concepts or global `--page` targeting flags.
 - Semantic refs should follow bridgic-style reconstruction rather than DOM marker lookup.
@@ -248,6 +250,7 @@ the implementation, and where should a change land first.
   start at `src/browser_cli/refs/registry.py`, `src/browser_cli/refs/generator.py`, `src/browser_cli/refs/resolver.py`, and the snapshot-related methods in `src/browser_cli/daemon/browser_service.py`.
 - If the user reports busy-tab or tab-visibility conflicts:
   start at `src/browser_cli/tabs/registry.py` and the tab-related handlers in `src/browser_cli/daemon/app.py`.
+- A canceled caller leaves a long operation busy -> socket disconnect intentionally does not replay or cancel browser work -> inspect `tabs/registry.py::begin_close/check_claim`, `daemon/app.py::_handle_close_tab`, `daemon/server.py::_handle_client`, and `extension/session.py::send_request` -> use an explicit owned-page close, confirm destruction, then drain the waiting task and discard late responses/artifacts. Other agents' pages remain inaccessible.
 - If the user wants task or automation behavior changed:
   inspect `src/browser_cli/task_runtime/*` and `src/browser_cli/automation/*`, then validate against example tasks under `tasks/`.
 - If the user wants task examples or template output changed:

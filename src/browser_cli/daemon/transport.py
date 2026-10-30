@@ -12,7 +12,7 @@ from typing import Any
 
 from browser_cli.constants import get_app_paths
 
-DAEMON_RUNTIME_VERSION = "2026-10-22-capture-context-batch-v2"
+DAEMON_RUNTIME_VERSION = "2026-10-30-owned-page-cancel-v3"
 
 
 def ensure_run_dir() -> Path:

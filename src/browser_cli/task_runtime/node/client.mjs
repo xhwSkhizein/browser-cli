@@ -81,6 +81,7 @@ export class BrowserCliClient {
     this._startupPromise = undefined;
   }
 
+  /** Send one checked action; retry startup only when no connection was established. */
   async request(action, args = {}, { startIfNeeded = true, timeoutMs = this.timeoutMs } = {}) {
     if (typeof action !== 'string' || !action.trim() || !isObject(args)) {
       throw new TypeError('request requires an action string and an args object.');
@@ -102,6 +103,7 @@ export class BrowserCliClient {
     return payload;
   }
 
+  /** Preserve the full batch envelope and raise with partial results on step failure. */
   async batch(commands, { context, stopOnError = true, resultMode = 'all', ...requestOptions } = {}) {
     if (!Array.isArray(commands) || commands.length < 1 || commands.length > 500) {
       throw new TypeError('batch requires 1 to 500 { action, args } objects.');

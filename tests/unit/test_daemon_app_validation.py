@@ -18,6 +18,9 @@ class _FakeTabs:
     async def update_tab(self, *_args, **_kwargs) -> None:
         return None
 
+    async def check_claim(self, **_kwargs) -> None:
+        return None
+
 
 class _FakeBrowserService:
     async def begin_command(self, _action: str) -> None:

@@ -133,6 +133,16 @@ class BatchFailedError(OperationFailedError):
         self.payload = payload
 
 
+class OperationCancelledError(OperationFailedError):
+    def __init__(self) -> None:
+        """Report uncertain effects when cleanup invalidates an operation's result."""
+        super().__init__(
+            "The operation's result cannot be confirmed because its page was closed or reserved for cleanup. Earlier effects may have completed.",
+            error_code=error_codes.OPERATION_CANCELLED,
+        )
+        self.payload = {"execution_state": "unknown"}
+
+
 class WorkspaceBindingLostError(OperationFailedError):
     def __init__(self, message: str = "Workspace binding was lost.") -> None:
         super().__init__(message, error_code=error_codes.WORKSPACE_BINDING_LOST)

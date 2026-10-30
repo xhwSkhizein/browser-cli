@@ -52,6 +52,7 @@ def _run_workspace_rebuild_json() -> str:
 
 
 def _recover() -> dict[str, Any]:
+    """Apply the recommended daemon repair while leaving extension reloads explicit."""
     ensure_daemon_running()
     before = collect_stable_status_data()
     actions: list[str] = []

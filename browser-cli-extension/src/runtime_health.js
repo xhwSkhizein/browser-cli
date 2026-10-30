@@ -13,6 +13,7 @@ export class ExtensionRuntimeError extends Error {
   }
 }
 
+/** Reject unusable core Chrome APIs before a browser action can mutate state. */
 export function assertRuntimeApis() {
   for (const path of REQUIRED_APIS) {
     const [namespace, method] = path.split('.');
@@ -22,6 +23,7 @@ export function assertRuntimeApis() {
   }
 }
 
+/** Probe live tab APIs with a deadline while preserving a missing-window error. */
 export async function queryRuntimeTabs(query = {windowType: 'normal'}) {
   assertRuntimeApis();
   let timeoutId;
@@ -46,9 +48,11 @@ export async function queryRuntimeTabs(query = {windowType: 'normal'}) {
 }
 
 // Persist the limit across service-worker and extension reloads. Never retry an action.
+/** Coalesce recovery requests and persist the reload cooldown across workers. */
 export function createRuntimeRecovery({canReload, now = Date.now, schedule = setTimeout}) {
   let pending;
   return {
+    /** Schedule an allowed reload once, without replaying the failed action. */
     recover({force = false} = {}) {
       if (pending) return pending;
       pending = (async () => {
