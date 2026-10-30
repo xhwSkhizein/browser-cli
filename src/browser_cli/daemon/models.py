@@ -36,6 +36,7 @@ class DaemonResponse:
     blocked_by: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
+        """Serialize the shared envelope, adding execution diagnostics on failure."""
         payload: dict[str, Any] = {
             "ok": self.ok,
             "data": self.data or {},
@@ -64,6 +65,7 @@ class DaemonResponse:
         execution_state: str | None = None,
         blocked_by: dict[str, Any] | None = None,
     ) -> DaemonResponse:
+        """Build a failed response without inventing an execution outcome."""
         return cls(
             ok=False,
             data={},

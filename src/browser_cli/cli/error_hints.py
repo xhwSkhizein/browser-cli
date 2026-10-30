@@ -7,6 +7,7 @@ from browser_cli.errors import BrowserCliError
 
 
 def next_hint_for_error(exc: BrowserCliError) -> str | None:
+    """Return the shared CLI recovery hint without mutating an error's payload."""
     if exc.error_code == error_codes.BROWSER_UNAVAILABLE:
         return "install stable Google Chrome and re-run browser-cli doctor"
     if exc.error_code == error_codes.PROFILE_UNAVAILABLE:
@@ -15,6 +16,8 @@ def next_hint_for_error(exc: BrowserCliError) -> str | None:
         return "run browser-cli workspace rebuild --json"
     if exc.error_code == error_codes.EXTENSION_UNAVAILABLE:
         return "connect or reload the Browser CLI extension"
+    if exc.error_code == error_codes.EXTENSION_RUNTIME_UNHEALTHY:
+        return "reload the Browser CLI extension, then run browser-cli doctor --json"
     if exc.error_code == error_codes.EXTENSION_CAPABILITY_INCOMPLETE:
         return "reload the Browser CLI extension and run browser-cli recover --json"
     if exc.error_code == error_codes.EXTENSION_PORT_IN_USE:

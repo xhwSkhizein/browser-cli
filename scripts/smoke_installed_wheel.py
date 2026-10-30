@@ -80,6 +80,7 @@ class FixtureHandler(BaseHTTPRequestHandler):
 
 
 def run(wheel: Path) -> dict[str, object]:
+    """Exercise a wheel in a disposable environment after launch permission checks."""
     ensure_browser_launch_allowed()
     node, uv = shutil.which("node"), shutil.which("uv")
     if node is None or uv is None:

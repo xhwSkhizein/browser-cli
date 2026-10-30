@@ -12,6 +12,7 @@ from browser_cli.outputs.json import CommandResult, render_json_payload
 
 
 def run_action_command(args: Namespace) -> CommandResult:
+    """Run an action, optionally export its full data, and retain failure exit codes."""
     builder = getattr(args, "action_request_builder", None)
     if builder is None:
         raise InvalidInputError("Internal CLI configuration error: missing action request builder.")

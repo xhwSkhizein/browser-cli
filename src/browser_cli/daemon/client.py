@@ -71,6 +71,7 @@ def send_command(
 
 
 async def _send_command_async(action: str, args: dict[str, Any]) -> dict[str, Any]:
+    """Send once, validate the complete response, and preserve uncertain failures."""
     app_paths = get_app_paths()
     try:
         reader, writer = await asyncio.open_unix_connection(
@@ -272,12 +273,14 @@ def _wait_for_pid_exit(pid: int, *, timeout_seconds: float) -> bool:
 
 
 def _error_from_payload(payload: dict[str, Any]) -> BrowserCliError:
+    """Convert a remote failure without losing its metadata or partial results."""
     exc = _typed_error_from_payload(payload)
     exc.payload = {**exc.payload, **payload}
     return exc
 
 
 def _typed_error_from_payload(payload: dict[str, Any]) -> BrowserCliError:
+    """Choose a local exception type from the daemon's stable error code."""
     error_code = str(payload.get("error_code") or "OPERATION_FAILED")
     message = str(payload.get("error_message") or "Daemon command failed.")
     if error_code == "INVALID_INPUT":

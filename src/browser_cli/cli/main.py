@@ -31,12 +31,14 @@ from browser_cli.outputs.json import CommandResult, render_json_error
 
 class CliArgumentParser(argparse.ArgumentParser):
     def error(self, message: str) -> None:
+        """Raise an unstarted input error for the shared JSON error renderer."""
         error = InvalidInputError(message)
         error.payload = {"execution_state": "not_started"}
         raise error
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Register local commands and the daemon action catalog on one parser."""
     parser = CliArgumentParser(prog="browser-cli")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
 
@@ -364,6 +366,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    """Execute a command and render typed failures as structured JSON."""
     parser = build_parser()
     arguments = list(argv) if argv is not None else sys.argv[1:]
     action = arguments[0] if arguments and not arguments[0].startswith("-") else None

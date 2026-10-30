@@ -41,6 +41,7 @@ REQUIRED_EXTENSION_TRACE_VIDEO = {
 
 
 def run(_root: Path) -> list[Finding]:
+    """Check the parser and packaged clients against the public CLI contract."""
     findings: list[Finding] = []
     parser = build_parser()
     top_level_commands = _subcommand_parsers(parser)
