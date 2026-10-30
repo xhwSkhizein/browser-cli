@@ -11,6 +11,8 @@ REQUIRED_AGENT_PHRASES = [
     "Batch step failures exit 75 in the CLI",
     "One-off browser tasks do not require task metadata or publication.",
     "`src/browser_cli/outputs/files.py`",
+    "`doctor --json` includes a read-only live runtime check from daemon-owned presentation.",
+    "failed actions are never replayed",
     "`browser-cli batch` executes ordered actions with compact result modes.",
     "Screenshots return actual image dimensions and capture geometry.",
     "The packaged Node.js client lives under `browser_cli.task_runtime/node`",

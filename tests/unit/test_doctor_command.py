@@ -7,6 +7,52 @@ from pathlib import Path
 from browser_cli.commands.doctor import collect_doctor_report, run_doctor_command
 
 
+def test_doctor_reports_connected_but_degraded_runtime(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("BROWSER_CLI_HOME", str(tmp_path / "home"))
+    monkeypatch.setattr(
+        "browser_cli.commands.doctor._daemon_runtime_payload",
+        lambda: {
+            "extension": {"connected": True, "capability_complete": True},
+            "workspace_window_state": {"binding_state": "absent"},
+            "presentation": {
+                "overall_state": "degraded",
+                "summary_reason": "Browser CLI no longer has a trusted extension workspace binding.",
+                "recovery_guidance": ["Run browser-cli workspace rebuild --json."],
+            },
+        },
+    )
+    report = collect_doctor_report()
+    runtime = next(item for item in report["checks"] if item["id"] == "runtime")
+    assert runtime["status"] == "warn"
+    assert "workspace binding" in runtime["summary"]
+    assert "workspace rebuild" in runtime["next"]
+    assert report["runtime_status"] == "degraded"
+
+
+def test_doctor_fails_extension_check_when_live_probe_fails(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("BROWSER_CLI_HOME", str(tmp_path / "home"))
+    monkeypatch.setattr(
+        "browser_cli.commands.doctor._daemon_runtime_payload",
+        lambda: {
+            "extension": {
+                "connected": True,
+                "capability_complete": True,
+                "runtime_health": {
+                    "status": "fail",
+                    "error_code": "EXTENSION_RUNTIME_UNHEALTHY",
+                    "message": "Chrome tabs.query is unavailable.",
+                },
+            },
+        },
+    )
+    report = collect_doctor_report()
+    extension = next(item for item in report["checks"] if item["id"] == "extension")
+    assert extension["status"] == "fail"
+    assert extension["error_code"] == "EXTENSION_RUNTIME_UNHEALTHY"
+    assert "tabs.query" in extension["details"]
+    assert "extension" in extension["next"]
+
+
 def test_doctor_json_payload_reports_checks(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("BROWSER_CLI_HOME", str(tmp_path / "home"))
     monkeypatch.setattr(

@@ -13,6 +13,7 @@ from browser_cli.errors import (
     ExtensionCapabilityIncompleteError,
     ExtensionUnavailableError,
     InvalidInputError,
+    OperationFailedError,
 )
 from browser_cli.outputs.json import render_json_payload
 
@@ -63,6 +64,14 @@ def _recover() -> dict[str, Any]:
     actions: list[str] = []
     current = before
     recommended = str(current["recovery"]["recommended_action"])
+    if recommended == "reload-extension":
+        raise OperationFailedError(
+            "The Chrome extension is connected but its browser API probe failed. "
+            "Allow automatic extension recovery to finish. If it remains unhealthy, "
+            "use Reload Extension in the popup or reload Browser CLI Bridge in chrome://extensions. "
+            "Restarting the daemon cannot repair the extension context.",
+            error_code=error_codes.EXTENSION_RUNTIME_UNHEALTHY,
+        )
     if recommended in {"reload", "reconnect-extension"}:
         send_command("stop", {}, start_if_needed=False)
         wait_for_daemon_stop()
@@ -103,6 +112,8 @@ def _result_payload(
 
 
 def _next_action_for_error(exc: BrowserCliError) -> str | None:
+    if exc.error_code == error_codes.EXTENSION_RUNTIME_UNHEALTHY:
+        return "reload the Browser CLI extension, then run browser-cli doctor --json"
     if exc.error_code == error_codes.WORKSPACE_BINDING_LOST:
         return "run browser-cli workspace rebuild --json"
     if exc.error_code == error_codes.EXTENSION_UNAVAILABLE:

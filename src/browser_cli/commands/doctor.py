@@ -61,6 +61,7 @@ def collect_doctor_report() -> dict[str, Any]:
         _daemon_check(app_paths),
         _automation_service_check(app_paths),
         _extension_check(daemon_payload),
+        _runtime_check(daemon_payload),
         _headless_check(environment),
         _container_check(environment),
         _extension_port_check(app_paths, daemon_payload),
@@ -86,7 +87,7 @@ def collect_doctor_report() -> dict[str, Any]:
 
 def render_doctor_report(report: dict[str, Any]) -> str:
     lines = [
-        f"Doctor: {report['overall_status']} (environment checks)",
+        f"Doctor: {report['overall_status']} (environment and live runtime checks)",
         "Service reachability, extension connection, and directory access are checked separately.",
         "",
     ]
@@ -285,6 +286,16 @@ def _extension_check(daemon_payload: dict[str, Any] | None) -> DoctorCheck:
             next="run browser-cli status after the daemon starts if you need extension mode",
         )
     extension = dict(daemon_payload.get("extension") or {})
+    health = dict(extension.get("runtime_health") or {})
+    if bool(extension.get("connected")) and health.get("status") == "fail":
+        return DoctorCheck(
+            id="extension",
+            status="fail",
+            summary="Extension is connected but its live browser API probe failed.",
+            details=str(health.get("message") or "Extension runtime is unusable."),
+            next="wait for automatic extension recovery, then re-run browser-cli doctor --json; if it fails, reload Browser CLI Bridge in chrome://extensions",
+            error_code=str(health.get("error_code") or error_codes.EXTENSION_RUNTIME_UNHEALTHY),
+        )
     if bool(extension.get("connected")) and bool(extension.get("capability_complete")):
         return DoctorCheck(
             id="extension",
@@ -306,6 +317,19 @@ def _extension_check(daemon_payload: dict[str, Any] | None) -> DoctorCheck:
         status="warn",
         summary="Browser CLI extension is not connected.",
         next="start with managed profile mode, or connect the extension if you need real Chrome behavior",
+    )
+
+
+def _runtime_check(daemon_payload: dict[str, Any] | None) -> DoctorCheck:
+    presentation = dict((daemon_payload or {}).get("presentation") or {})
+    state = presentation.get("overall_state")
+    guidance = list(presentation.get("recovery_guidance") or [])
+    return DoctorCheck(
+        id="runtime",
+        status="pass" if state == "healthy" else "fail" if state == "broken" else "warn",
+        summary=str(presentation.get("summary_reason") or "Runtime health is unavailable."),
+        details=f"runtime state: {state or 'unavailable'}",
+        next=" ".join(str(item) for item in guidance) if state != "healthy" and guidance else None,
     )
 
 

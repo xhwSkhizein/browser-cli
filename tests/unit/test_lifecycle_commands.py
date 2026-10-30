@@ -122,6 +122,7 @@ def test_status_json_returns_stable_agent_schema(tmp_path: Path) -> None:
                 "active_driver": "extension",
                 "extension_connected": True,
                 "extension_capability_complete": True,
+                "extension_runtime_health": {},
                 "extension_listener": {
                     "host": "127.0.0.1",
                     "port": 19825,

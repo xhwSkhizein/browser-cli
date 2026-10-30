@@ -111,14 +111,18 @@ export function buildPopupViewModel(status) {
     lastConnectedAt: status?.lastConnectedAt || null,
     daemonHost,
     daemonPort,
-    actions: ACTION_SPECS.map((action) => ({
-      ...action,
-      enabled:
-        action.id === 'refresh-status'
-          ? true
-          : availableActions === null
-            ? action.id === 'reconnect-extension' && !hasPresentation
-            : actionSet.has(action.id),
-    })),
+    actions: ACTION_SPECS.map((original) => {
+      const action = original.id === 'reconnect-extension' && actionSet.has('reload-extension')
+        ? {...original, id: 'reload-extension', label: 'Reload Extension'} : original;
+      return {
+        ...action,
+        enabled:
+          action.id === 'refresh-status'
+            ? true
+            : availableActions === null
+              ? action.id === 'reconnect-extension' && !hasPresentation
+              : actionSet.has(action.id),
+      }
+    }),
   }
 }

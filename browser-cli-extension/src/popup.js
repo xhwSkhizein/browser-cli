@@ -79,6 +79,7 @@ function applyActionState() {
   }
   for (const action of currentView.actions) {
     els[action.domId].disabled = busy || !action.enabled
+    els[action.domId].textContent = action.label
   }
 }
 
@@ -170,7 +171,9 @@ async function saveConfig() {
 async function reconnectNow() {
   setBusy(true)
   try {
-    renderStatus(await sendMessage({ type: 'reconnect-now' }))
+    const type = currentView?.actions.some(action => action.id === 'reload-extension')
+      ? 'reload-extension' : 'reconnect-now'
+    renderStatus(await sendMessage({ type }))
   } catch (error) {
     renderStatus(buildFallbackStatus(error))
   } finally {

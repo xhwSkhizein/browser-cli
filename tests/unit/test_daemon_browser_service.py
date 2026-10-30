@@ -179,6 +179,67 @@ class _TimeoutExtensionHub(_FakeExtensionHub):
         raise TimeoutError("timed out waiting for extension session")
 
 
+def test_runtime_status_does_not_hide_live_extension_probe_failure(
+    _patched_browser_service, monkeypatch
+) -> None:
+    async def scenario() -> None:
+        _patched_browser_service.connect()
+        service = browser_service_module.BrowserService()
+        await service.ensure_started()
+        service._extension.health = AsyncMock(  # noqa: SLF001
+            return_value=DriverHealth(
+                name="extension",
+                available=True,
+                details={
+                    "connected": True,
+                    "capability_complete": True,
+                    "workspace_window_state": {"binding_state": "tracked", "window_id": 91},
+                },
+            )
+        )
+        service._extension.workspace_status = AsyncMock(  # noqa: SLF001
+            side_effect=browser_service_module.OperationFailedError(
+                "Cannot read properties of undefined (reading 'query')",
+                error_code="EXTENSION_ACTION_FAILED",
+            )
+        )
+        try:
+            status = await service.runtime_status_for_popup()
+            assert status["extension"]["runtime_health"]["status"] == "fail"
+            assert status["presentation"]["overall_state"] == "degraded"
+            assert "query" in status["presentation"]["summary_reason"]
+            from browser_cli.commands.status import (
+                StatusReport,
+                _build_backend_section,
+                status_report_to_json_data,
+            )
+
+            report = StatusReport(
+                overall_status=status["presentation"]["overall_state"],
+                daemon_state="running",
+                runtime={},
+                daemon={"state": "running", "pid": 100, "socket_reachable": True},
+                backend=_build_backend_section(status, live_error=None),
+                browser={},
+                guidance=status["presentation"]["recovery_guidance"],
+                presentation=status["presentation"],
+            )
+            public = status_report_to_json_data(report)
+            assert public["health"]["extension"]["status"] == "fail"
+            assert public["recovery"]["recommended_action"] == "reload-extension"
+            assert public["browser"]["workspace_binding"] == "unknown"
+            service._extension.workspace_status = AsyncMock(  # noqa: SLF001
+                return_value={"binding_state": "tracked", "window_id": 91}
+            )
+            recovered = await service.runtime_status_for_popup()
+            assert recovered["extension"]["runtime_health"]["status"] == "pass"
+            assert recovered["presentation"]["overall_state"] == "healthy"
+        finally:
+            await service.stop()
+
+    asyncio.run(scenario())
+
+
 @pytest.fixture
 def _patched_browser_service(monkeypatch: pytest.MonkeyPatch):
     fake_hub = _FakeExtensionHub()
