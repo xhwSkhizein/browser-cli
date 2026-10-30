@@ -59,6 +59,7 @@ the implementation, and where should a change land first.
 - One-off browser tasks do not require task metadata or publication. Start with `status --json`, keep one stable `X_AGENT_ID`, serialize dependent same-tab actions, and save full results before returning compact summaries.
 - Busy errors identify the same agent's blocking request and report `execution_state=not_started`. Timeout/disconnect failures remain uncertain and must never trigger automatic replay. A local export failure may report `execution_state=completed` because the browser action already ran.
 - `close` and `close-tab` are owner-scoped cancellation controls, observable during batches. They reserve the owned page for closing, confirm browser destruction before canceling its daemon wait, and reject late results. They still wait for global stop or workspace rebuild; cleanup never starts a browser, rebuilds workspace binding, or rebinds drivers. Failed or unconfirmed closure retains the original busy claim. A successful close reports interruption separately; earlier side effects remain unknown and are never replayed.
+- Command runtime metadata is task-local in `daemon/browser_service.py`; concurrent cleanup must not overwrite another request's command or driver-transition diagnostics. Shared lifecycle counters still track all in-flight commands.
 - `v2` uses `X_AGENT_ID` to isolate tab visibility and active-tab state.
 - `v2` must not expose session concepts or global `--page` targeting flags.
 - Semantic refs should follow bridgic-style reconstruction rather than DOM marker lookup.

@@ -58,6 +58,7 @@ class DaemonNotAvailableError(BrowserCliError):
 
 class NoActiveTabError(BrowserCliError):
     def __init__(self, message: str = "No active tab is available for this agent.") -> None:
+        """Reject an action before browser execution when its agent has no active tab."""
         super().__init__(message, exit_codes.TEMPORARY_FAILURE, error_codes.NO_ACTIVE_TAB)
         self.payload = {"execution_state": "not_started"}
 
@@ -71,6 +72,7 @@ class BusyTabError(BrowserCliError):
     def __init__(
         self, message: str | None = None, *, blocked_by: dict[str, Any] | None = None
     ) -> None:
+        """Describe an unstarted action and the request holding its tab claim."""
         super().__init__(
             message
             or "The current active tab is already being operated on. Wait for the other command to finish before retrying.",
@@ -126,14 +128,16 @@ class OperationFailedError(BrowserCliError):
 
 class BatchFailedError(OperationFailedError):
     def __init__(self, payload: dict[str, Any]) -> None:
+        """Expose a failed batch while retaining its errors and partial results."""
         super().__init__("One or more batch steps failed.", error_code=error_codes.BATCH_FAILED)
         self.payload = payload
 
 
 class OperationCancelledError(OperationFailedError):
     def __init__(self) -> None:
+        """Report uncertain effects when cleanup invalidates an operation's result."""
         super().__init__(
-            "The owned page was closed while this operation was running. Earlier effects may have completed.",
+            "The operation's result cannot be confirmed because its page was closed or reserved for cleanup. Earlier effects may have completed.",
             error_code=error_codes.OPERATION_CANCELLED,
         )
         self.payload = {"execution_state": "unknown"}

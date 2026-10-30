@@ -83,6 +83,7 @@ class TabRegistry:
         last_snapshot_url: str | None = None,
         last_snapshot_at: float | None = None,
     ) -> TabRecord:
+        """Refresh a live page's metadata while rejecting pages reserved for closing."""
         async with self._lock:
             record = self._tabs.get(page_id)
             if record is None:
@@ -134,6 +135,7 @@ class TabRegistry:
             return self._copy_record(record)
 
     async def set_active_tab(self, agent_id: str, page_id: str) -> TabRecord:
+        """Activate an owned page unless cleanup has already reserved it."""
         async with self._lock:
             record = self._tabs.get(page_id)
             if record is None or record.owner_agent_id != agent_id:
@@ -216,6 +218,7 @@ class TabRegistry:
         request_id: str,
         command: str,
     ) -> AsyncIterator[TabRecord]:
+        """Claim the agent's active tab immediately and release it on scope exit."""
         page_id: str
         async with self._lock:
             page_id = self._active_tab_by_agent.get(agent_id, "")
@@ -251,6 +254,7 @@ class TabRegistry:
         request_id: str,
         command: str,
     ) -> TabRecord:
+        """Claim an owned page; the caller must release it after the operation."""
         async with self._lock:
             record = self._tabs.get(page_id)
             if record is None or record.owner_agent_id != agent_id:
@@ -287,6 +291,7 @@ class TabRegistry:
             return self._copy_record(record), running
 
     async def end_close(self, *, page_id: str, request_id: str) -> None:
+        """Release a close reservation without releasing the original operation."""
         async with self._lock:
             record = self._tabs.get(page_id)
             if record and record.closing and record.closing.request_id == request_id:
@@ -294,6 +299,7 @@ class TabRegistry:
                 record.closing = None
 
     async def check_claim(self, *, page_id: str, request_id: str) -> None:
+        """Reject results whose page is closing, gone, or held by a different request."""
         async with self._lock:
             record = self._tabs.get(page_id)
             if (
@@ -305,6 +311,7 @@ class TabRegistry:
                 raise OperationCancelledError()
 
     async def release_tab(self, *, page_id: str, request_id: str) -> None:
+        """Release only the matching request's page claim and task reference."""
         async with self._lock:
             self._claim_tasks.pop((page_id, request_id), None)
             record = self._tabs.get(page_id)
@@ -322,6 +329,7 @@ class TabRegistry:
 
     @staticmethod
     def _copy_record(record: TabRecord) -> TabRecord:
+        """Copy tab state without exposing mutable snapshot reference sets."""
         return TabRecord(
             page_id=record.page_id,
             owner_agent_id=record.owner_agent_id,

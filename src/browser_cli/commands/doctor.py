@@ -46,6 +46,7 @@ def run_doctor_command(args: Namespace) -> str:
 
 
 def collect_doctor_report() -> dict[str, Any]:
+    """Combine caller environment checks with the daemon's live runtime evidence."""
     app_paths = get_app_paths()
     daemon_payload = _daemon_runtime_payload()
     environment = _environment_payload(app_paths)
@@ -86,6 +87,7 @@ def collect_doctor_report() -> dict[str, Any]:
 
 
 def render_doctor_report(report: dict[str, Any]) -> str:
+    """Present environment and runtime findings with their recovery guidance."""
     lines = [
         f"Doctor: {report['overall_status']} (environment and live runtime checks)",
         "Service reachability, extension connection, and directory access are checked separately.",
@@ -278,6 +280,7 @@ def _automation_service_check(app_paths: AppPaths) -> DoctorCheck:
 
 
 def _extension_check(daemon_payload: dict[str, Any] | None) -> DoctorCheck:
+    """Require a live browser API probe, not merely an extension handshake."""
     if daemon_payload is None:
         return DoctorCheck(
             id="extension",
@@ -321,6 +324,7 @@ def _extension_check(daemon_payload: dict[str, Any] | None) -> DoctorCheck:
 
 
 def _runtime_check(daemon_payload: dict[str, Any] | None) -> DoctorCheck:
+    """Project the daemon-owned presentation into a diagnostic finding."""
     presentation = dict((daemon_payload or {}).get("presentation") or {})
     state = presentation.get("overall_state")
     guidance = list(presentation.get("recovery_guidance") or [])

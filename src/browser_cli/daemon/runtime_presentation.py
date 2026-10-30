@@ -6,6 +6,7 @@ from typing import Any
 
 
 def build_runtime_presentation(raw_status: dict[str, Any]) -> dict[str, Any]:
+    """Classify daemon health and binding facts for every runtime observer."""
     browser_started = bool(raw_status.get("browser_started"))
     active_driver = str(raw_status.get("active_driver") or "not-started")
     pending_rebind = _as_dict_or_none(raw_status.get("pending_rebind"))

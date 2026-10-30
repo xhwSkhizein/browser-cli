@@ -7,6 +7,7 @@ import contextlib
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any
 
@@ -99,7 +100,9 @@ class BrowserService:
         self._command_depth = 0
         self._pending_driver: str | None = None
         self._pending_reason: str | None = None
-        self._last_runtime_meta: dict[str, Any] = {}
+        self._runtime_meta: ContextVar[dict[str, Any] | None] = ContextVar(
+            "browser_cli_runtime_meta", default=None
+        )
         self._last_transition: dict[str, Any] | None = None
         self._stability = _StabilityMetrics()
         self._page_counter = 0
@@ -119,6 +122,8 @@ class BrowserService:
         await self._extension_hub.ensure_started()
 
     async def begin_command(self, action: str) -> None:
+        """Begin one command with task-local diagnostics, without rebinding during cleanup."""
+        self._runtime_meta.set({})
         cleanup = action in {"close", "close-tab"}
         if cleanup:
             if self._driver is None:
@@ -143,11 +148,13 @@ class BrowserService:
         if not cleanup:
             await self._maybe_apply_pending_rebind()
         self._command_depth += 1
-        self._last_runtime_meta = {"driver": self.active_driver_name, "command": action}
+        meta = self._runtime_meta.get() or {}
+        meta.update({"driver": self.active_driver_name, "command": action})
+        self._runtime_meta.set(meta)
         if preflight is not None:
-            self._last_runtime_meta["preflight"] = preflight
+            meta["preflight"] = preflight
             if preflight.get("ok"):
-                self._last_runtime_meta.update(
+                meta.update(
                     {
                         "driver_changed_from": "extension",
                         "driver_changed_to": "extension",
@@ -157,16 +164,19 @@ class BrowserService:
                 )
 
     async def end_command(self, *, allow_rebind: bool = True) -> dict[str, Any]:
+        """Return this task's diagnostics and apply an allowed rebind only at idle."""
+        meta = dict(self._runtime_meta.get() or {})
         self._command_depth = max(0, self._command_depth - 1)
         if self._command_depth == 0:
             self._stability.active_command = None
             if allow_rebind:
                 await self._maybe_apply_pending_rebind()
-        meta = dict(self._last_runtime_meta)
-        self._last_runtime_meta = {}
+        meta.update(self._runtime_meta.get() or {})
+        self._runtime_meta.set(None)
         return meta
 
     async def _maybe_preflight_workspace_binding(self) -> dict[str, Any] | None:
+        """Repair a lost binding only when no browser command or tab claim is active."""
         try:
             if self._driver_name != "extension" or self._command_depth != 0:
                 return None
@@ -282,6 +292,7 @@ class BrowserService:
         return shutdown
 
     async def runtime_status(self, *, warmup: bool = False) -> dict[str, Any]:
+        """Collect shared runtime facts with a bounded live extension probe."""
         if warmup:
             await self.ensure_started()
         extension_health = await self._extension.health()
@@ -387,6 +398,7 @@ class BrowserService:
         }
 
     async def _tab_runtime_status(self) -> dict[str, Any]:
+        """Snapshot agent ownership and all outstanding page or cleanup claims."""
         records, active_by_agent = await self._tabs.snapshot_state()
         return {
             "count": len(records),
@@ -399,6 +411,7 @@ class BrowserService:
 
     @staticmethod
     def _serialize_tab_record(record: TabRecord) -> dict[str, Any]:
+        """Expose tab diagnostics without sharing the registry's mutable records."""
         return {
             "page_id": record.page_id,
             "owner_agent_id": record.owner_agent_id,
@@ -519,6 +532,7 @@ class BrowserService:
         return any(pattern in message for pattern in self._READ_EXTENSION_FALLBACK_PATTERNS)
 
     async def close_tab(self, page_id: str) -> dict[str, Any]:
+        """Ask the active backend to close a page before discarding its snapshots."""
         result = await self._active_driver().close_tab(page_id)
         self._snapshot_registry.clear_page(page_id)
         return result
@@ -1080,10 +1094,11 @@ class BrowserService:
                         await self._driver.switch_tab(page_id)
                     except Exception:
                         pass
-            self._last_runtime_meta = {
+            meta = {
                 "driver": self._driver_name,
                 "driver_reason": reason,
             }
+            self._runtime_meta.set(meta)
             if old_driver_name and old_driver_name != driver_name:
                 self._stability.driver_switches += 1
                 self._last_transition = {
@@ -1092,7 +1107,7 @@ class BrowserService:
                     "driver_reason": reason,
                     "state_reset": state_reset,
                 }
-                self._last_runtime_meta.update(self._last_transition)
+                meta.update(self._last_transition)
             logger.info(
                 "Driver rebound active=%s restored_tabs=%d state_reset=%s",
                 self._driver_name,

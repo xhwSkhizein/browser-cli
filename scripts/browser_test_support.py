@@ -14,6 +14,7 @@ from browser_cli.profiles.discovery import discover_chrome_executable
 # Use the selected installation's public, read-only CLI. Its internal Node
 # registry module layout differs between Playwright releases.
 def _headless_shell_locations(output: str) -> list[Path]:
+    """Read only headless-shell installation paths from Playwright CLI output."""
     locations = []
     shell_section = False
     for line in re.sub(r"\x1b\[[0-9;]*m", "", output).splitlines():
@@ -31,6 +32,7 @@ def resolve_browser_test_executable(
     python: Path | None = None,
     env: dict[str, str] | None = None,
 ) -> Path:
+    """Select the pinned shell on macOS and stable Chrome on other platforms."""
     if (platform or sys.platform) != "darwin":
         return discover_chrome_executable(platform=platform)
 

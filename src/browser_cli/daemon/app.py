@@ -124,6 +124,7 @@ class BrowserDaemonApp:
         return self._state
 
     async def execute(self, request: DaemonRequest) -> DaemonResponse:
+        """Coordinate browser work while keeping status and owned cleanup observable."""
         # Status remains observable during long batches. Browser actions retain
         # TabRegistry's immediate busy-tab errors instead of queuing per agent.
         observable = request.action in {"run-status", "run-logs", "run-cancel", "run-start-read"}
@@ -143,6 +144,7 @@ class BrowserDaemonApp:
             return await self._execute(request)
 
     async def _execute(self, request: DaemonRequest) -> DaemonResponse:
+        """Dispatch one request and attach its provenance to success or failure."""
         agent_id = request.agent_id or DEFAULT_PUBLIC_AGENT_ID
         request.agent_id = agent_id
         handler = self._handlers.get(request.action)
@@ -236,6 +238,7 @@ class BrowserDaemonApp:
         request: DaemonRequest,
         runtime_meta: dict[str, Any] | None = None,
     ) -> DaemonResponse:
+        """Keep request identity and execution diagnostics in the failure envelope."""
         meta = {
             "action": request.action,
             "agent_id": request.agent_id,
@@ -443,6 +446,7 @@ class BrowserDaemonApp:
         return {"page": page}
 
     async def _handle_tabs(self, request: DaemonRequest) -> dict[str, Any]:
+        """List only this agent's pages, including ordinary and closing claims."""
         tabs = await self._state.tabs.list_tabs(request.agent_id)
         current_active: str | None = None
         try:
@@ -474,6 +478,7 @@ class BrowserDaemonApp:
         return {"tabs": results}
 
     async def _handle_switch_tab(self, request: DaemonRequest) -> dict[str, Any]:
+        """Switch an owned page while retaining its claim through summary capture."""
         page_id = self._require_str(request.args, "page_id")
         claimed = await self._state.tabs.claim_page(
             agent_id=request.agent_id,
@@ -492,6 +497,7 @@ class BrowserDaemonApp:
             )
 
     async def _handle_close_tab(self, request: DaemonRequest) -> dict[str, Any]:
+        """Confirm owned-page destruction before canceling its waiting operation."""
         page_id = str(request.args.get("page_id") or "").strip()
         if not page_id:
             page_id = await self._state.tabs.current_active_page_id(request.agent_id)
@@ -1098,6 +1104,7 @@ class BrowserDaemonApp:
         request: DaemonRequest,
         operation: Callable[[str], Awaitable[dict[str, Any]]],
     ) -> dict[str, Any]:
+        """Run under an owner claim and reject results superseded by page cleanup."""
         async with self._state.tabs.claim_active_tab(
             agent_id=request.agent_id,
             request_id=request.request_id,

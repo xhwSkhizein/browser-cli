@@ -91,6 +91,7 @@ class BrowserDaemonServer:
     async def _handle_client(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
+        """Answer one request and close its connection even when interrupted."""
         request = None
         try:
             try:

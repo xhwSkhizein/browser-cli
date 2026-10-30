@@ -27,6 +27,7 @@ class ActionSpec:
 
 
 def get_action_specs() -> list[ActionSpec]:
+    """Describe daemon actions, their CLI arguments, and request builders."""
     return [
         ActionSpec(
             "batch",
@@ -658,6 +659,7 @@ def _add_mouse_button_arguments(parser: ArgumentParser) -> None:
 
 
 def _add_eval_arguments(parser: ArgumentParser) -> None:
+    """Require one JavaScript source: an inline function, UTF-8 file, or stdin."""
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument(
         "code", nargs="?", help='Arrow function JavaScript like "() => document.title".'
@@ -668,11 +670,13 @@ def _add_eval_arguments(parser: ArgumentParser) -> None:
 
 
 def _add_eval_on_arguments(parser: ArgumentParser) -> None:
+    """Combine a semantic element ref with the shared JavaScript input options."""
     parser.add_argument("ref", help="Element ref from the latest snapshot.")
     _add_eval_arguments(parser)
 
 
 def _eval_request(args: Namespace) -> dict[str, Any]:
+    """Read and validate JavaScript before sending any browser request."""
     code = args.code
     if args.code_file is not None:
         try:
@@ -890,6 +894,7 @@ def _add_resize_arguments(parser: ArgumentParser) -> None:
 
 
 def _default_request(args: Namespace) -> dict[str, Any]:
+    """Copy daemon arguments while keeping CLI rendering options on the caller."""
     ignore = {
         "command",
         "handler",

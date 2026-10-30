@@ -132,6 +132,7 @@ class ExtensionSession:
     async def send_request(
         self, action: str, payload: dict[str, Any] | None = None
     ) -> dict[str, Any]:
+        """Wait for one response and bounded artifacts, cleaning request state on exit."""
         if not self.available:
             raise OperationFailedError("Browser CLI extension session is not connected.")
         request = ExtensionRequest(
@@ -241,6 +242,7 @@ class ExtensionSession:
         self._artifact_events.clear()
 
     def begin_artifact(self, descriptor: ExtensionArtifactBegin) -> None:
+        """Buffer artifacts only for live requests, ignoring late transmissions."""
         if descriptor.request_id not in self._pending:
             return
         key = (descriptor.request_id, descriptor.artifact_id)

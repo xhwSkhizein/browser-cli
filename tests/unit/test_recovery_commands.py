@@ -4,13 +4,14 @@ import json
 from argparse import Namespace
 from unittest.mock import patch
 
+import pytest
+
 from browser_cli.cli.main import main
 from browser_cli.commands.recovery import (
-    _next_action_for_error,
     run_recover_command,
     run_workspace_command,
 )
-from browser_cli.errors import ExtensionPortInUseError, WorkspaceBindingLostError
+from browser_cli.errors import OperationFailedError
 
 
 def test_recover_reports_extension_fault_without_restarting_healthy_daemon(capsys) -> None:
@@ -28,7 +29,10 @@ def test_recover_reports_extension_fault_without_restarting_healthy_daemon(capsy
         assert captured.err == ""
     assert payload["ok"] is False
     assert payload["error_code"] == "EXTENSION_RUNTIME_UNHEALTHY"
-    assert "extension" in payload["next_action"]
+    assert (
+        payload["next_action"]
+        == "reload the Browser CLI extension, then run browser-cli doctor --json"
+    )
     send_command.assert_not_called()
 
 
@@ -127,12 +131,21 @@ def test_workspace_rebuild_json_failure_returns_structured_error(capsys) -> None
     }
 
 
-def test_recovery_next_action_covers_binding_and_port_errors() -> None:
-    assert (
-        _next_action_for_error(WorkspaceBindingLostError("lost"))
-        == "run browser-cli workspace rebuild --json"
-    )
-    assert (
-        _next_action_for_error(ExtensionPortInUseError("busy"))
-        == "set BROWSER_CLI_EXTENSION_PORT to a free port or stop the process using it"
-    )
+@pytest.mark.parametrize(
+    ("arguments", "operation"),
+    [
+        (["recover", "--json"], "_recover"),
+        (["workspace", "rebuild", "--json"], "_run_workspace_rebuild_json"),
+    ],
+)
+def test_recovery_error_without_hint_omits_next_action(arguments, operation, capsys) -> None:
+    with patch(
+        f"browser_cli.commands.recovery.{operation}",
+        side_effect=OperationFailedError("fixture recovery failure"),
+    ):
+        assert main(arguments) == 75
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert captured.err == ""
+    assert payload["error_code"] == "OPERATION_FAILED"
+    assert "next_action" not in payload

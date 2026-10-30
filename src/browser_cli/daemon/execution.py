@@ -19,6 +19,7 @@ class BrowserExecutionCoordinator:
     async def scope(
         self, *, mode: Literal["shared", "batch", "exclusive", "cleanup"] = "shared"
     ) -> AsyncIterator[None]:
+        """Preserve independent actions and allow cleanup through ordinary batches."""
         # Shared work remains concurrent; TabRegistry owns immediate busy errors.
         # Waiting batches take priority over newly arriving browser actions.
         exclusive = mode in {"batch", "exclusive"}

@@ -315,3 +315,38 @@ def test_cleanup_never_starts_rebuilds_or_rebinds_browser(monkeypatch, tmp_path)
         assert service._command_depth == 0
 
     asyncio.run(scenario())
+
+
+def test_cleanup_cannot_replace_the_running_commands_runtime_metadata(monkeypatch, tmp_path):
+    monkeypatch.setenv("BROWSER_CLI_HOME", str(tmp_path / "runtime"))
+
+    async def scenario():
+        service = BrowserService(TabRegistry())
+        service._driver = object()
+        service._driver_name = "playwright"
+        service.ensure_started = AsyncMock()
+        service._maybe_preflight_workspace_binding = AsyncMock(return_value=None)
+        service._maybe_apply_pending_rebind = AsyncMock()
+        entered, resume = asyncio.Event(), asyncio.Event()
+
+        async def evaluating():
+            await service.begin_command("eval")
+            entered.set()
+            await resume.wait()
+            return await service.end_command()
+
+        running = asyncio.create_task(evaluating())
+        try:
+            await entered.wait()
+            await service.begin_command("close-tab")
+            cleanup_meta = await service.end_command(allow_rebind=False)
+            resume.set()
+            action_meta = await running
+            assert cleanup_meta == {"driver": "playwright", "command": "close-tab"}
+            assert action_meta == {"driver": "playwright", "command": "eval"}
+            assert service._command_depth == 0
+        finally:
+            resume.set()
+            await drain(running)
+
+    asyncio.run(scenario())
