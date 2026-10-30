@@ -91,24 +91,41 @@ class BrowserDaemonServer:
     async def _handle_client(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
+        request = None
         try:
-            raw = await reader.readline()
-            if not raw:
-                return
-            payload = json.loads(raw.decode("utf-8"))
-            request = DaemonRequest.from_dict(payload)
-            response = await self._app.execute(request)
-        except Exception as exc:  # pragma: no cover
-            response = DaemonResponse.failure(
-                error_code="DAEMON_PROTOCOL_ERROR",
-                error_message=str(exc),
-            )
-        try:
-            writer.write((json.dumps(response.to_dict()) + "\n").encode("utf-8"))
-            await writer.drain()
-        except (ConnectionError, OSError):
-            # A client timeout/disconnect does not cancel or replay browser work.
-            logger.debug("Client disconnected before the daemon response was delivered")
+            try:
+                raw = await reader.readline()
+                if not raw:
+                    return
+                payload = json.loads(raw.decode("utf-8"))
+                request = DaemonRequest.from_dict(payload)
+                response = await self._app.execute(request)
+            except asyncio.CancelledError:
+                response = DaemonResponse.failure(
+                    error_code="OPERATION_CANCELLED",
+                    error_message="The daemon request was interrupted. Earlier browser effects may have completed.",
+                    execution_state="unknown",
+                    meta={
+                        "action": request.action,
+                        "agent_id": request.agent_id,
+                        "request_id": request.request_id,
+                    }
+                    if request
+                    else {},
+                )
+            except Exception as exc:  # pragma: no cover
+                response = DaemonResponse.failure(
+                    error_code="DAEMON_PROTOCOL_ERROR",
+                    error_message=str(exc),
+                    execution_state="not_started" if request is None else "unknown",
+                )
+            try:
+                writer.write((json.dumps(response.to_dict()) + "\n").encode("utf-8"))
+                await writer.drain()
+            except (ConnectionError, OSError):
+                # Disconnect is not remote cancellation. An owned-page close can
+                # interrupt this task only after the browser confirms destruction.
+                logger.debug("Client disconnected before the daemon response was delivered")
         finally:
             writer.close()
             with contextlib.suppress(Exception):

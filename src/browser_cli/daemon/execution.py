@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import Literal
 
 
 class BrowserExecutionCoordinator:
@@ -12,24 +13,31 @@ class BrowserExecutionCoordinator:
         self._condition = asyncio.Condition()
         self._active = 0
         self._exclusive_waiters = 0
-        self._exclusive_running = False
+        self._exclusive_mode: str | None = None
 
     @asynccontextmanager
-    async def scope(self, *, exclusive: bool = False) -> AsyncIterator[None]:
+    async def scope(
+        self, *, mode: Literal["shared", "batch", "exclusive", "cleanup"] = "shared"
+    ) -> AsyncIterator[None]:
         # Shared work remains concurrent; TabRegistry owns immediate busy errors.
         # Waiting batches take priority over newly arriving browser actions.
+        exclusive = mode in {"batch", "exclusive"}
         async with self._condition:
             if exclusive:
                 self._exclusive_waiters += 1
                 try:
                     await self._condition.wait_for(lambda: self._active == 0)
-                    self._exclusive_running = True
+                    self._exclusive_mode = mode
                 finally:
                     self._exclusive_waiters -= 1
                     self._condition.notify_all()
+            elif mode == "cleanup":
+                # Closing an owned page may interrupt a batch or a shared action,
+                # but must not race a global stop or workspace rebuild.
+                await self._condition.wait_for(lambda: self._exclusive_mode in {None, "batch"})
             else:
                 await self._condition.wait_for(
-                    lambda: not self._exclusive_running and not self._exclusive_waiters
+                    lambda: self._exclusive_mode is None and not self._exclusive_waiters
                 )
             self._active += 1
         try:
@@ -38,5 +46,5 @@ class BrowserExecutionCoordinator:
             async with self._condition:
                 self._active -= 1
                 if exclusive:
-                    self._exclusive_running = False
+                    self._exclusive_mode = None
                 self._condition.notify_all()

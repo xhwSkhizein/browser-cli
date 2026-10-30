@@ -6,6 +6,7 @@ import asyncio
 import json
 import shutil
 import socket
+from contextlib import suppress
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -90,6 +91,86 @@ async def command(runtime, action, **args):
     response = await runtime.app.execute(DaemonRequest(action, args, "capture-test", "request"))
     assert response.ok, response.to_dict()
     return response.data
+
+
+@pytest.mark.parametrize("disconnect", [False, True])
+def test_owned_close_interrupts_real_fetch_after_client_disconnect(runtime, disconnect):
+    async def scenario():
+        owner = await command(runtime, "open", url=runtime.url + "/static")
+        page_id = owner["page"]["page_id"]
+        page = runtime.low._require_page(page_id)
+        peer = await runtime.app.execute(
+            DaemonRequest("open", {"url": runtime.url + "/static"}, "cancel-peer", "peer-open")
+        )
+        assert peer.ok
+        peer_id = peer.data["page"]["page_id"]
+        peer_page = runtime.low._require_page(peer_id)
+        started, release, route_done = asyncio.Event(), asyncio.Event(), asyncio.Event()
+
+        async def delayed(route):
+            started.set()
+            try:
+                await release.wait()
+                with suppress(Exception):
+                    await route.fulfill(
+                        status=200, content_type="application/json", body='{"fixture":true}'
+                    )
+            finally:
+                route_done.set()
+
+        await page.route("**/cancel-wait", delayed)
+        reader, writer = await asyncio.open_unix_connection(str(runtime.socket))
+        writer.write(
+            (
+                json.dumps(
+                    {
+                        "action": "eval",
+                        "args": {"code": "async () => (await fetch('/cancel-wait')).json()"},
+                        "agent_id": "capture-test",
+                        "request_id": "fetch-to-cancel",
+                        "runtime_version": DAEMON_RUNTIME_VERSION,
+                    }
+                )
+                + "\n"
+            ).encode()
+        )
+        await writer.drain()
+        try:
+            await asyncio.wait_for(started.wait(), 5)
+            if disconnect:
+                writer.close()
+                await writer.wait_closed()
+            closed = await asyncio.wait_for(command(runtime, "close-tab", page_id=page_id), 1)
+            assert closed["closed"] is True
+            assert closed["interruption"]["page_closed"] is True
+            assert closed["interruption"]["execution_state"] == "unknown"
+            assert page.is_closed()
+            assert not peer_page.is_closed()
+            assert page_id not in [
+                record.page_id for record in await runtime.app.state.tabs.list_tabs("capture-test")
+            ]
+            alive = await runtime.app.execute(
+                DaemonRequest("eval", {"code": "() => 42"}, "cancel-peer", "peer-eval")
+            )
+            assert alive.ok and alive.data["result"] == 42
+            if not disconnect:
+                interrupted = json.loads(await asyncio.wait_for(reader.readline(), 1))
+                assert interrupted["ok"] is False
+                assert interrupted["execution_state"] == "unknown"
+        finally:
+            release.set()
+            if started.is_set():
+                await asyncio.wait_for(route_done.wait(), 1)
+            writer.close()
+            await writer.wait_closed()
+            for actor, owned in [("capture-test", page_id), ("cancel-peer", peer_id)]:
+                if await runtime.app.state.tabs.is_visible(actor, owned):
+                    result = await runtime.app.execute(
+                        DaemonRequest("close-tab", {"page_id": owned}, actor, "cleanup-owned")
+                    )
+                    assert result.ok, result.to_dict()
+
+    runtime.loop.run_until_complete(scenario())
 
 
 def test_real_screenshot_dimensions_ranges_dpr_and_restoration(runtime):

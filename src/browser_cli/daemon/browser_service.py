@@ -119,11 +119,19 @@ class BrowserService:
         await self._extension_hub.ensure_started()
 
     async def begin_command(self, action: str) -> None:
-        await self.ensure_started()
-        preflight = await self._maybe_preflight_workspace_binding()
+        cleanup = action in {"close", "close-tab"}
+        if cleanup:
+            if self._driver is None:
+                raise OperationFailedError(
+                    "No running browser backend can confirm owned-page closure."
+                )
+            preflight = None
+        else:
+            await self.ensure_started()
+            preflight = await self._maybe_preflight_workspace_binding()
         self._stability.commands_started += 1
         self._stability.active_command = action
-        if self._driver_name == "extension":
+        if not cleanup and self._driver_name == "extension":
             session = self._extension_hub.session
             if session is None or not session.hello.has_required_capabilities():
                 self._stability.extension_disconnects += 1
@@ -132,7 +140,8 @@ class BrowserService:
                     action,
                 )
                 await self._activate_driver("playwright", reason="extension-disconnected-command")
-        await self._maybe_apply_pending_rebind()
+        if not cleanup:
+            await self._maybe_apply_pending_rebind()
         self._command_depth += 1
         self._last_runtime_meta = {"driver": self.active_driver_name, "command": action}
         if preflight is not None:
@@ -147,11 +156,12 @@ class BrowserService:
                     }
                 )
 
-    async def end_command(self) -> dict[str, Any]:
+    async def end_command(self, *, allow_rebind: bool = True) -> dict[str, Any]:
         self._command_depth = max(0, self._command_depth - 1)
         if self._command_depth == 0:
             self._stability.active_command = None
-            await self._maybe_apply_pending_rebind()
+            if allow_rebind:
+                await self._maybe_apply_pending_rebind()
         meta = dict(self._last_runtime_meta)
         self._last_runtime_meta = {}
         return meta
@@ -380,7 +390,9 @@ class BrowserService:
         records, active_by_agent = await self._tabs.snapshot_state()
         return {
             "count": len(records),
-            "busy_count": sum(1 for record in records if record.busy is not None),
+            "busy_count": sum(
+                1 for record in records if record.busy is not None or record.closing is not None
+            ),
             "active_by_agent": active_by_agent,
             "records": [self._serialize_tab_record(record) for record in records],
         }
@@ -392,7 +404,7 @@ class BrowserService:
             "owner_agent_id": record.owner_agent_id,
             "url": record.url,
             "title": record.title,
-            "busy": record.busy is not None,
+            "busy": record.busy is not None or record.closing is not None,
             "last_snapshot_id": record.last_snapshot_id,
         }
 
@@ -507,8 +519,9 @@ class BrowserService:
         return any(pattern in message for pattern in self._READ_EXTENSION_FALLBACK_PATTERNS)
 
     async def close_tab(self, page_id: str) -> dict[str, Any]:
+        result = await self._active_driver().close_tab(page_id)
         self._snapshot_registry.clear_page(page_id)
-        return await self._active_driver().close_tab(page_id)
+        return result
 
     async def get_page_summary(self, page_id: str) -> dict[str, Any]:
         return await self._active_driver().get_page_summary(page_id)

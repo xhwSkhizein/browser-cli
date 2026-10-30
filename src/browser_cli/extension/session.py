@@ -142,27 +142,31 @@ class ExtensionSession:
         future: asyncio.Future[ExtensionResponse] = asyncio.get_running_loop().create_future()
         event = asyncio.Event()
         event.set()
-        async with self._lock:
-            self._pending[request.id] = future
-            self._artifact_events[request.id] = event
-            await self.websocket.send(json.dumps(request.to_message()))
         try:
+            async with self._lock:
+                self._pending[request.id] = future
+                self._artifact_events[request.id] = event
+                await self.websocket.send(json.dumps(request.to_message()))
             response = await asyncio.wait_for(future, timeout=30.0)
             await asyncio.wait_for(event.wait(), timeout=30.0)
+            if not response.ok:
+                raise OperationFailedError(
+                    response.error_message or f"Extension request failed: {action}",
+                    error_code=response.error_code or "EXTENSION_REQUEST_FAILED",
+                )
+            data = dict(response.data)
+            artifacts = self._completed_artifacts.pop(request.id, [])
+            if artifacts:
+                data["_artifacts"] = artifacts
+            return data
         finally:
             self._pending.pop(request.id, None)
             self._artifact_events.pop(request.id, None)
             self._response_buffers.pop(request.id, None)
-        if not response.ok:
-            raise OperationFailedError(
-                response.error_message or f"Extension request failed: {action}",
-                error_code=response.error_code or "EXTENSION_REQUEST_FAILED",
-            )
-        data = dict(response.data)
-        artifacts = self._completed_artifacts.pop(request.id, [])
-        if artifacts:
-            data["_artifacts"] = artifacts
-        return data
+            self._completed_artifacts.pop(request.id, None)
+            for key in list(self._artifact_buffers):
+                if key[0] == request.id:
+                    self._artifact_buffers.pop(key, None)
 
     def resolve_response(self, response: ExtensionResponse) -> None:
         future = self._pending.get(response.id)
@@ -237,6 +241,8 @@ class ExtensionSession:
         self._artifact_events.clear()
 
     def begin_artifact(self, descriptor: ExtensionArtifactBegin) -> None:
+        if descriptor.request_id not in self._pending:
+            return
         key = (descriptor.request_id, descriptor.artifact_id)
         self._artifact_buffers[key] = _ArtifactBuffer(descriptor=descriptor)
         event = self._artifact_events.get(descriptor.request_id)

@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { BrowserCliClient, BrowserCliError, writeJsonArtifact } from '../browser-cli-client.mjs';
 
-const runtimeVersion = '2026-10-22-capture-context-batch-v2';
+const runtimeVersion = '2026-10-30-owned-page-cancel-v3';
 
 async function daemon(t, handle, clientOptions = {}) {
   const { daemonRuntimeVersion = () => runtimeVersion, rejectRuntime = false, ...options } = clientOptions;

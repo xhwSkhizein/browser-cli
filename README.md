@@ -233,6 +233,14 @@ return JSON by default and also accept `--json`. `--help` remains text. Busy
 errors report `execution_state: "not_started"` and the blocking request; a
 timeout or disconnect leaves execution uncertain and must not trigger replay.
 
+To interrupt an operation after caller cancellation, use `close-tab PAGE_ID`
+(or `close` for the active page) with the same `X_AGENT_ID`. These cleanup controls
+can run during a batch and close only that identity's owned page. They confirm
+browser closure before canceling the daemon wait. Failed closure retains the
+busy claim; successful closure reports the interrupted request separately and
+does not roll back earlier effects. Client disconnect alone leaves execution
+uncertain. Late results and artifact chunks from an interrupted request are discarded.
+
 For batch, top-level `ok` describes request handling; `data.success` describes
 step success. Failed steps produce CLI exit code 75, including with
 `--continue-on-error`. `batch --output` saves partial results and returns

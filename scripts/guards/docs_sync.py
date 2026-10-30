@@ -7,6 +7,7 @@ from pathlib import Path
 from scripts.guards.common import Finding, discover_top_level_packages, read_section
 
 REQUIRED_AGENT_PHRASES = [
+    "`close` and `close-tab` are owner-scoped cancellation controls",
     "All CLI errors, including argument errors, return `ok/data/meta` JSON on stdout",
     "Batch step failures exit 75 in the CLI",
     "One-off browser tasks do not require task metadata or publication.",
