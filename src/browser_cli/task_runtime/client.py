@@ -31,6 +31,7 @@ class BrowserCliTaskClient:
         stop_on_error: bool = True,
         result_mode: str = "all",
     ) -> dict[str, Any]:
+        """Run ordered actions, raising with partial results if any step fails."""
         response = send_command(
             "batch",
             {

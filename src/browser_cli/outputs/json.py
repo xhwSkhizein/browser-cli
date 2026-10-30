@@ -26,6 +26,7 @@ def render_json_error(
     agent_id: str | None = None,
     next_action: str | None = None,
 ) -> str:
+    """Render a typed error with provenance and only an available recovery hint."""
     payload: dict[str, Any] = {
         **exc.payload,
         "ok": False,

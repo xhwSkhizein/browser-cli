@@ -134,6 +134,7 @@ class BrowserDaemonApp:
             return await self._execute(request)
 
     async def _execute(self, request: DaemonRequest) -> DaemonResponse:
+        """Dispatch one request and attach its provenance to success or failure."""
         agent_id = request.agent_id or DEFAULT_PUBLIC_AGENT_ID
         request.agent_id = agent_id
         handler = self._handlers.get(request.action)
@@ -220,6 +221,7 @@ class BrowserDaemonApp:
         request: DaemonRequest,
         runtime_meta: dict[str, Any] | None = None,
     ) -> DaemonResponse:
+        """Keep request identity and execution diagnostics in the failure envelope."""
         meta = {
             "action": request.action,
             "agent_id": request.agent_id,

@@ -5,11 +5,9 @@ from __future__ import annotations
 from argparse import Namespace
 from typing import Any
 
-from browser_cli import error_codes
 from browser_cli.commands.status import collect_status_report, status_report_to_json_data
 from browser_cli.daemon.client import ensure_daemon_running, send_command, wait_for_daemon_stop
 from browser_cli.errors import (
-    BrowserCliError,
     ExtensionCapabilityIncompleteError,
     ExtensionUnavailableError,
     InvalidInputError,
@@ -18,25 +16,19 @@ from browser_cli.outputs.json import render_json_payload
 
 
 def run_workspace_command(args: Namespace) -> str:
+    """Rebuild the extension workspace; let the CLI render errors and hints."""
     if args.workspace_subcommand != "rebuild":
         raise InvalidInputError(f"Unsupported workspace subcommand: {args.workspace_subcommand}")
     if not getattr(args, "json", False):
         raise InvalidInputError("workspace rebuild currently requires --json")
-    try:
-        return _run_workspace_rebuild_json()
-    except BrowserCliError as exc:
-        exc.payload["next_action"] = _next_action_for_error(exc)
-        raise
+    return _run_workspace_rebuild_json()
 
 
 def run_recover_command(args: Namespace) -> str:
+    """Report runtime recovery with the shared CLI error contract."""
     if not getattr(args, "json", False):
         raise InvalidInputError("recover currently requires --json")
-    try:
-        return render_json_payload({"ok": True, "data": _recover(), "meta": {"action": "recover"}})
-    except BrowserCliError as exc:
-        exc.payload["next_action"] = _next_action_for_error(exc)
-        raise
+    return render_json_payload({"ok": True, "data": _recover(), "meta": {"action": "recover"}})
 
 
 def collect_stable_status_data() -> dict[str, Any]:
@@ -100,15 +92,3 @@ def _result_payload(
         "after_status": after,
         "recovered": after.get("recovery", {}).get("recommended_action") == "none",
     }
-
-
-def _next_action_for_error(exc: BrowserCliError) -> str | None:
-    if exc.error_code == error_codes.WORKSPACE_BINDING_LOST:
-        return "run browser-cli workspace rebuild --json"
-    if exc.error_code == error_codes.EXTENSION_UNAVAILABLE:
-        return "connect or reload the Browser CLI extension"
-    if exc.error_code == error_codes.EXTENSION_CAPABILITY_INCOMPLETE:
-        return "reload the Browser CLI extension and run browser-cli recover --json"
-    if exc.error_code == error_codes.EXTENSION_PORT_IN_USE:
-        return "set BROWSER_CLI_EXTENSION_PORT to a free port or stop the process using it"
-    return None

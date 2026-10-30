@@ -157,6 +157,7 @@ class Flow:
         return output_path
 
     def write_json_artifact(self, relative_path: str, payload: Any) -> Path:
+        """Atomically save complete task JSON and return its resolved path."""
         output_path = (self.artifacts_dir / relative_path).resolve()
         write_json_artifact(output_path, payload)
         return output_path
