@@ -562,7 +562,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
   if (message?.type === 'reload-extension') {
-    void buildStatusSnapshot().then(async snapshot => {
+    // Status is optional. Read it before arming the reload so the popup's
+    // response can be sent before the extension restarts.
+    void buildStatusSnapshot().catch(() => ({})).then(async snapshot => {
       const accepted = await runtimeRecovery.recover({force: true});
       sendResponse({...snapshot, lastError: accepted
         ? 'Reloading the extension. Refresh status after it reconnects.'

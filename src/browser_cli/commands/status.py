@@ -261,7 +261,8 @@ def status_report_to_json_data(report: StatusReport) -> dict[str, Any]:
             },
             "extension": {
                 "status": "fail"
-                if report.backend.get("extension_runtime_health", {}).get("status") == "fail"
+                if report.backend["extension_connected"]
+                and report.backend.get("extension_runtime_health", {}).get("status") == "fail"
                 else "pass"
                 if report.backend["extension_connected"]
                 and report.backend["extension_capability_complete"]

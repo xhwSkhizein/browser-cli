@@ -123,7 +123,12 @@ export function createWorkspaceHandlers(context) {
       const pageId = context.pageIdForTab(tab.id);
       const artifacts = await flushPendingVideoArtifactsForTab(context, meta.requestId, payload.tab_id);
       await chrome.tabs.remove(tab.id);
-      await context.untrackTab(tab.id);
+      await context.untrackTab(tab.id).catch(error => {
+        // Chrome confirmed destruction. Stale storage cannot restore a removed
+        // target, so persistence failure must not turn this into a failed close.
+        context.state.runtimeState = context.state.runtimeState || {};
+        context.state.runtimeState.lastError = `Page closed; workspace cleanup failed: ${String(error?.message || error)}`;
+      });
       return {
         url: tab.url || '',
         title: tab.title || '',
