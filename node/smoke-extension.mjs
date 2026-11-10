@@ -14,6 +14,7 @@ mkdirSync(root, {recursive:true});
 const connections = new Set();
 const server = createServer((req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader('Content-Security-Policy', "script-src 'self'; style-src 'unsafe-inline'; img-src 'self' data:");
   res.end('<!doctype html><html><head><style>body{margin:0;height:2400px;background:linear-gradient(#eee,#789)}h1{margin:0;padding:40px}#crop{position:absolute;left:10px;top:300px;width:123px;height:77px;background:rgb(255,0,0)}</style></head><body><h1>Browser CLI extension acceptance</h1><div id="crop"></div></body></html>');
 });
 server.on('connection', socket => { connections.add(socket); socket.on('close', () => connections.delete(socket)); });
@@ -36,6 +37,11 @@ let opened = false;
 try {
   await client.open(`http://127.0.0.1:${server.address().port}/`);
   opened = true;
+  const evaluated = await client.request('eval', {code:'async () => { window.acceptanceEffects = (window.acceptanceEffects || 0) + 1; return document.title || "CSP evaluation passed"; }'});
+  assert.equal(evaluated.data.result, 'CSP evaluation passed');
+  await assert.rejects(client.request('eval', {code:'() => { window.acceptanceEffects++; throw new Error("expected CSP page error"); }'}), /expected CSP page error/);
+  assert.equal((await client.request('eval', {code:'window.acceptanceEffects'})).data.result, 2, 'Failed evaluation must never be replayed.');
+  assert.ok((await client.snapshot({interactive:false})).tree.includes('Browser CLI extension acceptance'));
   const native = await client.request('screenshot', {path:resolve(root, 'native-temp.png'), viewport_width:640, viewport_height:480, device_scale_factor:2});
   assert.equal(native.meta.driver, 'extension');
   assert.deepEqual(native.data.screenshot_size, {width:1280, height:960});

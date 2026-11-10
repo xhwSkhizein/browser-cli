@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import {createContext, runInContext} from 'node:vm'
 
 function installChromeStub({
   urls,
@@ -36,6 +37,34 @@ async function loadDebuggerModule() {
   const cacheBust = `${Date.now()}-${Math.random()}`
   return await import(new URL(`../src/debugger.js?test=${cacheBust}`, import.meta.url))
 }
+
+test('page evaluation handles CSP, async functions and exceptions without replay', async t => {
+  const context = createContext({effects: 0});
+  const calls = [];
+  globalThis.chrome = {
+    tabs: {async get(id) { return {id, url: 'https://csp.test/'}; }},
+    debugger: {
+      async attach() {},
+      async sendCommand(_target, method, params) {
+        calls.push({method, params});
+        assert.equal(method, 'Runtime.evaluate');
+        assert.equal(params.allowUnsafeEvalBlockedByCSP, true);
+        assert.equal(params.awaitPromise, true);
+        assert.equal(params.returnByValue, true);
+        try { return {result: {value: await runInContext(params.expression, context)}}; }
+        catch (error) { return {exceptionDetails: {exception: {description: error.message}}}; }
+      },
+    },
+  };
+  t.after(() => { delete globalThis.chrome; });
+  const {evaluateExpression} = await loadDebuggerModule();
+  assert.equal(await evaluateExpression(16, 'async () => { effects++; return "quoted \\"value\\""; }'), 'quoted "value"');
+  await assert.rejects(evaluateExpression(16, '() => { effects++; throw new Error("page failed"); }'), /page failed/);
+  assert.equal(context.effects, 2);
+  assert.equal(calls.length, 2);
+  assert.equal(await evaluateExpression(16, 'undefined'), null);
+  assert.equal(await evaluateExpression(16, 'effects'), 2);
+});
 
 test('ensureAttached waits for an initially blank tab URL before attaching', async (t) => {
   const chromeStub = installChromeStub({ urls: ['', '', 'about:blank'] })
@@ -98,7 +127,7 @@ test('ensureAttached still rejects truly non-debuggable tabs', async (t) => {
   )
 })
 
-function captureChromeStub({ fail = false, dpr = 2, zoom = 1, images = ['aW1hZ2U='] } = {}) {
+function captureChromeStub({ fail = false, dpr = 2, zoom = 1, images = ['aW1hZ2U='], reflowBeyondViewport = false } = {}) {
   const native = { viewport_width: 1000, viewport_height: 700, page_width: 1000, page_height: 2400, scroll_x: 0, scroll_y: 300, device_scale_factor: dpr };
   let geometry = { ...native };
   const commands = [];
@@ -116,6 +145,7 @@ function captureChromeStub({ fail = false, dpr = 2, zoom = 1, images = ['aW1hZ2U
         if (method === 'Emulation.clearDeviceMetricsOverride') geometry = { ...native };
         if (method === 'Page.captureScreenshot') {
           if (fail) throw new Error('capture failed');
+          if (reflowBeyondViewport && params.captureBeyondViewport) geometry.page_height += 4;
           return { data: images[Math.min(imageIndex++, images.length - 1)] };
         }
         return { result: { value: true } };
@@ -135,6 +165,17 @@ test('full-page screenshot keeps viewport and scales image pixels only', async (
   assert.equal(stub.commands.some((c) => c.method.startsWith('Emulation.')), false);
   const command = stub.commands.find((c) => c.method === 'Page.captureScreenshot');
   assert.deepEqual(command.params.clip, { x: 0, y: 0, width: 1000, height: 2400, scale: 1.5 });
+  assert.equal(command.params.captureBeyondViewport, true);
+});
+
+test('viewport capture avoids virtualized-page reflow and still rejects real geometry changes', async t => {
+  const stub = captureChromeStub({reflowBeyondViewport:true});
+  t.after(() => { delete globalThis.chrome; });
+  const {captureScreenshot} = await loadDebuggerModule();
+  const {capture} = await captureScreenshot(46);
+  assert.deepEqual(capture.before, capture.after);
+  assert.equal(stub.commands.find(command => command.method === 'Page.captureScreenshot').params.captureBeyondViewport, false);
+  await assert.rejects(captureScreenshot(46, {fullPage:true}), /Page geometry changed during capture/);
 });
 
 test('temporary screenshot viewport restores an existing explicit viewport', async (t) => {

@@ -7,7 +7,7 @@ import {
   buildWsUrl,
 } from './protocol.js';
 import { locatorActionJs } from './page_runtime.js';
-import { disposeNetworkSession, registerDebuggerListeners } from './debugger.js';
+import { disposeNetworkSession, evaluateExpression as executeExpression, registerDebuggerListeners } from './debugger.js';
 import { createWorkspaceTabs } from './background/workspace_tabs.js';
 import { createArtifactHandlers } from './background/artifact_actions.js';
 import { createDialogHandlers } from './background/dialog_actions.js';
@@ -331,23 +331,6 @@ async function reconnectNow() {
     return;
   }
   await connect();
-}
-
-async function executeExpression(tabId, expression) {
-  const [result] = await chrome.scripting.executeScript({
-    target: { tabId },
-    world: 'MAIN',
-    func: async (code) => {
-      // eslint-disable-next-line no-eval
-      const evaluated = await eval(code);
-      if (typeof evaluated === 'function') {
-        return await evaluated();
-      }
-      return evaluated;
-    },
-    args: [expression],
-  });
-  return result ? result.result : null;
 }
 
 async function waitForLoad(tabId, timeoutSeconds = 30) {
