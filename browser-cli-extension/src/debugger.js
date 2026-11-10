@@ -3,6 +3,7 @@ import {ensureOffscreenDocument, sendOffscreenCommand} from './offscreen_client.
 const attached = new Set();
 const traceWaiters = new Map();
 const screencastConsumers = new Map();
+const screencastRenderLoops = new Map();
 const networkSessions = new Map();
 
 const DEFAULT_NETWORK_RECENT_LIMIT = 200;
@@ -215,6 +216,30 @@ export function disposeNetworkSession(tabId) {
   }
   session.waiters = [];
   networkSessions.delete(tabId);
+}
+
+// Only call when the owned tab is being discarded. Live interactive tabs keep
+// their network history, emulation, tracing and screencast state intact.
+export async function releaseTabDebugger(tabId) {
+  await stopScreencastRendering(tabId);
+  if (attached.has(tabId)) {
+    try {
+      await chrome.debugger.detach({ tabId });
+    } catch (error) {
+      // Closing a tab may already have detached Chrome before onRemoved runs.
+      const tab = await chrome.tabs.get(tabId).catch(() => null);
+      if (tab) throw error;
+    }
+    attached.delete(tabId);
+  }
+  viewportOverrides.delete(tabId);
+  screencastConsumers.delete(tabId);
+  disposeNetworkSession(tabId);
+  const trace = traceWaiters.get(tabId);
+  if (trace) {
+    trace.reject(new Error(`Tab ${tabId} was released while tracing.`));
+    traceWaiters.delete(tabId);
+  }
 }
 
 function ensureSession(tabId) {
@@ -825,8 +850,10 @@ export async function startScreencast(
     maxWidth = undefined,
     maxHeight = undefined,
     onFrame = null,
+    fps = 8,
   } = {},
 ) {
+  await stopScreencastRendering(tabId);
   await ensureAttached(tabId);
   screencastConsumers.set(tabId, onFrame);
   await sendCommand(tabId, 'Page.startScreencast', {
@@ -836,12 +863,50 @@ export async function startScreencast(
     maxWidth,
     maxHeight,
   });
+  startScreencastRendering(tabId, fps);
+}
+
+// Hidden tabs may not composite at all, so Page.startScreencast emits no
+// frames. A one-pixel surface capture requests a draw without changing focus,
+// viewport, scroll or the native screencast's size and encoding settings.
+function startScreencastRendering(tabId, fps) {
+  const loop = { stopped: false, timer: null, pending: null };
+  screencastRenderLoops.set(tabId, loop);
+  const interval = Math.max(40, Math.round(1000 / Math.max(1, Number(fps) || 8)));
+  const render = async () => {
+    const tab = await chrome.tabs.get(tabId);
+    if (loop.stopped || tab.active || !attached.has(tabId) || !screencastConsumers.has(tabId)) return;
+    // Never call sendCommand here: a late timer must not reattach a released tab.
+    await chrome.debugger.sendCommand({ tabId }, 'Page.captureScreenshot', {
+      format: 'jpeg', quality: 1, fromSurface: true,
+      clip: { x: 0, y: 0, width: 1, height: 1, scale: 1 },
+    });
+  };
+  const schedule = () => {
+    loop.timer = setTimeout(() => {
+      loop.pending = render().catch(() => {}).finally(() => {
+        loop.pending = null;
+        if (!loop.stopped) schedule();
+      });
+    }, interval);
+  };
+  schedule();
+}
+
+async function stopScreencastRendering(tabId) {
+  const loop = screencastRenderLoops.get(tabId);
+  if (!loop) return;
+  loop.stopped = true;
+  clearTimeout(loop.timer);
+  screencastRenderLoops.delete(tabId);
+  await loop.pending;
 }
 
 export async function stopScreencast(tabId) {
-  await ensureAttached(tabId);
+  await stopScreencastRendering(tabId);
+  if (!attached.has(tabId) || !screencastConsumers.has(tabId)) return;
   try {
-    await sendCommand(tabId, 'Page.stopScreencast');
+    await chrome.debugger.sendCommand({ tabId }, 'Page.stopScreencast');
   } finally {
     screencastConsumers.delete(tabId);
   }
@@ -873,6 +938,7 @@ export async function handleJavascriptDialog(tabId, { accept = true, promptText 
 
 export function registerDebuggerListeners() {
   chrome.tabs.onRemoved.addListener((tabId) => {
+    void stopScreencastRendering(tabId);
     attached.delete(tabId);
     viewportOverrides.delete(tabId);
     screencastConsumers.delete(tabId);
@@ -885,6 +951,7 @@ export function registerDebuggerListeners() {
   });
   chrome.debugger.onDetach.addListener((source) => {
     if (source.tabId) {
+      void stopScreencastRendering(source.tabId);
       attached.delete(source.tabId);
       viewportOverrides.delete(source.tabId);
       screencastConsumers.delete(source.tabId);
@@ -918,7 +985,9 @@ export function registerDebuggerListeners() {
       }))
         .catch(() => {})
         .finally(() => {
-          void sendCommand(source.tabId, 'Page.screencastFrameAck', {
+          // A late frame must not reattach the debugger after teardown.
+          if (!attached.has(source.tabId) || !screencastConsumers.has(source.tabId)) return;
+          void chrome.debugger.sendCommand({ tabId: source.tabId }, 'Page.screencastFrameAck', {
             sessionId: Number(params?.sessionId || 0),
           }).catch(() => {});
         });

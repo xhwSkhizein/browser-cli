@@ -118,6 +118,7 @@ export function createVideoHandlers(context) {
         height: payload.height ?? null,
       });
       await startScreencast(payload.tab_id, {
+        fps,
         format: 'jpeg',
         quality: 70,
         everyNthFrame: 1,

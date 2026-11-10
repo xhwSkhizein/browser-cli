@@ -13,7 +13,7 @@ test('startup and install events share a single connection attempt', async (t) =
       onStartup: {addListener: fn => startup.push(fn)}, onMessage: event},
     storage: {local: {get: () => config}},
     alarms: {create() {}, onAlarm: event},
-    tabs: {onRemoved: event}, windows: {onRemoved: event},
+    tabs: {onRemoved: event, onAttached: event}, windows: {onRemoved: event},
     debugger: {onEvent: event, onDetach: event},
   };
   const sockets = [];
@@ -54,7 +54,7 @@ test('unusable APIs reject an action before mutation and obsolete sockets cannot
     storage: {local: {get: async () => ({}), set: async () => {}}},
     alarms: {create: noop, onAlarm: event},
     tabs: {query: async () => [], get: noop, create: noop, update: noop, remove: noop,
-      onRemoved: event},
+      onRemoved: event, onAttached: event},
     windows: {get: noop, create: () => { mutations += 1; }, remove: noop, onRemoved: event},
     scripting: {executeScript: noop},
     debugger: {attach: noop, sendCommand: noop, onEvent: event, onDetach: event},
@@ -83,6 +83,7 @@ test('unusable APIs reject an action before mutation and obsolete sockets cannot
   await old.onmessage(request);
   assert.equal(old.sent.at(-1).error_code, 'EXTENSION_RUNTIME_UNHEALTHY');
   assert.equal(mutations, 0);
+  chrome.tabs.query = async () => [];
   await new Promise(resolve => messages[0]({type: 'reconnect-now'}, {}, resolve));
   const current = sockets.at(-1);
   assert.notEqual(current, old);
@@ -124,7 +125,7 @@ test('reload acknowledges before reloading even if offline status and browser AP
       ? {[key]: binding} : {}, set: async () => {}}},
     alarms: {create: noop, onAlarm: event},
     tabs: {query: async () => [{id: 5, windowId: 91}], get: noop, create: noop,
-      update: noop, remove: noop, onRemoved: event},
+      update: noop, remove: noop, onRemoved: event, onAttached: event},
     windows: {get: noop, create: noop, remove: noop, onRemoved: event},
     scripting: {executeScript: noop},
     debugger: {getTargets: async () => [{id: 'target-five', tabId: 5, type: 'page'}],
