@@ -9,13 +9,14 @@ import {runInNewContext} from 'node:vm';
 function setup(t) {
   const calls=[];
   const listeners={};
+  let tabGets=0, attaches=0;
   globalThis.chrome={runtime:{async getPlatformInfo(){return {os:'mac'}}},
-    tabs:{async get(id){return {id,url:'https://fixture.test/'}},onRemoved:{addListener(fn){listeners.removed=fn}}},
-    debugger:{async attach(){},async sendCommand(_target,method,params){calls.push({method,params});return {}},
+    tabs:{async get(id){tabGets++;return {id,url:'https://fixture.test/'}},onRemoved:{addListener(fn){listeners.removed=fn}}},
+    debugger:{async attach(){attaches++;},async sendCommand(_target,method,params){calls.push({method,params});return {}},
       onDetach:{addListener(fn){listeners.detached=fn}},onEvent:{addListener(){}}}};
   forgetInputState(700);
   t.after(()=>{forgetInputState(700);delete globalThis.chrome});
-  return {calls,listeners};
+  return {calls,listeners,counts:()=>({tabGets,attaches})};
 }
 test('background focus is temporary and cleanup preserves an input failure without replay',async t=>{
   const {calls}=setup(t);
@@ -106,4 +107,42 @@ test('ownership checks precede native input and zero scroll does not become 700 
   const window={scrollX:0,scrollY:0,scrollBy(x,y){delta=[x,y]}};
   runInNewContext(scrollPageJs(0,0),{window,document:{dispatchEvent(){}},WheelEvent:class{}});
   assert.deepEqual(delta,[0,0]);
+});
+
+test('one native command prepares its connection once, retaining focus cleanup and result',async t=>{
+  const {calls,counts}=setup(t);
+  const handlers=createInputHandlers({async getManagedTab(id){return await chrome.tabs.get(id)}});
+  const start=counts().tabGets;
+  assert.deepEqual(await handlers['mouse-click']({tab_id:700,x:20,y:30}),{x:20,y:30,button:'left',count:1});
+  assert.equal(counts().tabGets-start,2); // Ownership check plus one debugger preparation.
+  assert.deepEqual(calls.map(c=>c.method),['Emulation.setFocusEmulationEnabled',
+    'Input.dispatchMouseEvent','Input.dispatchMouseEvent','Input.dispatchMouseEvent','Emulation.setFocusEmulationEnabled']);
+  const next=counts().tabGets;
+  await handlers.press({tab_id:700,key:'Meta+A'});
+  assert.equal(counts().tabGets-next,2); // Every command prepares again, including multi-key input.
+  const typed=counts().tabGets;
+  await handlers.type({tab_id:700,text:'hello',submit:true});
+  assert.equal(counts().tabGets-typed,2);
+  const dragged=counts().tabGets;
+  await handlers['mouse-drag']({tab_id:700,x1:10,y1:20,x2:30,y2:40});
+  assert.equal(counts().tabGets-dragged,2);
+});
+test('lost debugger during input fails without attaching or replaying the remaining events',async t=>{
+  const {calls,counts,listeners}=setup(t);
+  registerDebuggerListeners(forgetInputState);
+  const initialAttaches=counts().attaches;
+  const handlers=createInputHandlers({async getManagedTab(id){return await chrome.tabs.get(id)}});
+  const original=chrome.debugger.sendCommand;
+  chrome.debugger.sendCommand=async(target,method,params)=>{
+    if(method==='Input.dispatchMouseEvent'&&params.type==='mousePressed'){
+      calls.push({method,params});listeners.detached({tabId:700});throw Error('Debugger detached');
+    }
+    return original(target,method,params);
+  };
+  await assert.rejects(handlers['mouse-click']({tab_id:700,x:20,y:30}),/Debugger detached/);
+  assert.equal(counts().tabGets,2);
+  assert.equal(counts().attaches,initialAttaches);
+  assert.equal(calls.filter(c=>c.params.type==='mousePressed').length,1);
+  assert.equal(calls.filter(c=>c.params.type==='mouseReleased').length,0);
+  assert.equal(calls.at(-1).params.enabled,false);
 });

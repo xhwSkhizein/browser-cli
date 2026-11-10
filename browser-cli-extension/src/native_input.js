@@ -26,7 +26,8 @@ export function forgetInputState(tabId) { states.delete(tabId); }
 export async function withInputFocus(tabId, action) {
   await sendCommand(tabId,'Emulation.setFocusEmulationEnabled',{enabled:true});
   let failed=false;
-  try { return await action(); }
+  // Reuse only this command's prepared connection; a failed input is never reattached or replayed.
+  try { return await action((method, params) => chrome.debugger.sendCommand({tabId}, method, params)); }
   catch(error) { failed=true; throw error; }
   finally {
     try { await chrome.debugger.sendCommand({tabId},'Emulation.setFocusEmulationEnabled',{enabled:false}); }
@@ -40,7 +41,7 @@ async function definition(key) {
   if (!result) throw new Error(`Unknown key: ${key}`);
   return result;
 }
-async function dispatchKey(tabId, base, up) {
+async function dispatchKey(tabId, base, up, send) {
   const state=stateFor(tabId);
   const key=(state.modifiers & 8) && base.shifted ? base.shifted : base;
   const held=new Set(state.keys);
@@ -50,7 +51,7 @@ async function dispatchKey(tabId, base, up) {
   const shortcut=[...['Shift','Control','Alt','Meta'].filter(name=>modifiers & modifierBits[name]),key.code].join('+');
   const commands=(await isMac()) ? [macEditingCommands[shortcut] || []].flat()
     .filter(command=>!command.startsWith('insert')).map(command=>command.slice(0,-1)) : [];
-  await sendCommand(tabId,'Input.dispatchKeyEvent',{
+  await send('Input.dispatchKeyEvent',{
     type:up ? 'keyUp' : text ? 'keyDown' : 'rawKeyDown',
     key:key.key, code:key.code, windowsVirtualKeyCode:key.keyCodeWithoutLocation || key.keyCode,
     location:key.location || 0, isKeypad:key.location===3, modifiers,
@@ -59,9 +60,9 @@ async function dispatchKey(tabId, base, up) {
   state.modifiers=modifiers;
   if (up) state.keys.delete(key.code); else state.keys.add(key.code);
 }
-export async function keyInput(tabId, action, key) {
+export async function keyInput(tabId, action, key, send = (method, params) => sendCommand(tabId, method, params)) {
   if (action!=='press') {
-    await dispatchKey(tabId,await definition(key),action==='key-up');
+    await dispatchKey(tabId,await definition(key),action==='key-up',send);
     return {key};
   }
   // A trailing plus is a literal key, as in Control++.
@@ -72,54 +73,54 @@ export async function keyInput(tabId, action, key) {
   const state=stateFor(tabId);
   const added=[];
   for (const item of definitions.slice(0,-1)) {
-    if (!(state.modifiers & modifierBits[item.key])) {await dispatchKey(tabId,item,false);added.push(item);}
+    if (!(state.modifiers & modifierBits[item.key])) {await dispatchKey(tabId,item,false,send);added.push(item);}
   }
   // Never replay input after a protocol failure; held-state cleanup belongs to the caller.
-  await dispatchKey(tabId,definitions.at(-1),false);
-  await dispatchKey(tabId,definitions.at(-1),true);
-  for (const item of added.reverse()) await dispatchKey(tabId,item,true);
+  await dispatchKey(tabId,definitions.at(-1),false,send);
+  await dispatchKey(tabId,definitions.at(-1),true,send);
+  for (const item of added.reverse()) await dispatchKey(tabId,item,true,send);
   return {key};
 }
-export async function typeInput(tabId, text, submit) {
-  if (text) await sendCommand(tabId,'Input.insertText',{text});
-  if (submit) await keyInput(tabId,'press','Enter');
+export async function typeInput(tabId, text, submit, send = (method, params) => sendCommand(tabId, method, params)) {
+  if (text) await send('Input.insertText',{text});
+  if (submit) await keyInput(tabId,'press','Enter',send);
   return {typed:true,submitted:!!submit};
 }
 const buttonBits={left:1,right:2,middle:4};
-async function mouseEvent(tabId,type,x,y,button='none',clickCount=0) {
+async function mouseEvent(send,tabId,type,x,y,button='none',clickCount=0) {
   if (!Number.isFinite(x)||!Number.isFinite(y)||x<0||y<0) throw new Error('Mouse coordinates must be nonnegative CSS viewport pixels.');
   const state=stateFor(tabId);
   const bit=buttonBits[button] || 0;
   const buttons=type==='mousePressed' ? state.buttons | bit : type==='mouseReleased' ? state.buttons & ~bit : state.buttons;
-  await sendCommand(tabId,'Input.dispatchMouseEvent',{type,x,y,button,buttons,clickCount,modifiers:state.modifiers});
+  await send('Input.dispatchMouseEvent',{type,x,y,button,buttons,clickCount,modifiers:state.modifiers});
   Object.assign(state,{x,y,buttons});
 }
-export async function mouseInput(tabId,action,payload) {
+export async function mouseInput(tabId,action,payload,send = (method, params) => sendCommand(tabId, method, params)) {
   const button=payload.button || 'left';
   if (!buttonBits[button]) throw new Error(`Unknown mouse button: ${button}`);
   const state=stateFor(tabId);
   if (action==='mouse-move') {
-    await mouseEvent(tabId,'mouseMoved',payload.x,payload.y);
+    await mouseEvent(send,tabId,'mouseMoved',payload.x,payload.y);
     return {x:payload.x,y:payload.y};
   }
   if (action==='mouse-down'||action==='mouse-up') {
-    await mouseEvent(tabId,action==='mouse-down'?'mousePressed':'mouseReleased',state.x,state.y,button,1);
+    await mouseEvent(send,tabId,action==='mouse-down'?'mousePressed':'mouseReleased',state.x,state.y,button,1);
     return {button};
   }
   if (action==='mouse-drag') {
     if (![payload.x1,payload.y1,payload.x2,payload.y2].every(n=>Number.isFinite(n)&&n>=0)) throw new Error('Invalid CSS drag coordinates.');
-    await mouseEvent(tabId,'mouseMoved',payload.x1,payload.y1);
-    await mouseEvent(tabId,'mousePressed',payload.x1,payload.y1,button,1);
-    await mouseEvent(tabId,'mouseMoved',payload.x2,payload.y2,button,1);
-    await mouseEvent(tabId,'mouseReleased',payload.x2,payload.y2,button,1);
+    await mouseEvent(send,tabId,'mouseMoved',payload.x1,payload.y1);
+    await mouseEvent(send,tabId,'mousePressed',payload.x1,payload.y1,button,1);
+    await mouseEvent(send,tabId,'mouseMoved',payload.x2,payload.y2,button,1);
+    await mouseEvent(send,tabId,'mouseReleased',payload.x2,payload.y2,button,1);
     return {from:{x:payload.x1,y:payload.y1},to:{x:payload.x2,y:payload.y2}};
   }
   const count=Math.max(1,Number(payload.count || 1));
   if (!Number.isSafeInteger(count)) throw new Error('Invalid mouse click count.');
-  await mouseEvent(tabId,'mouseMoved',payload.x,payload.y);
+  await mouseEvent(send,tabId,'mouseMoved',payload.x,payload.y);
   for (let i=1;i<=count;i++) {
-    await mouseEvent(tabId,'mousePressed',payload.x,payload.y,button,i);
-    await mouseEvent(tabId,'mouseReleased',payload.x,payload.y,button,i);
+    await mouseEvent(send,tabId,'mousePressed',payload.x,payload.y,button,i);
+    await mouseEvent(send,tabId,'mouseReleased',payload.x,payload.y,button,i);
   }
   return {x:payload.x,y:payload.y,button,count};
 }
