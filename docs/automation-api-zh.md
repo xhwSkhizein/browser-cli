@@ -163,3 +163,23 @@ uv run python scripts/smoke_installed_wheel.py dist/<构建出的文件名>.whl
 ```
 
 脚本先检查浏览器启动权限，再创建临时虚拟环境、安装 wheel、把对应 Playwright 版本的 ffmpeg 准备到独立缓存、发现 Node 客户端和套接字、启动独立后台，并完成隔离截图和失败结果处理。Chrome 使用本机稳定版。测试结束后停止独立后台并清理临时文件；当前后台使用不同的目录和端口。`BROWSER_CLI_HOME` 同时决定托管配置目录、套接字和产物的位置。
+
+## 输入、等待和成本
+
+`mouse-click`、`mouse-move` 和 `mouse-drag` 的坐标是相对网页视口左上角的 **CSS 像素**，不包含 Chrome 工具栏。不要直接使用 Retina 截图的图片像素坐标。截图返回的 `capture.viewport`、`capture.clip` 和 `screenshot_size` 给出实际换算依据；裁剪截图还需要加回裁剪偏移，不能一律除以设备 DPR。
+
+扩展的底层鼠标、键盘及 `type` 通过现有 Chrome 调试连接输入，后台标签页不会因此主动切到前台。命令和默认 JSON 结构保持不变，不附带 DOM、快照或长诊断。`mouse-down`／`mouse-up` 沿用该标签页最近的鼠标坐标；按住的修饰键会影响后续输入。macOS 可使用 `Meta+A`，跨平台可使用 `ControlOrMeta+A`；`type` 插入文字，`press` 用于按键和快捷键。
+
+成功响应表示输入通道已接受命令，不保证网站完成特定业务变化。例如，点击已选中的标签或在底部继续滚动可以没有变化。需要确认结果时，使用现有的局部 `eval`、`verify-*` 或条件等待；不要每次输入后自动抓取完整快照，也不要在超时或连接中断后自动重放输入。
+
+已有的条件等待包括：
+
+```bash
+browser-cli wait 10 --text '正在关注'
+browser-cli wait 10 --text '正在加载' --gone
+browser-cli wait-network --timeout 10
+```
+
+这些分别等待文本出现、文本消失和网络空闲。实时 feed 可能持续联网，网络空闲不能证明 feed 已完整加载，宜等待任务所需的元素或文本条件。无需为每次操作增加一次等待；只在下一步依赖异步结果时使用。
+
+真实扩展输入验收可以运行 `node node/smoke-input.mjs runs/input.json 3`。它复用已连接的 Chrome，在自己的后台标签页测试 x.com 的聚焦、键盘编辑和滚动，不发帖。报告区分输入命令与测试的准备／观察请求，记录成功率、耗时、实际请求／响应 UTF-8 字节数，不把字节数当作真实 Agent token。

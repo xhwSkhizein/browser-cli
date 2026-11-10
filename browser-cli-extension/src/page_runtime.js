@@ -502,111 +502,17 @@ export function generateSnapshotJs({ interactive = false } = {}) {
   `;
 }
 
-export function typeTextJs(text, { submit = false } = {}) {
-  return `
-    (() => {
-      const text = ${js(text)};
-      const active = document.activeElement || document.body;
-      active.focus();
-      if ('value' in active) {
-        active.value = String(active.value || '') + text;
-      } else if (active.isContentEditable) {
-        active.textContent = String(active.textContent || '') + text;
-      }
-      active.dispatchEvent(new Event('input', { bubbles: true }));
-      active.dispatchEvent(new Event('change', { bubbles: true }));
-      for (const char of text) {
-        active.dispatchEvent(new KeyboardEvent('keydown', { key: char, bubbles: true }));
-        active.dispatchEvent(new KeyboardEvent('keyup', { key: char, bubbles: true }));
-      }
-      if (${submit ? 'true' : 'false'}) {
-        active.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-        active.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', bubbles: true }));
-      }
-      return { typed: true, submitted: ${submit ? 'true' : 'false'} };
-    })()
-  `;
-}
-
-export function keyActionJs(action, key) {
-  return `
-    (() => {
-      const active = document.activeElement || document.body;
-      const eventName = ${js(action)} === 'press'
-        ? 'keydown'
-        : (${js(action)} === 'key-down' ? 'keydown' : 'keyup');
-      active.dispatchEvent(new KeyboardEvent(eventName, { key: ${js(key)}, bubbles: true }));
-      if (${js(action)} === 'press') {
-        active.dispatchEvent(new KeyboardEvent('keyup', { key: ${js(key)}, bubbles: true }));
-      }
-      return { key: ${js(key)} };
-    })()
-  `;
-}
-
 export function scrollPageJs(dx = 0, dy = 700) {
   return `
     (() => {
-      window.scrollBy(${Number(dx) || 0}, ${Number(dy) || 700});
+      window.scrollBy(${Number(dx) || 0}, ${Number(dy)});
       document.dispatchEvent(new WheelEvent('wheel', {
         deltaX: ${Number(dx) || 0},
-        deltaY: ${Number(dy) || 700},
+        deltaY: ${Number(dy)},
         bubbles: true,
         cancelable: true
       }));
-      return { dx: ${Number(dx) || 0}, dy: ${Number(dy) || 700}, scroll_x: window.scrollX, scroll_y: window.scrollY };
-    })()
-  `;
-}
-
-export function mouseActionJs(action, payload = {}) {
-  return `
-    (() => {
-      const payload = ${js(payload)};
-      const dispatch = (type, x, y, extra = {}) => {
-        const target = document.elementFromPoint(x, y) || document.body || document.documentElement;
-        target.dispatchEvent(new MouseEvent(type, {
-          bubbles: true,
-          cancelable: true,
-          clientX: x,
-          clientY: y,
-          button: extra.buttonIndex ?? 0,
-          buttons: extra.buttons ?? 1,
-          detail: extra.detail ?? 1,
-          view: window,
-        }));
-      };
-      const buttonName = String(payload.button || 'left');
-      const buttonIndex = buttonName === 'right' ? 2 : (buttonName === 'middle' ? 1 : 0);
-      if (${js(action)} === 'mouse-move') {
-        dispatch('mousemove', Number(payload.x), Number(payload.y), { buttonIndex: 0, buttons: 0, detail: 0 });
-        return { x: Number(payload.x), y: Number(payload.y) };
-      }
-      if (${js(action)} === 'mouse-click') {
-        const count = Math.max(1, Number(payload.count || 1));
-        for (let i = 0; i < count; i += 1) {
-          dispatch('mousedown', Number(payload.x), Number(payload.y), { buttonIndex, buttons: 1, detail: i + 1 });
-          dispatch('mouseup', Number(payload.x), Number(payload.y), { buttonIndex, buttons: 0, detail: i + 1 });
-          dispatch('click', Number(payload.x), Number(payload.y), { buttonIndex, buttons: 0, detail: i + 1 });
-        }
-        return { x: Number(payload.x), y: Number(payload.y), button: buttonName, count };
-      }
-      if (${js(action)} === 'mouse-drag') {
-        dispatch('mousemove', Number(payload.x1), Number(payload.y1), { buttonIndex: 0, buttons: 0, detail: 0 });
-        dispatch('mousedown', Number(payload.x1), Number(payload.y1), { buttonIndex: 0, buttons: 1, detail: 1 });
-        dispatch('mousemove', Number(payload.x2), Number(payload.y2), { buttonIndex: 0, buttons: 1, detail: 0 });
-        dispatch('mouseup', Number(payload.x2), Number(payload.y2), { buttonIndex: 0, buttons: 0, detail: 1 });
-        return { from: { x: Number(payload.x1), y: Number(payload.y1) }, to: { x: Number(payload.x2), y: Number(payload.y2) } };
-      }
-      if (${js(action)} === 'mouse-down') {
-        dispatch('mousedown', 1, 1, { buttonIndex, buttons: 1, detail: 1 });
-        return { button: buttonName };
-      }
-      if (${js(action)} === 'mouse-up') {
-        dispatch('mouseup', 1, 1, { buttonIndex, buttons: 0, detail: 1 });
-        return { button: buttonName };
-      }
-      throw new Error('Unsupported mouse action');
+      return { dx: ${Number(dx) || 0}, dy: ${Number(dy)}, scroll_x: window.scrollX, scroll_y: window.scrollY };
     })()
   `;
 }
