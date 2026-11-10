@@ -11,6 +11,43 @@ from browser_cli.browser.service import BrowserService
 from browser_cli.profiles.discovery import ChromeEnvironment
 
 
+def test_canceling_read_only_wait_consumes_late_page_close_without_replay():
+    async def scenario():
+        started, closed, settled = asyncio.Event(), asyncio.Event(), asyncio.Event()
+        calls = []
+        unhandled = []
+        loop = asyncio.get_running_loop()
+        loop.set_exception_handler(lambda _loop, context: unhandled.append(context))
+
+        class Page:
+            async def wait_for_timeout(self, _milliseconds):
+                calls.append("wait")
+                started.set()
+                try:
+                    await closed.wait()
+                    raise RuntimeError("Page closed")
+                finally:
+                    settled.set()
+
+        service = BrowserService()
+        service._pages["page"] = Page()
+        task = asyncio.create_task(service.wait("page", seconds=1))
+        await started.wait()
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert not settled.is_set()  # the protocol read was not canceled
+        closed.set()
+        await asyncio.wait_for(settled.wait(), 1)
+        # Let the retained task and its exception consumer finish.
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert calls == ["wait"]
+        assert unhandled == []
+
+    asyncio.run(scenario())
+
+
 @pytest.fixture(autouse=True)
 def _allow_mock_browser_launch(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("browser_cli.browser.service.ensure_browser_launch_allowed", lambda: None)

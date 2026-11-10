@@ -796,10 +796,28 @@ class BrowserService:
         if text:
             locator = page.get_by_text(text, exact=exact).first
             state = "hidden" if gone else "visible"
-            await locator.wait_for(state=state, timeout=((seconds or 30.0) * 1000.0))
+            await self._await_observation(
+                locator.wait_for(state=state, timeout=((seconds or 30.0) * 1000.0))
+            )
             return {"page_id": page_id, "text": text, "state": state}
-        await page.wait_for_timeout((seconds or 1.0) * 1000.0)
+        await self._await_observation(page.wait_for_timeout((seconds or 1.0) * 1000.0))
         return {"page_id": page_id, "seconds": seconds or 1.0}
+
+    @staticmethod
+    async def _await_observation(observation):
+        """Consume a read-only protocol reply even after its caller is canceled.
+
+        Owned-page close has already destroyed the page before canceling its
+        daemon wait. Canceling the Playwright future as well can orphan the
+        resulting TargetClosedError. Shield only these read-only waits; never
+        replay them or extend this helper to mutating actions.
+        """
+        pending = asyncio.ensure_future(observation)
+        try:
+            return await asyncio.shield(pending)
+        except asyncio.CancelledError:
+            pending.add_done_callback(lambda task: None if task.cancelled() else task.exception())
+            raise
 
     async def wait_for_network_idle(
         self, page_id: str, *, timeout_seconds: float = 30.0

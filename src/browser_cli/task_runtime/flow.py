@@ -45,8 +45,28 @@ class Flow:
     def search(self, query: str, *, engine: str = "duckduckgo") -> dict[str, Any]:
         return self.client.search(query, engine=engine)
 
-    def snapshot(self, *, interactive: bool = False, full_page: bool = True) -> SnapshotResult:
-        self._last_snapshot = self.client.snapshot(interactive=interactive, full_page=full_page)
+    def snapshot(
+        self,
+        *,
+        interactive: bool = False,
+        full_page: bool = True,
+        compact: bool = False,
+        scope: str | None = None,
+        roles: list[str] | None = None,
+        max_lines: int | None = None,
+    ) -> SnapshotResult:
+        options: dict[str, Any] = {}
+        if compact:
+            options["compact"] = compact
+        if scope is not None:
+            options["scope"] = scope
+        if roles is not None:
+            options["roles"] = roles
+        if max_lines is not None:
+            options["max_lines"] = max_lines
+        self._last_snapshot = self.client.snapshot(
+            interactive=interactive, full_page=full_page, **options
+        )
         return self._last_snapshot
 
     def last_snapshot(self) -> SnapshotResult:

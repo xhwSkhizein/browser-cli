@@ -17,6 +17,99 @@ class _FakeProcess:
 
 
 @pytest.mark.parametrize(
+    "args,view",
+    [
+        ({"compact": True}, {"compact": False}),
+        ({"scope": "@deadbeef"}, {"scope": None}),
+        ({"roles": ["main"]}, {"roles": []}),
+        ({"roles": ["main"], "interactive": True}, {"roles": ["main"], "interactive": False}),
+        ({"max_lines": 2}, {"max_lines": None}),
+        ({"max_lines": 2}, {"max_lines": 2, "returned_lines": 3, "truncated": False}),
+        (
+            {"max_lines": 2},
+            {"max_lines": 2, "matched_lines": 3, "returned_lines": 3, "truncated": False},
+        ),
+        (
+            {"max_lines": 2},
+            {"max_lines": 2, "matched_lines": 3, "returned_lines": 2, "truncated": False},
+        ),
+    ],
+)
+def test_daemon_cannot_acknowledge_a_view_while_ignoring_its_requested_filters(args, view):
+    payload = {"ok": True, "data": {"view": view, "tree": "private full page"}, "meta": {}}
+    with pytest.raises(OperationFailedError) as failure:
+        client._check_snapshot_views("snapshot", args, payload)
+    assert failure.value.error_code == "DAEMON_INCOMPATIBLE"
+    assert failure.value.payload["execution_state"] == "completed"
+    assert "private full page" not in str(failure.value.payload)
+
+
+def test_view_acknowledgement_normalizes_scope_and_duplicate_roles():
+    client._check_snapshot_views(
+        "snapshot",
+        {"scope": "ref=DEADBEEF", "roles": ["main", "main"], "max_lines": 2},
+        {
+            "ok": True,
+            "data": {
+                "view": {
+                    "scope": "deadbeef",
+                    "roles": ["main"],
+                    "max_lines": 2,
+                    "returned_lines": 1,
+                    "matched_lines": 1,
+                    "truncated": False,
+                }
+            },
+            "meta": {},
+        },
+    )
+
+
+def test_view_acknowledgement_accepts_interactive_filter_context():
+    client._check_snapshot_views(
+        "snapshot",
+        {"scope": "@deadbeef", "roles": ["main"], "interactive": True},
+        {
+            "ok": True,
+            "data": {"view": {"scope": "deadbeef", "roles": ["main"], "interactive": True}},
+            "meta": {},
+        },
+    )
+
+
+@pytest.mark.parametrize("batch", [False, True])
+def test_older_daemon_cannot_silently_ignore_snapshot_views_or_trigger_replay(batch):
+    async def scenario():
+        result = {"ok": True, "data": {"tree": "unfiltered"}, "meta": {"request_id": "snapshot"}}
+        args = {"compact": True, "roles": ["main"]}
+        action = "snapshot"
+        if batch:
+            result = {"ok": True, "data": {"results": [{**result, "index": 0}]}, "meta": {}}
+            args = {"commands": [{"action": "snapshot", "args": args}]}
+            action = "batch"
+        reader = asyncio.StreamReader()
+        reader.feed_data((json.dumps(result) + "\n").encode())
+        reader.feed_eof()
+        writer = MagicMock()
+        writer.drain = AsyncMock()
+        writer.wait_closed = AsyncMock()
+        with (
+            patch(
+                "browser_cli.daemon.client.asyncio.open_unix_connection",
+                AsyncMock(return_value=(reader, writer)),
+            ) as connect,
+            pytest.raises(OperationFailedError) as failure,
+        ):
+            await client._send_command_async(action, args)
+        assert failure.value.error_code == "DAEMON_INCOMPATIBLE"
+        assert failure.value.payload["execution_state"] == ("unknown" if batch else "completed")
+        connect.assert_awaited_once()
+        writer.close.assert_called_once()
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize(
     "raw", [b'{"ok":', b'{"ok":true,"data":{},"meta":{}}', b"[]\n", b'{"ok":true}\n', b"\xff\n"]
 )
 def test_incomplete_or_invalid_daemon_response_is_rejected_and_connection_closed(raw):

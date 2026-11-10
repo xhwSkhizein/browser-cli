@@ -62,6 +62,9 @@ class SemanticSnapshot:
     tree: str
     refs: dict[str, RefData]
     metadata: SnapshotMetadata
+    # Generator-owned provenance for projections; never inferred from page text
+    # or serialized into the public snapshot payload.
+    line_refs: tuple[str | None, ...] | None = field(default=None, repr=False, compare=False)
 
 
 @dataclass(slots=True, frozen=True)

@@ -71,6 +71,12 @@ def test_source_distribution_contains_new_extension_modules_and_acceptance_tests
             "tests/browser_runtime.py",
             "tests/integration/conftest.py",
             "tests/unit/test_test_browser_runtime.py",
+            "scripts/benchmark_agent_workflows.py",
+            "tests/agent_workflow_fixture.py",
+            "tests/integration/test_agent_workflows.py",
+            "tests/unit/test_snapshot_views.py",
+            "src/browser_cli/refs/view.py",
+            "docs/agent-workflows-zh.md",
         ):
             content = archive.extractfile(f"{prefix}/{relative}")
             assert content is not None

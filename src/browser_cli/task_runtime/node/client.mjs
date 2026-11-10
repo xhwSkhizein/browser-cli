@@ -6,6 +6,34 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+
+function snapshotViewApplied(args, data) {
+  const requested = args.compact || args.scope != null || args.roles?.length || args.max_lines != null;
+  if (!requested) return true;
+  const view = data?.view;
+  if (!isObject(view)) return false;
+  if (args.compact && view.compact !== true) return false;
+  if (args.scope != null) {
+    if (typeof args.scope !== 'string') return false;
+    const scope = args.scope.trim().replace(/^(@|ref=)/, '').toLowerCase();
+    if (!/^[0-9a-f]{8}$/.test(scope) || view.scope !== scope) return false;
+  }
+  if (args.roles?.length) {
+    if (!Array.isArray(args.roles)) return false;
+    const roles = [...new Set(args.roles)];
+    if (!Array.isArray(view.roles) || view.roles.length !== roles.length
+      || roles.some((role, index) => role !== view.roles[index])) return false;
+  }
+  if (args.interactive && (args.scope != null || args.roles?.length) && view.interactive !== true) return false;
+  if (args.max_lines != null) {
+    const { matched_lines: matched, returned_lines: returned, truncated } = view;
+    if (!Number.isSafeInteger(view.max_lines) || view.max_lines !== args.max_lines
+      || !Number.isSafeInteger(matched) || !Number.isSafeInteger(returned)
+      || typeof truncated !== 'boolean' || matched < 0
+      || returned !== Math.min(matched, args.max_lines) || truncated !== (returned < matched)) return false;
+  }
+  return true;
+}
 export const DAEMON_RUNTIME_VERSION = JSON.parse(
   readFileSync(new URL('./package.json', import.meta.url), 'utf8'),
 ).browserCliRuntimeVersion;
@@ -124,8 +152,12 @@ export class BrowserCliClient {
   }
 
   async open(url) { return (await this.request('open', { url })).data; }
-  async snapshot({ interactive = false, fullPage = true } = {}) {
-    return (await this.request('snapshot', { interactive, full_page: fullPage })).data;
+  async snapshot({ interactive = false, fullPage = true, compact = false, scope, roles, maxLines } = {}) {
+    return (await this.request('snapshot', {
+      interactive, full_page: fullPage,
+      ...(compact ? { compact } : {}), ...(scope !== undefined ? { scope } : {}),
+      ...(roles !== undefined ? { roles } : {}), ...(maxLines !== undefined ? { max_lines: maxLines } : {}),
+    })).data;
   }
   async screenshot(path, {
     fullPage = false, pageRange, clip, viewportWidth, viewportHeight, deviceScaleFactor,
@@ -179,7 +211,32 @@ export class BrowserCliClient {
     if (result.meta.runtime_version !== DAEMON_RUNTIME_VERSION) {
       throw this.#incompatible(result.meta.runtime_version);
     }
+    this.#checkSnapshotViews(request.action, request.args, result);
     return result;
+  }
+
+  #checkSnapshotViews(action, args, result) {
+    if (!result.ok) return;
+    if (action === 'batch') {
+      for (const step of result.data.results || []) {
+        const command = args.commands?.[step.index];
+        if (command) {
+          try { this.#checkSnapshotViews(command.action, command.args || {}, step); }
+          catch (error) {
+            error.payload.execution_state = 'unknown';
+            error.payload.meta = result.meta;
+            error.payload.batch_progress = Object.fromEntries(
+              ['success', 'completed', 'completed_count', 'total_count', 'failed_indices'].map(key => [key, result.data[key]]));
+            throw error;
+          }
+        }
+      }
+      return;
+    }
+    if (action === 'snapshot' && !snapshotViewApplied(args, result.data)) {
+      throw new BrowserCliError('Daemon did not apply the requested snapshot view. Upgrade Browser CLI and run browser-cli reload.',
+        { error_code: 'DAEMON_INCOMPATIBLE', execution_state: 'completed' });
+    }
   }
 
   #incompatible(actualVersion) {

@@ -70,9 +70,27 @@ class BrowserCliTaskClient:
     def search(self, query: str, *, engine: str = "duckduckgo") -> dict[str, Any]:
         return self.invoke("search", query=query, engine=engine).get("page", {})
 
-    def snapshot(self, *, interactive: bool = False, full_page: bool = True) -> SnapshotResult:
+    def snapshot(
+        self,
+        *,
+        interactive: bool = False,
+        full_page: bool = True,
+        compact: bool = False,
+        scope: str | None = None,
+        roles: list[str] | None = None,
+        max_lines: int | None = None,
+    ) -> SnapshotResult:
+        options: dict[str, Any] = {}
+        if compact:
+            options["compact"] = compact
+        if scope is not None:
+            options["scope"] = scope
+        if roles is not None:
+            options["roles"] = roles
+        if max_lines is not None:
+            options["max_lines"] = max_lines
         return SnapshotResult.from_payload(
-            self.invoke("snapshot", interactive=interactive, full_page=full_page)
+            self.invoke("snapshot", interactive=interactive, full_page=full_page, **options)
         )
 
     def html(self) -> str:
