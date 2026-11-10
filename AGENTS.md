@@ -359,6 +359,7 @@ public interactive commands.
 - `tests/browser_runtime.py` configures disposable daemon profiles through the existing `chrome_environment` protocol before CLI browser actions, including after reload. Keep the user's `HOME` intact and isolate tests with `BROWSER_CLI_HOME`.
 - `scripts/lint.sh` owns repository lint execution.
 - `scripts/test.sh` owns repository test execution.
+- CI browser integration uses Ubuntu 24.04 while `uv.lock` pins Playwright 1.58; moving to `ubuntu-latest` can select an unsupported OS and fail before tests run. Keep the runner compatible with the locked browser dependencies.
 - `scripts/guard.sh` owns architecture, product-contract, and doc-sync guards.
 - `scripts/check.sh` runs lint, tests, and guard in the expected order.
 - The guard implementations live under `scripts/guards/`.

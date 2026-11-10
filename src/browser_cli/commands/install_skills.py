@@ -8,8 +8,12 @@ import shutil
 import uuid
 from dataclasses import dataclass
 from importlib import resources
-from importlib.abc import Traversable
 from pathlib import Path
+
+try:
+    from importlib.resources.abc import Traversable
+except ModuleNotFoundError:  # Python 3.10
+    from importlib.abc import Traversable
 
 from browser_cli.errors import InvalidInputError, OperationFailedError
 
