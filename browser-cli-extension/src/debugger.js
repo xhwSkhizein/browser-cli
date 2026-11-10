@@ -507,6 +507,23 @@ export async function sendCommand(tabId, method, params = {}) {
   return await chrome.debugger.sendCommand({ tabId }, method, params);
 }
 
+/** Evaluate once in the page world; site CSP must not silently erase command results. */
+export async function evaluateExpression(tabId, expression) {
+  const result = await sendCommand(tabId, 'Runtime.evaluate', {
+    expression: `(async () => {
+      const value = eval(${JSON.stringify(expression)});
+      return typeof value === 'function' ? await value() : value;
+    })()`,
+    returnByValue: true,
+    awaitPromise: true,
+    allowUnsafeEvalBlockedByCSP: true,
+  });
+  if (result.exceptionDetails) {
+    throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text || 'Page evaluation failed.');
+  }
+  return result.result?.value ?? null;
+}
+
 async function readProtocolStream(tabId, handle) {
   let text = '';
   while (true) {
@@ -753,7 +770,11 @@ export async function captureScreenshot(
       height:Math.ceil(dipRectangle.y + dipRectangle.height) - Math.floor(dipRectangle.y) + 1,
     } : dipRectangle;
     const result = await sendCommand(tabId, 'Page.captureScreenshot', {
-      format:'png', fromSurface: true, captureBeyondViewport: true,
+      format:'png', fromSurface: true,
+      // Beyond-viewport capture can reflow virtualized pages even for a viewport-sized clip.
+      captureBeyondViewport: rectangle.x < captured.scroll_x || rectangle.y < captured.scroll_y
+        || rectangle.x + rectangle.width > captured.scroll_x + captured.viewport_width
+        || rectangle.y + rectangle.height > captured.scroll_y + captured.viewport_height,
       // CDP capture rectangles use device-independent pixels, while the
       // public rectangle is in page CSS pixels at the tab's current zoom.
       clip: {
@@ -778,7 +799,7 @@ export async function captureScreenshot(
     });
   }
   const after = await settledGeometry(tabId);
-  if (JSON.stringify(before) !== JSON.stringify(after)) throw new Error('Page geometry changed during capture; screenshot was not saved.');
+  if (JSON.stringify(before) !== JSON.stringify(after)) throw new Error(`Page geometry changed during capture; screenshot was not saved. ${JSON.stringify({before, after})}`);
   return {
     dataBase64,
     capture: {
