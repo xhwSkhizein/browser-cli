@@ -388,3 +388,30 @@ def test_stale_extension_cannot_silently_ignore_screenshot_controls(tmp_path: Pa
         assert not any(action == "screenshot" for action, _ in session.requests)
 
     asyncio.run(scenario())
+
+
+def test_extension_driver_passes_one_shot_read_network_policy() -> None:
+    session = _FakeSession(_hello())
+    driver = ExtensionDriver(_FakeHub(session))
+
+    async def _scenario() -> None:
+        await driver.new_tab(page_id="read", url="https://example.com", observe_network=False)
+        await driver.new_tab(page_id="interactive", url="https://example.com")
+
+    asyncio.run(_scenario())
+    assert session.requests[0][1]["observe_network"] is False
+    assert session.requests[1][1]["observe_network"] is True
+
+
+def test_extension_target_restoration_does_not_activate_chrome_tab() -> None:
+    session = _FakeSession(_hello())
+    driver = ExtensionDriver(_FakeHub(session))
+
+    async def _scenario() -> None:
+        await driver.new_tab(page_id="page_0001", url="https://example.com")
+        page = await driver.switch_tab("page_0001")
+        assert page["page_id"] == "page_0001"
+        assert page["title"] == "Example"
+
+    asyncio.run(_scenario())
+    assert [action for action, _ in session.requests] == ["open-tab", "page-summary"]

@@ -7,7 +7,8 @@ import {
   buildWsUrl,
 } from './protocol.js';
 import { locatorActionJs } from './page_runtime.js';
-import { disposeNetworkSession, ensureNetworkSession, registerDebuggerListeners } from './debugger.js';
+import { disposeNetworkSession, registerDebuggerListeners } from './debugger.js';
+import { createWorkspaceTabs } from './background/workspace_tabs.js';
 import { createArtifactHandlers } from './background/artifact_actions.js';
 import { createDialogHandlers } from './background/dialog_actions.js';
 import { createInputHandlers } from './background/input_actions.js';
@@ -17,7 +18,7 @@ import { createPageHandlers } from './background/page_actions.js';
 import { sendFramedMessage } from './background/response_framing.js';
 import { createTraceHandlers } from './background/trace_actions.js';
 import { createVideoHandlers } from './background/video_actions.js';
-import { buildWorkspaceStatus, createWorkspaceHandlers } from './background/workspace.js';
+import { createWorkspaceHandlers } from './background/workspace.js';
 import { createWorkspaceBinding } from './background/workspace_binding.js';
 import {assertRuntimeApis, createRuntimeRecovery, queryRuntimeTabs} from './runtime_health.js';
 
@@ -37,6 +38,8 @@ const state = {
   keepAliveIntervalId: null,
   reconnectBackoffMs: INITIAL_RECONNECT_BACKOFF_MS,
   workspaceWindowId: null,
+  workspaceGroupId: null,
+  bootstrapTabId: null,
   managedTabIds: new Set(),
   pageIdByTabId: new Map(),
   traceSessions: new Map(),
@@ -330,45 +333,6 @@ async function reconnectNow() {
   await connect();
 }
 
-/** Report verified workspace state after any pending ownership restoration. */
-async function getWorkspaceWindowState() {
-  await workspaceBinding.restore();
-  if (state.workspaceWindowId === null) {
-    return { window_id: null, tab_count: 0, managed_tab_count: 0, binding_state: 'absent' };
-  }
-  return await buildWorkspaceStatus(context);
-}
-
-/** Reuse the dedicated workspace or create and persist its initial managed tab. */
-async function ensureWorkspaceWindow(url = 'about:blank') {
-  await workspaceBinding.restore();
-  if (state.workspaceWindowId !== null) {
-    try {
-      await chrome.windows.get(state.workspaceWindowId);
-      return state.workspaceWindowId;
-    } catch (_error) {
-      state.workspaceWindowId = null;
-      state.managedTabIds.clear();
-      state.pageIdByTabId.clear();
-    }
-  }
-  const windowInfo = await chrome.windows.create({
-    url,
-    focused: true,
-    width: 1280,
-    height: 900,
-    type: 'normal',
-  });
-  state.workspaceWindowId = windowInfo.id;
-  for (const tab of windowInfo.tabs || []) {
-    if (tab.id !== undefined) {
-      state.managedTabIds.add(tab.id);
-    }
-  }
-  await workspaceBinding.save();
-  return state.workspaceWindowId;
-}
-
 async function executeExpression(tabId, expression) {
   const [result] = await chrome.scripting.executeScript({
     target: { tabId },
@@ -398,41 +362,6 @@ async function waitForLoad(tabId, timeoutSeconds = 30) {
   throw new Error('Timed out waiting for tab load');
 }
 
-/** Open a workspace-owned tab and prepare its browser observation hooks. */
-async function openTab(url) {
-  if (state.workspaceWindowId === null) {
-    await ensureWorkspaceWindow('about:blank');
-    const tabs = await chrome.tabs.query({ windowId: state.workspaceWindowId });
-    const activeTab = tabs.find((tab) => tab.active) || tabs[0];
-    if (!activeTab || activeTab.id === undefined) {
-      throw new Error('Workspace tab creation failed');
-    }
-    state.managedTabIds.add(activeTab.id);
-    await ensureNetworkSession(activeTab.id);
-    if (url) {
-      await chrome.tabs.update(activeTab.id, { url });
-      await waitForLoad(activeTab.id, 30);
-    }
-    return activeTab;
-  }
-  const tab = await chrome.tabs.create({
-    windowId: state.workspaceWindowId,
-    url: 'about:blank',
-    active: true,
-  });
-  if (tab.id === undefined) {
-    throw new Error('Workspace tab creation failed');
-  }
-  state.managedTabIds.add(tab.id);
-  await workspaceBinding.save();
-  await ensureNetworkSession(tab.id);
-  if (url) {
-    await chrome.tabs.update(tab.id, { url });
-    await waitForLoad(tab.id, 30);
-  }
-  return tab;
-}
-
 async function getManagedTab(tabId) {
   if (!state.managedTabIds.has(tabId)) {
     throw new Error('Tab is not managed by Browser CLI');
@@ -452,6 +381,7 @@ function pageIdForTab(tabId) {
 async function untrackTab(tabId) {
   const wasManaged = state.managedTabIds.has(tabId);
   state.managedTabIds.delete(tabId);
+  if (state.bootstrapTabId === tabId) state.bootstrapTabId = null;
   state.pageIdByTabId.delete(tabId);
   state.traceSessions.delete(tabId);
   state.videoSessions.delete(tabId);
@@ -460,7 +390,14 @@ async function untrackTab(tabId) {
   else await workspaceBinding.flush();
 }
 
+const { ensureWorkspaceWindow, openTab, managedTabs, closeManagedTab, closeWorkspaceTabs, getWorkspaceWindowState } = createWorkspaceTabs({
+  state, waitForLoad, untrackTab, workspaceBinding,
+});
+
 const context = {
+  managedTabs,
+  closeManagedTab,
+  closeWorkspaceTabs,
   state,
   connect,
   getManagedTab,
@@ -540,16 +477,19 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   });
 });
 
+chrome.tabs.onAttached.addListener((tabId) => {
+  void workspaceBinding.restore().then(async () => {
+    if (state.managedTabIds.has(tabId)) await workspaceBinding.save();
+  }).catch(error => {
+    state.runtimeState.lastError = String(error?.message || error);
+  });
+});
+
 chrome.windows.onRemoved.addListener((windowId) => {
   if (windowId === state.workspaceWindowId) {
-    for (const tabId of Array.from(state.managedTabIds)) {
-      disposeNetworkSession(tabId);
-    }
+    // Owned tabs may have been moved out before the window was closed.
     state.workspaceWindowId = null;
-    state.managedTabIds.clear();
-    state.pageIdByTabId.clear();
-    state.traceSessions.clear();
-    state.videoSessions.clear();
+    state.workspaceGroupId = null;
     void workspaceBinding.save().catch(error => {
       state.runtimeState.lastError = String(error?.message || error);
     });

@@ -16,6 +16,7 @@ class ExtensionDriverPageActionsMixin:
         url: str | None = None,
         wait_until: str = "load",
         timeout_seconds: float | None = None,
+        observe_network: bool = True,
     ) -> dict[str, Any]:
         session = await self._require_session()
         payload = await session.send_request(
@@ -25,6 +26,7 @@ class ExtensionDriverPageActionsMixin:
                 "url": url,
                 "wait_until": wait_until,
                 "timeout_seconds": timeout_seconds,
+                "observe_network": observe_network,
             },
         )
         tab_id = int(payload["tab_id"])
@@ -83,7 +85,9 @@ class ExtensionDriverPageActionsMixin:
     async def switch_tab(self, page_id: str) -> dict[str, Any]:
         tab_id = self._require_tab_id(page_id)
         session = await self._require_session()
-        payload = await session.send_request("activate-tab", {"tab_id": tab_id})
+        # Selecting an agent's target (including after rebinding) is independent
+        # of the tab the user has selected in Chrome.
+        payload = await session.send_request("page-summary", {"tab_id": tab_id})
         self._active_page_id = page_id
         return {
             "page_id": page_id,

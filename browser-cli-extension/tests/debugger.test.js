@@ -209,3 +209,77 @@ test('rectangle screenshot restores ICC metadata from an un-clipped capture', as
   assert.equal(calls.length,2);
   assert.deepEqual(calls[1].params,{format:'png',fromSurface:true});
 });
+
+test('late screencast completion cannot reattach after the tab is released', async t => {
+  let onEvent;
+  let onDetach;
+  let finishFrame;
+  let attachments = 0;
+  const commands = [];
+  globalThis.chrome = {
+    tabs: {async get(id) {return {id, url:'https://example.com'};}, onRemoved:{addListener() {}}},
+    debugger: {
+      async attach() {attachments++;},
+      async detach(target) {onDetach(target);},
+      async sendCommand(_, method) {commands.push(method); return {};},
+      onDetach:{addListener(fn) {onDetach = fn;}},
+      onEvent:{addListener(fn) {onEvent = fn;}},
+    },
+  };
+  t.after(() => {delete globalThis.chrome;});
+  const {registerDebuggerListeners, startScreencast, stopScreencast, releaseTabDebugger} = await loadDebuggerModule();
+  registerDebuggerListeners();
+  await startScreencast(101, {onFrame:() => new Promise(resolve => {finishFrame = resolve;})});
+  onEvent({tabId:101}, 'Page.screencastFrame', {sessionId:1, data:'frame'});
+  await stopScreencast(101);
+  await releaseTabDebugger(101);
+  finishFrame();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(attachments, 1);
+  assert.equal(commands.includes('Page.screencastFrameAck'), false);
+});
+
+test('background screencast requests rendering without activating the tab and stops pumping on cleanup', async t => {
+  let onEvent;
+  let frames = 0;
+  let captures = 0;
+  let detached;
+  let active = false;
+  let attachments = 0;
+  globalThis.chrome = {
+    tabs: {async get(id) {return {id,url:'https://example.com',active};},onRemoved:{addListener() {}}},
+    debugger: {
+      async attach() {attachments++;},
+      async detach(target) {detached(target);},
+      async sendCommand(target,method,params) {
+        if (method === 'Page.captureScreenshot') {
+          captures++;
+          assert.deepEqual(params.clip,{x:0,y:0,width:1,height:1,scale:1});
+          // Chrome's hidden-page compositor only produces a frame when asked
+          // to render. Exercise the same chain as the real background failure.
+          onEvent(target,'Page.screencastFrame',{sessionId:captures,data:'frame'});
+        }
+        return {};
+      },
+      onDetach:{addListener(fn) {detached=fn;}},
+      onEvent:{addListener(fn) {onEvent=fn;}},
+    },
+  };
+  const {registerDebuggerListeners,startScreencast,stopScreencast,releaseTabDebugger}=await loadDebuggerModule();
+  registerDebuggerListeners();
+  t.after(async()=>{await stopScreencast(102);await releaseTabDebugger(102);delete globalThis.chrome;});
+  await startScreencast(102,{fps:25,onFrame:()=>{frames++;}});
+  for(let attempt=0;attempt<20 && !frames;attempt++) await new Promise(resolve=>setTimeout(resolve,10));
+  assert.ok(frames>0,'A hidden tab must produce actual screencast frames.');
+  active = true;
+  const foregroundCaptures = captures;
+  await new Promise(resolve=>setTimeout(resolve,80));
+  assert.equal(captures,foregroundCaptures,'Visible tabs should use their native frame delivery.');
+  await stopScreencast(102);
+  const stoppedCaptures=captures;
+  await new Promise(resolve=>setTimeout(resolve,60));
+  assert.equal(captures,stoppedCaptures,'Stopping a recording must stop background rendering.');
+  await releaseTabDebugger(102);
+  await stopScreencast(102);
+  assert.equal(attachments,1,'A late stop must not reattach the released debugger.');
+});
