@@ -36,6 +36,7 @@ class SnapshotResult:
     snapshot_id: str
     tree: str
     refs: tuple[SnapshotRef, ...]
+    view: dict[str, Any] | None = None
 
     @classmethod
     def from_payload(cls, payload: dict[str, Any]) -> SnapshotResult:
@@ -59,6 +60,7 @@ class SnapshotResult:
             snapshot_id=str(payload.get("snapshot_id") or ""),
             tree=str(payload.get("tree") or "(empty)"),
             refs=refs,
+            view=dict(payload["view"]) if isinstance(payload.get("view"), dict) else None,
         )
 
     def find_ref(self, *, role: str, name: str, nth: int = 0) -> str:

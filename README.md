@@ -256,6 +256,28 @@ Python `browser_cli.task_runtime.write_json_artifact(path, value)` or Node
 returned descriptor. See the [Chinese usage guide](docs/browser-cli-usage-guide-zh.md)
 for the one-off workflow and recovery rules.
 
+The CLI does not require a model turn for each action: one host Python or Node
+script can call the existing client, branch, loop, and print just its final
+fields. Use a short batch for a known sequence and stop at an observation or
+authorization boundary. See [multi-step agent workflows](docs/agent-workflows-zh.md).
+
+`snapshot --compact` keeps the semantic tree and public ref fields while
+omitting repeated locator metadata. Optional `--scope REF`, repeated
+`--role ROLE`, and `--max-lines N` select regions, element types, and an explicit
+line limit. Only these opt-in views add `data.view`, including omission counts
+and `truncated`; default snapshot output is unchanged. A missing scope fails
+instead of returning the whole page. Python/Flow `snapshot()` and Node
+`snapshot()` accept the same options (`maxLines` in Node). Ref actions after a
+URL change require a fresh snapshot. Existing error codes stay stable;
+`meta.failure_kind` distinguishes page changes, stale locators, and deadlines.
+
+With scope/role plus `--interactive`, the scope is resolved before interactive
+filtering and the line limit is applied last; ancestor context is retained.
+Clients verify the returned filters and truncation counts. A completed browser
+action followed by cleanup failure reports `execution_state=completed`; a
+partially filled form followed by rejection remains `unknown`. Neither outcome
+permits automatic replay.
+
 ## Task And Automation Model
 
 Browser CLI separates local authoring from durable publication:

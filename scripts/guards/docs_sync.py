@@ -7,6 +7,9 @@ from pathlib import Path
 from scripts.guards.common import Finding, discover_top_level_packages, read_section
 
 REQUIRED_AGENT_PHRASES = [
+    "Optional snapshot views",
+    "Snapshot view filters run before truncation.",
+    "Composite execution state must include earlier effects:",
     "`close` and `close-tab` are owner-scoped cancellation controls",
     "All CLI errors, including argument errors, return `ok/data/meta` JSON on stdout",
     "Batch step failures exit 75 in the CLI",

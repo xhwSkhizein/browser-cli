@@ -556,6 +556,21 @@ def _add_search_arguments(parser: ArgumentParser) -> None:
 
 def _add_snapshot_arguments(parser: ArgumentParser) -> None:
     parser.add_argument(
+        "--compact",
+        action="store_true",
+        help="Omit repeated ref metadata; keep the semantic tree and actionable refs.",
+    )
+    parser.add_argument("--scope", help="Return the subtree of a semantic ref on this page.")
+    parser.add_argument(
+        "--role",
+        dest="roles",
+        action="append",
+        help="Keep this role's subtrees and ancestors; repeat for multiple roles.",
+    )
+    parser.add_argument(
+        "--max-lines", type=int, help="Limit returned tree lines and explicitly report truncation."
+    )
+    parser.add_argument(
         "-i",
         "--interactive",
         action="store_true",

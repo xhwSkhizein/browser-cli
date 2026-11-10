@@ -24,10 +24,12 @@ from browser_cli.errors import (
     NoSnapshotContextError,
     OperationFailedError,
     RefNotFoundError,
+    StaleSnapshotError,
 )
 from browser_cli.extension import ExtensionHub
 from browser_cli.profiles.discovery import ChromeEnvironment
 from browser_cli.refs import SemanticRefResolver, SemanticSnapshotGenerator, SnapshotRegistry
+from browser_cli.refs.view import SnapshotViewOptions, project_snapshot
 from browser_cli.tabs import TabRegistry
 from browser_cli.tabs.registry import TabRecord
 
@@ -552,20 +554,34 @@ class BrowserService:
         *,
         interactive: bool = False,
         full_page: bool = True,
+        view: SnapshotViewOptions | None = None,
     ) -> dict[str, Any]:
+        # Resolve structured filters before -i removes landmarks or flattens the
+        # tree. Plain -i and compact/truncation-only -i keep the legacy capture.
+        capture_interactive = interactive and not (view is not None and (view.scope or view.roles))
         snapshot_input = await self._active_driver().capture_snapshot_input(
             page_id,
-            interactive=interactive,
+            interactive=capture_interactive,
             full_page=full_page,
         )
         semantic_snapshot = self._snapshot_generator.snapshot_from_raw_text(
             snapshot_input.raw_snapshot,
             page_id=page_id,
             captured_url=snapshot_input.captured_url,
-            interactive=interactive,
+            interactive=capture_interactive,
             full_page=full_page,
             captured_at=snapshot_input.captured_at,
         )
+        projected = None
+        if view is not None:
+            try:
+                projected = project_snapshot(semantic_snapshot, view, interactive=interactive)
+            except KeyError as exc:
+                if self._snapshot_registry.get_ref(page_id, str(exc.args[0])) is not None:
+                    raise StaleSnapshotError(
+                        "Snapshot scope disappeared. Capture a new snapshot."
+                    ) from exc
+                raise RefNotFoundError("Snapshot scope is not present on this page.") from exc
         state = self._snapshot_registry.store(semantic_snapshot)
         return {
             "page_id": page_id,
@@ -573,13 +589,19 @@ class BrowserService:
             "snapshot_id": semantic_snapshot.metadata.snapshot_id,
             "captured_url": state.captured_url,
             "captured_at": state.captured_at,
-            "refs_summary": [
-                {
-                    "ref": ref,
-                    **data.to_summary(),
+            **(
+                projected
+                if projected is not None
+                else {
+                    "refs_summary": [
+                        {
+                            "ref": ref,
+                            **data.to_summary(),
+                        }
+                        for ref, data in semantic_snapshot.refs.items()
+                    ]
                 }
-                for ref, data in semantic_snapshot.refs.items()
-            ],
+            ),
         }
 
     async def navigate(
@@ -633,14 +655,26 @@ class BrowserService:
     async def fill_form(
         self, page_id: str, fields: list[dict[str, Any]], *, submit: bool = False
     ) -> dict[str, Any]:
-        for field in fields:
-            ref = str(field.get("ref") or "").strip()
-            text = str(field.get("text") or "")
-            if not ref:
-                raise InvalidInputError("Each fill-form field must include a ref.")
-            await self.fill_ref(page_id, ref, text, submit=False)
-        if submit and fields:
-            await self._active_driver().press_key(page_id, "Enter")
+        filled = 0
+        try:
+            for field in fields:
+                ref = str(field.get("ref") or "").strip()
+                text = str(field.get("text") or "")
+                if not ref:
+                    raise InvalidInputError("Each fill-form field must include a ref.")
+                await self.fill_ref(page_id, ref, text, submit=False)
+                filled += 1
+            if submit and filled:
+                # Input handlers may have navigated after the final fill. Do not
+                # press Enter on a page that this form's snapshot did not describe.
+                await self._require_locator(page_id, ref)
+                await self._active_driver().press_key(page_id, "Enter")
+        except BrowserCliError as exc:
+            if filled:
+                # A later field or submit rejection describes that substep only;
+                # it cannot make the earlier field effects unstarted or undone.
+                exc.payload["execution_state"] = "unknown"
+            raise
         return {"page_id": page_id, "filled_fields": len(fields), "submitted": submit}
 
     async def select_option(self, page_id: str, ref: str, text: str) -> dict[str, Any]:
@@ -1004,6 +1038,13 @@ class BrowserService:
             if normalized is None:
                 raise InvalidInputError(f"Invalid ref: {ref}")
             raise RefNotFoundError()
+        current = await self._active_driver().get_page_summary(page_id)
+        if current["url"] != state.captured_url:
+            error = StaleSnapshotError(
+                "Page URL changed since the snapshot. Capture a new snapshot before acting."
+            )
+            error.payload = {"execution_state": "not_started", "failure_kind": "page_changed"}
+            raise error
         return locator
 
     async def _scroll_page_to_bottom(self, page_id: str) -> None:

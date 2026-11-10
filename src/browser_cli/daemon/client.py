@@ -35,6 +35,7 @@ from browser_cli.errors import (
     TabNotFoundError,
     TemporaryReadError,
 )
+from browser_cli.refs.view import SnapshotViewOptions
 
 from .transport import (
     DAEMON_RUNTIME_VERSION,
@@ -117,8 +118,89 @@ async def _send_command_async(action: str, args: dict[str, Any]) -> dict[str, An
             error_code="INVALID_RESPONSE",
         ) from exc
     if payload.get("ok"):
+        _check_snapshot_views(action, args, payload)
         return payload
     raise _error_from_payload(payload)
+
+
+def _snapshot_view_applied(args: dict[str, Any], data: dict[str, Any]) -> bool:
+    try:
+        options = SnapshotViewOptions.from_dict(args)
+    except ValueError:
+        return False
+    if options is None:
+        return True
+    view = data.get("view")
+    if not isinstance(view, dict):
+        return False
+    if options.compact and view.get("compact") is not True:
+        return False
+    if options.scope is not None and view.get("scope") != options.scope:
+        return False
+    if options.roles and view.get("roles") != list(options.roles):
+        return False
+    if (
+        args.get("interactive")
+        and (options.scope or options.roles)
+        and view.get("interactive") is not True
+    ):
+        return False
+    if options.max_lines is not None:
+        matched, returned, truncated = (
+            view.get("matched_lines"),
+            view.get("returned_lines"),
+            view.get("truncated"),
+        )
+        if (
+            type(view.get("max_lines")) is not int
+            or view["max_lines"] != options.max_lines
+            or type(matched) is not int
+            or type(returned) is not int
+            or type(truncated) is not bool
+            or matched < 0
+            or returned != min(matched, options.max_lines)
+            or truncated != (returned < matched)
+        ):
+            return False
+    return True
+
+
+def _check_snapshot_views(action: str, args: dict[str, Any], payload: dict[str, Any]) -> None:
+    """Reject an older daemon's unfiltered observations without replaying work."""
+    if action == "batch":
+        commands = args.get("commands", [])
+        for result in payload["data"].get("results", []):
+            index = result.get("index")
+            if result.get("ok") and isinstance(index, int) and 0 <= index < len(commands):
+                command = commands[index]
+                try:
+                    _check_snapshot_views(command["action"], command.get("args", {}), result)
+                except OperationFailedError as exc:
+                    exc.payload.update(
+                        {
+                            "execution_state": "unknown",
+                            "meta": payload["meta"],
+                            "batch_progress": {
+                                key: payload["data"].get(key)
+                                for key in (
+                                    "success",
+                                    "completed",
+                                    "completed_count",
+                                    "total_count",
+                                    "failed_indices",
+                                )
+                            },
+                        }
+                    )
+                    raise
+        return
+    if action == "snapshot" and not _snapshot_view_applied(args, payload["data"]):
+        error = OperationFailedError(
+            "Daemon did not apply the requested snapshot view. Upgrade Browser CLI and run browser-cli reload.",
+            error_code="DAEMON_INCOMPATIBLE",
+        )
+        error.payload = {"execution_state": "completed", "meta": payload["meta"]}
+        raise error
 
 
 def ensure_daemon_running() -> None:

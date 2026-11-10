@@ -5,3 +5,5 @@ recursive-include tests *.py
 include docs/automation-api-zh.md
 include scripts/smoke_installed_wheel.py
 include scripts/browser_test_support.py
+include scripts/benchmark_agent_workflows.py
+include docs/agent-workflows-zh.md

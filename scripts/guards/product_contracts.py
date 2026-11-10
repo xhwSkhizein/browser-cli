@@ -107,6 +107,14 @@ def run(_root: Path) -> list[Finding]:
             "--page-range",
         },
         "batch": {"--commands", "--file", "--context", "--context-file", "--result-mode"},
+        "snapshot": {
+            "--interactive",
+            "--no-full-page",
+            "--compact",
+            "--scope",
+            "--role",
+            "--max-lines",
+        },
         "eval": {"--file", "--output", "--json"},
         "eval-on": {"--file", "--output", "--json"},
     }.items():

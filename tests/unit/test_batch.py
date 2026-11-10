@@ -12,7 +12,7 @@ from browser_cli.daemon.app import BrowserDaemonApp
 from browser_cli.daemon.models import DaemonRequest
 from browser_cli.daemon.state import DaemonState
 from browser_cli.daemon.transport import DAEMON_RUNTIME_VERSION
-from browser_cli.errors import InvalidInputError
+from browser_cli.errors import InvalidInputError, NoActiveTabError, OperationFailedError
 
 
 class Service:
@@ -52,6 +52,42 @@ def app_with_steps():
     return app, service, seen
 
 
+@pytest.mark.parametrize("mode", ["all", "last", "summary"])
+def test_batch_deadline_keeps_legacy_code_and_exposes_typed_failure_without_replay(mode):
+    async def scenario():
+        app, _, seen = app_with_steps()
+
+        async def deadline(req):
+            seen.append(req.args["n"])
+            if req.args["n"] == 1:
+                raise TimeoutError("local fixture deadline")
+            return {"value": "done"}
+
+        app._handlers["eval"] = deadline
+        response = await app.execute(
+            request(
+                args={
+                    "commands": [
+                        {"action": "eval", "args": {"n": i, "private_input": "fixture-secret"}}
+                        for i in range(3)
+                    ],
+                    "result_mode": mode,
+                }
+            )
+        )
+        assert response.ok and not response.data["success"]
+        assert response.data["completed_count"] == 2  # attempted steps, including the failure
+        assert response.data["failed_indices"] == [1] and seen == [0, 1]
+        error = response.data["errors"][0]
+        assert error["error_code"] == "INTERNAL_ERROR"
+        assert error["meta"]["failure_kind"] == "timeout"
+        assert error["execution_state"] == "unknown"
+        assert "private_input" not in str(response.to_dict())
+        assert "fixture-secret" not in str(response.to_dict())
+
+    asyncio.run(scenario())
+
+
 @pytest.mark.parametrize("mode,indices", [("all", [0, 1, 2]), ("last", [2]), ("summary", [1])])
 def test_batch_orders_actions_and_preserves_errors_with_compact_results(mode, indices):
     app, _, seen = app_with_steps()
@@ -89,6 +125,76 @@ def test_batch_stops_after_failure_by_default():
     )
     assert seen == [0]
     assert response.data["completed"] is False
+
+
+@pytest.mark.parametrize("mode", ["all", "last", "summary"])
+@pytest.mark.parametrize("unexpected", [False, True])
+def test_cleanup_failure_after_a_successful_step_cannot_report_not_started(mode, unexpected):
+    app, service, seen = app_with_steps()
+    service.end_command.side_effect = (
+        RuntimeError("cleanup failed") if unexpected else NoActiveTabError()
+    )
+    response = asyncio.run(
+        app.execute(
+            request(
+                args={
+                    "commands": [{"action": "eval", "args": {"n": i}} for i in range(2)],
+                    "result_mode": mode,
+                }
+            )
+        )
+    )
+    assert seen == [0]
+    assert response.data["completed_count"] == 1 and response.data["failed_indices"] == [0]
+    assert response.data["completed"] is False
+    assert response.data["errors"][0]["execution_state"] == "completed"
+    assert response.data["errors"][0]["error_code"] == (
+        "INTERNAL_ERROR" if unexpected else "NO_ACTIVE_TAB"
+    )
+    service.end_command.assert_awaited_once()
+
+
+@pytest.mark.parametrize("unexpected", [False, True])
+def test_cleanup_failure_preserves_partial_step_error_and_batch_progress(unexpected):
+    app, service, seen = app_with_steps()
+    service.end_command.side_effect = RuntimeError("cleanup failed")
+
+    async def partial(_request):
+        seen.append("effect")
+        if unexpected:
+            raise RuntimeError("Primary failure")
+        error = OperationFailedError("Primary failure", error_code="FIXTURE_PARTIAL")
+        error.payload = {"execution_state": "unknown"}
+        raise error
+
+    app._handlers["eval"] = partial
+    response = asyncio.run(
+        app.execute(request(args={"commands": [{"action": "eval"}, {"action": "eval"}]}))
+    )
+    assert response.ok and response.data["success"] is False
+    assert response.data["completed_count"] == 1
+    assert response.data["failed_indices"] == [0] and seen == ["effect"]
+    error = response.data["errors"][0]
+    assert error["error_code"] == ("INTERNAL_ERROR" if unexpected else "FIXTURE_PARTIAL")
+    assert error["execution_state"] == "unknown"
+    assert error["meta"]["cleanup_failed"] is True
+    service.end_command.assert_awaited_once()
+
+
+def test_cleanup_failure_cannot_replace_cancellation():
+    async def scenario():
+        app, service, _ = app_with_steps()
+        service.end_command.side_effect = RuntimeError("cleanup failed")
+
+        async def cancel(_request):
+            raise asyncio.CancelledError
+
+        app._handlers["eval"] = cancel
+        with pytest.raises(asyncio.CancelledError):
+            await app.execute(request("eval"))
+        service.end_command.assert_awaited_once()
+
+    asyncio.run(scenario())
 
 
 @pytest.mark.parametrize(

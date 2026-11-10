@@ -43,6 +43,77 @@ async function daemon(t, handle, clientOptions = {}) {
 
 const success = (data = {}) => ({ ok: true, data, meta: { action: 'eval', runtime_version: runtimeVersion } });
 
+test('snapshot views are opt-in, forwarded, and retain truncation metadata', async t => {
+  const requests = [];
+  const {client} = await daemon(t, (request, socket) => {
+    requests.push(request);
+    socket.end(JSON.stringify(success({tree:'- main', refs_summary:[], view:{compact:true, scope:'deadbeef', roles:['button'], max_lines:2, matched_lines:3, returned_lines:2, truncated:true}})) + '\n');
+  });
+  await client.snapshot();
+  assert.deepEqual(requests[0].args, {interactive:false, full_page:true});
+  const result = await client.snapshot({compact:true, scope:'@deadbeef', roles:['button'], maxLines:2});
+  assert.deepEqual(requests[1].args, {interactive:false, full_page:true, compact:true, scope:'@deadbeef', roles:['button'], max_lines:2});
+  assert.equal(result.view.truncated, true);
+});
+
+for (const batch of [false, true]) {
+  for (const [args, view] of [
+    [{compact:true}, {compact:false}],
+    [{scope:'@deadbeef'}, {scope:null}],
+    [{roles:['main']}, {roles:[]}],
+    [{roles:['main'], interactive:true}, {roles:['main'], interactive:false}],
+    [{max_lines:2}, {max_lines:null}],
+    [{max_lines:2}, {max_lines:2, matched_lines:3, returned_lines:3, truncated:false}],
+    [{max_lines:2}, {max_lines:2, matched_lines:3, returned_lines:2, truncated:false}],
+  ]) {
+    test(`view acknowledgement must match requested filters (batch=${batch}, args=${JSON.stringify(args)})`, async t => {
+      let calls = 0;
+      const {client} = await daemon(t, (_request, socket) => {
+        calls++;
+        const step = success({tree:'private full page', view});
+        const data = batch ? {results:[{...step, index:0}], completed_count:1, total_count:2, failed_indices:[], completed:false, success:false} : step.data;
+        socket.end(JSON.stringify(success(data)) + '\n');
+      });
+      await assert.rejects(batch
+        ? client.request('batch', {commands:[{action:'snapshot', args}]})
+        : client.request('snapshot', args), error => {
+        assert.equal(error.code, 'DAEMON_INCOMPATIBLE');
+        assert.equal(error.payload.execution_state, batch ? 'unknown' : 'completed');
+        if (batch) assert.equal(error.payload.batch_progress.completed_count, 1);
+        assert.equal(JSON.stringify(error.payload).includes('private full page'), false);
+        return true;
+      });
+      assert.equal(calls, 1);
+    });
+  }
+}
+
+test('view acknowledgement accepts normalized scope and deduplicated roles', async t => {
+  const {client} = await daemon(t, (_request, socket) => {
+    socket.end(JSON.stringify(success({view:{scope:'deadbeef', roles:['main'], max_lines:2, matched_lines:1, returned_lines:1, truncated:false}})) + '\n');
+  });
+  await client.request('snapshot', {scope:'ref=DEADBEEF', roles:['main', 'main'], max_lines:2});
+});
+
+for (const batch of [false, true]) {
+  test(`older daemon cannot silently ignore a snapshot view (batch=${batch})`, async t => {
+    let calls = 0;
+    const {client} = await daemon(t, (request, socket) => {
+      calls++;
+      const data = batch ? {results:[{...success({tree:'unfiltered'}), index:0}]} : {tree:'unfiltered'};
+      socket.end(JSON.stringify(success(data)) + '\n');
+    });
+    await assert.rejects(batch
+      ? client.request('batch', {commands:[{action:'snapshot', args:{compact:true}}]})
+      : client.snapshot({compact:true}), error => {
+      assert.equal(error.code, 'DAEMON_INCOMPATIBLE');
+      assert.equal(error.payload.execution_state, batch ? 'unknown' : 'completed');
+      return true;
+    });
+    assert.equal(calls, 1, 'An executed observation must never be replayed automatically');
+  });
+}
+
 test('status configuration reaches the daemon instead of being replaced by the compatibility probe', async t => {
   const requests = [];
   const {client} = await daemon(t, (request, socket) => {

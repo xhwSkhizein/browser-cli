@@ -64,6 +64,10 @@ the implementation, and where should a change land first.
 - `v2` uses `X_AGENT_ID` to isolate tab visibility and active-tab state.
 - `v2` must not expose session concepts or global `--page` targeting flags.
 - Semantic refs should follow bridgic-style reconstruction rather than DOM marker lookup.
+- Optional snapshot views (`--compact`, `--scope`, repeated `--role`, `--max-lines`) reduce only the response; the daemon retains the complete snapshot and the same semantic refs. `view` reports filters, counts and truncation. Default snapshot output is unchanged. Inspect `refs/view.py` before changing observation size; do not introduce a driver-local ref system. Old daemons that omit requested view metadata are rejected by the clients without replay.
+- Snapshot view filters run before truncation. Scope/role plus interactive mode captures the full structure first, then selects interactive descendants and ancestor context; a present noninteractive scope must not be reported stale. Plain `-i` and compact-only `-i` retain their representation. The generator records internal `SemanticSnapshot.line_refs` provenance; `refs/view.py` carries those identities through projection instead of reconstructing them from quoted page text, and never serializes provenance into the public payload. Python and Node clients verify acknowledged filters and truncation counts instead of accepting any `view` object.
+- Ref actions verify the current page URL against the captured URL before dispatch; a changed URL returns `STALE_SNAPSHOT`, `meta.failure_kind=page_changed`, and `execution_state=not_started`. This does not prove document identity across same-URL reloads or eliminate navigation races. Other existing error codes remain stable; backend deadlines add `meta.failure_kind=timeout`.
+- Composite execution state must include earlier effects: `fill-form` rechecks the page before Enter, and any later field/submit rejection after a successful fill remains `unknown`. If a browser action returned success and only command cleanup failed, report `completed`; cleanup of a failed action must preserve its primary error and recorded batch progress, with `meta.cleanup_failed` for a secondary cleanup failure. Cleanup failure must not replace cancellation, which retains the existing `unknown` response contract without promising complete step progress. Never repeat cleanup or replay the action to recover its result.
 - Daemon-side semantic refs remain the only ref system; drivers must not fork product semantics.
 - Dual-driver support must preserve one CLI/daemon JSON contract across both `playwright_driver` and `extension_driver`.
 - Driver parity is enforced through an explicit driver contract. Do not reintroduce dynamic backend passthrough through `__getattr__` or similar implicit escape hatches.
@@ -207,6 +211,8 @@ the implementation, and where should a change land first.
   `skills/browser-cli-delivery/SKILL.md`
 - Tests for behavior and contracts:
   `tests/unit/*`, `tests/integration/*`
+- Reproducible local multi-step workloads and response-size measurements:
+  `scripts/benchmark_agent_workflows.py`, `tests/agent_workflow_fixture.py`, `tests/integration/test_agent_workflows.py`. Run as a module through uv. They share one preflighted test browser and measure actual daemon traffic; real Agent tool calls and model metrics are explicitly unmeasured.
 - Repo-local git branch protection hooks:
   `.githooks/pre-commit`, `.githooks/pre-push`
 
@@ -328,6 +334,7 @@ public interactive commands.
 - Tab targeting is agent-scoped. Do not add public `--page`, `--page-id`, session IDs, or similar cross-agent escape hatches.
 - Drivers must accept daemon-built `LocatorSpec`, not raw `ref` strings.
 - Drivers must expose snapshot input, not final snapshot rendering. Final semantic snapshot generation stays daemon-owned.
+- Playwright read-only waits shield and consume their protocol replies on caller cancellation (`browser/service.py::_await_observation`); otherwise page-close replies can become unhandled futures. Do not apply this observation helper to mutating actions or replay canceled work.
 - Extension and Playwright backends must stay behaviorally aligned on the same public contract even if their internal mechanics differ.
 - Popup daemon status reads and workspace rebuild requests flow through the extension listener HTTP surface in `src/browser_cli/extension/session.py`; keep popup UI logic out of that state interpretation path.
 - The extension listener is implemented on the WebSocket listener stack, which only accepts body-less `GET` HTTP requests before upgrade. If popup control endpoints need to mutate runtime state, keep them narrow and route them through dedicated `GET` paths instead of adding a parallel HTTP server.
@@ -352,6 +359,7 @@ public interactive commands.
 - `tests/browser_runtime.py` configures disposable daemon profiles through the existing `chrome_environment` protocol before CLI browser actions, including after reload. Keep the user's `HOME` intact and isolate tests with `BROWSER_CLI_HOME`.
 - `scripts/lint.sh` owns repository lint execution.
 - `scripts/test.sh` owns repository test execution.
+- CI browser integration uses Ubuntu 24.04 while `uv.lock` pins Playwright 1.58; moving to `ubuntu-latest` can select an unsupported OS and fail before tests run. Keep the runner compatible with the locked browser dependencies.
 - `scripts/guard.sh` owns architecture, product-contract, and doc-sync guards.
 - `scripts/check.sh` runs lint, tests, and guard in the expected order.
 - The guard implementations live under `scripts/guards/`.

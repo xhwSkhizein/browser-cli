@@ -23,6 +23,7 @@ from browser_cli.errors import (
     OperationFailedError,
 )
 from browser_cli.profiles.discovery import ChromeEnvironment
+from browser_cli.refs.view import SnapshotViewOptions
 from browser_cli.tabs import TabRegistry
 
 from .models import DaemonRequest, DaemonResponse
@@ -155,9 +156,25 @@ class BrowserDaemonApp:
             )
         runtime_meta: dict[str, Any] = {}
         command_started = False
+        action_completed = False
         end_command = self._state.browser_service.end_command
         if request.action in {"close", "close-tab"}:
             end_command = partial(end_command, allow_rebind=False)
+
+        async def cleanup_after_failure() -> dict[str, Any]:
+            try:
+                return await end_command()
+            except Exception as cleanup_error:
+                # Preserve the original operation outcome and batch progress.
+                # Never log request arguments or replace cancellation with a
+                # secondary cleanup exception.
+                logger.warning(
+                    "Command cleanup failed: action=%s error_type=%s",
+                    request.action,
+                    type(cleanup_error).__name__,
+                )
+                return {"cleanup_failed": True}
+
         try:
             if (
                 request.runtime_version is not None
@@ -187,6 +204,7 @@ class BrowserDaemonApp:
                 await self._state.browser_service.begin_command(request.action)
                 command_started = True
             data = await handler(request)
+            action_completed = command_started
             meta = {
                 "action": request.action,
                 "agent_id": agent_id,
@@ -213,22 +231,37 @@ class BrowserDaemonApp:
             return DaemonResponse.success(data, meta=meta)
         except asyncio.CancelledError:
             if command_started:
-                await end_command()
+                command_started = False
+                await cleanup_after_failure()
             raise
         except BrowserCliError as exc:
             if command_started:
-                runtime_meta = await end_command()
+                command_started = False
+                runtime_meta = await cleanup_after_failure()
+            if action_completed:
+                # Cleanup failure cannot erase a successful browser action or
+                # suggest that replaying a mutating step is safe.
+                exc.payload["execution_state"] = "completed"
             return self._error_response(exc, request=request, runtime_meta=runtime_meta)
         except Exception as exc:  # pragma: no cover - last-resort daemon guard
             if command_started:
-                runtime_meta = await end_command()
+                command_started = False
+                runtime_meta = await cleanup_after_failure()
+            # Preserve existing public error codes while giving agents a typed
+            # signal for backend deadlines. No action is retried or replayed.
+            if type(exc).__name__ == "TimeoutError":
+                runtime_meta = {**runtime_meta, "failure_kind": "timeout"}
             logger.exception("Unexpected daemon failure in action=%s", request.action)
+            error = OperationFailedError(
+                f"Unexpected daemon failure: {exc}\n{traceback.format_exc()}",
+                error_code=error_codes.INTERNAL_ERROR,
+            )
+            if action_completed:
+                error.payload["execution_state"] = "completed"
             return self._error_response(
-                OperationFailedError(
-                    f"Unexpected daemon failure: {exc}\n{traceback.format_exc()}",
-                    error_code=error_codes.INTERNAL_ERROR,
-                ),
+                error,
                 request=request,
+                runtime_meta=runtime_meta,
             )
 
     def _error_response(
@@ -248,6 +281,17 @@ class BrowserDaemonApp:
         }
         if runtime_meta:
             meta.update(runtime_meta)
+        failure_kind = exc.payload.get("failure_kind") or {
+            error_codes.NO_SNAPSHOT_CONTEXT: "snapshot_missing",
+            error_codes.REF_NOT_FOUND: "ref_unknown",
+            error_codes.STALE_SNAPSHOT: "locator_stale",
+            error_codes.AMBIGUOUS_REF: "locator_ambiguous",
+            error_codes.TAB_NOT_FOUND: "page_inaccessible",
+            error_codes.OPERATION_CANCELLED: "canceled",
+            error_codes.EXTENSION_DISCONNECTED: "disconnected",
+        }.get(exc.error_code)
+        if failure_kind is not None:
+            meta["failure_kind"] = failure_kind
         return DaemonResponse.failure(
             error_code=exc.error_code,
             error_message=exc.message,
@@ -564,12 +608,20 @@ class BrowserDaemonApp:
     async def _handle_snapshot(self, request: DaemonRequest) -> dict[str, Any]:
         interactive = bool(request.args.get("interactive"))
         full_page = bool(request.args.get("full_page", True))
+        try:
+            view = SnapshotViewOptions.from_dict(request.args)
+        except ValueError as exc:
+            error = InvalidInputError(str(exc))
+            error.payload = {"execution_state": "not_started"}
+            raise error from exc
 
         async def _snapshot(page_id: str) -> dict[str, Any]:
+            options = {"view": view} if view is not None else {}
             payload = await self._state.browser_service.capture_snapshot(
                 page_id,
                 interactive=interactive,
                 full_page=full_page,
+                **options,
             )
             refs_summary = payload.get("refs_summary", [])
             ref_ids = {str(item.get("ref")) for item in refs_summary if item.get("ref")}

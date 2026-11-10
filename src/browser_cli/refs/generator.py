@@ -217,7 +217,7 @@ class SemanticSnapshotGenerator:
                 interactive=interactive,
                 full_page=full_page,
             )
-            return SemanticSnapshot(tree="(empty)", refs={}, metadata=metadata)
+            return SemanticSnapshot(tree="(empty)", refs={}, metadata=metadata, line_refs=())
 
         normalized = self._normalize_raw_snapshot(raw_snapshot)
         snapshot_id = f"snap_{uuid.uuid4().hex[:12]}"
@@ -233,6 +233,12 @@ class SemanticSnapshotGenerator:
 
         refs: dict[str, RefData] = {}
         result: list[str] = []
+        line_refs: list[str | None] = []
+
+        def append_line(line: str, ref: str | None = None) -> None:
+            result.append(line)
+            line_refs.append(ref)
+
         depth_stack: list[tuple[int, bool, int, str | None]] = []
         iframe_stack: list[tuple[int, tuple[int, ...]]] = []
         iframe_local_counters: dict[tuple[int, ...], int] = {}
@@ -266,11 +272,11 @@ class SemanticSnapshotGenerator:
                 stripped = line.lstrip()
                 if interactive:
                     if stripped.startswith("- /") and any(kept for _, kept, _, _ in depth_stack):
-                        result.append(f"{'  ' * effective_depth(original_depth)}- {stripped[2:]}")
+                        append_line(f"{'  ' * effective_depth(original_depth)}- {stripped[2:]}")
                     continue
                 if any(kept for _, kept, _, _ in depth_stack) or not depth_stack:
                     content = stripped[2:] if stripped.startswith("- ") else stripped
-                    result.append(f"{'  ' * effective_depth(original_depth)}- {content}")
+                    append_line(f"{'  ' * effective_depth(original_depth)}- {content}")
                 continue
 
             _, role, name, suffix = match.groups()
@@ -284,7 +290,7 @@ class SemanticSnapshotGenerator:
 
             if role.startswith("/"):
                 if any(kept for _, kept, _, _ in depth_stack) or not depth_stack:
-                    result.append(f"{'  ' * effective_depth(original_depth)}- {role}{suffix}")
+                    append_line(f"{'  ' * effective_depth(original_depth)}- {role}{suffix}")
                 continue
 
             keep, have_ref = self._should_keep(
@@ -371,7 +377,7 @@ class SemanticSnapshotGenerator:
                 else:
                     enhanced += f" {clean_suffix}"
 
-            result.append(enhanced)
+            append_line(enhanced, current_ref)
 
         dedup_counts: dict[tuple[str, str | None, tuple[int, ...]], int] = {}
         for item in refs.values():
@@ -383,4 +389,4 @@ class SemanticSnapshotGenerator:
                 refs[ref] = replace(data, nth=None)
 
         tree = "\n".join(result) if result else "(empty)"
-        return SemanticSnapshot(tree=tree, refs=refs, metadata=metadata)
+        return SemanticSnapshot(tree=tree, refs=refs, metadata=metadata, line_refs=tuple(line_refs))
