@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createInputHandlers} from '../src/background/input_actions.js';
-import {forgetInputState, keyInput, mouseInput, typeInput} from '../src/native_input.js';
+import {forgetInputState, keyInput, mouseInput, typeInput, withInputFocus} from '../src/native_input.js';
 import {registerDebuggerListeners} from '../src/debugger.js';
 import {scrollPageJs} from '../src/page_runtime.js';
 import {runInNewContext} from 'node:vm';
@@ -17,6 +17,20 @@ function setup(t) {
   t.after(()=>{forgetInputState(700);delete globalThis.chrome});
   return {calls,listeners};
 }
+test('background focus is temporary and cleanup preserves an input failure without replay',async t=>{
+  const {calls}=setup(t);
+  assert.deepEqual(await withInputFocus(700,()=>mouseInput(700,'mouse-click',{x:20,y:30})),{x:20,y:30,button:'left',count:1});
+  assert.deepEqual(calls.filter(c=>c.method==='Emulation.setFocusEmulationEnabled').map(c=>c.params.enabled),[true,false]);
+  calls.length=0;
+  await assert.rejects(withInputFocus(700,async()=>{throw Error('input failed')}),/input failed/);
+  assert.deepEqual(calls.map(c=>c.params.enabled),[true,false]);
+  const original=chrome.debugger.sendCommand;
+  chrome.debugger.sendCommand=async(target,method,params)=>{
+    if(params.enabled===false) throw Error('cleanup failed');
+    return original(target,method,params);
+  };
+  await assert.rejects(withInputFocus(700,async()=>{throw Error('primary input failure')}),/primary input failure/);
+});
 test('keyboard preserves held modifiers, native editing commands and compact results',async t=>{
   const {calls}=setup(t);
   assert.deepEqual(await keyInput(700,'key-down','Shift'),{key:'Shift'});

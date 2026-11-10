@@ -1,0 +1,661 @@
+{
+  "samples": 3,
+  "harness_sha256": "c6634ed342a300b89aa80a87b7eece335176f0b08f4fccfa8af22109c965c910",
+  "environment": {
+    "viewport": [
+      1920,
+      1118,
+      2
+    ],
+    "visibility": "hidden",
+    "x": 1422,
+    "y": 29
+  },
+  "passed": 3,
+  "total": 24,
+  "input_commands": {
+    "calls": 42,
+    "request_bytes": 6660,
+    "response_bytes": 11025
+  },
+  "all_requests": {
+    "calls": 96,
+    "request_bytes": 29512,
+    "response_bytes": 25766
+  },
+  "summary": [
+    {
+      "name": "mouse-focus",
+      "passed": 0,
+      "total": 3,
+      "median_ms": 14.793042000000241,
+      "calls": 3,
+      "request_bytes": 555,
+      "response_bytes": 888
+    },
+    {
+      "name": "tab-default",
+      "passed": 0,
+      "total": 3,
+      "median_ms": 7.221875000000182,
+      "calls": 3,
+      "request_bytes": 447,
+      "response_bytes": 744
+    },
+    {
+      "name": "select-all",
+      "passed": 0,
+      "total": 3,
+      "median_ms": 6.453375000000051,
+      "calls": 3,
+      "request_bytes": 456,
+      "response_bytes": 753
+    },
+    {
+      "name": "backspace-default",
+      "passed": 0,
+      "total": 3,
+      "median_ms": 9.409166000000369,
+      "calls": 6,
+      "request_bytes": 948,
+      "response_bytes": 1542
+    },
+    {
+      "name": "held-shift",
+      "passed": 0,
+      "total": 3,
+      "median_ms": 12.637625000000298,
+      "calls": 9,
+      "request_bytes": 1386,
+      "response_bytes": 2289
+    },
+    {
+      "name": "move-down-up-focus",
+      "passed": 0,
+      "total": 3,
+      "median_ms": 18.661293000000114,
+      "calls": 9,
+      "request_bytes": 1416,
+      "response_bytes": 2352
+    },
+    {
+      "name": "type-trusted",
+      "passed": 0,
+      "total": 3,
+      "median_ms": 5.858374999999796,
+      "calls": 3,
+      "request_bytes": 516,
+      "response_bytes": 801
+    },
+    {
+      "name": "scroll-after-move",
+      "passed": 3,
+      "total": 3,
+      "median_ms": 10.111417000000074,
+      "calls": 6,
+      "request_bytes": 936,
+      "response_bytes": 1656
+    }
+  ],
+  "rows": [
+    {
+      "name": "mouse-focus",
+      "sample": 0,
+      "passed": false,
+      "visibility": "hidden",
+      "commands": [
+        {
+          "action": "mouse-click",
+          "request_bytes": 185,
+          "response_bytes": 296,
+          "ms": 21.575458000000253,
+          "measured": true
+        }
+      ],
+      "ms": 21.575458000000253,
+      "request_bytes": 185,
+      "response_bytes": 296
+    },
+    {
+      "name": "tab-default",
+      "sample": 0,
+      "passed": false,
+      "visibility": "hidden",
+      "commands": [
+        {
+          "action": "press",
+          "request_bytes": 149,
+          "response_bytes": 248,
+          "ms": 8.461833999999726,
+          "measured": true
+        }
+      ],
+      "ms": 8.461833999999726,
+      "request_bytes": 149,
+      "response_bytes": 248
+    },
+    {
+      "name": "select-all",
+      "sample": 0,
+      "passed": false,
+      "visibility": "hidden",
+      "commands": [
+        {
+          "action": "press",
+          "request_bytes": 152,
+          "response_bytes": 251,
+          "ms": 6.453375000000051,
+          "measured": true
+        }
+      ],
+      "ms": 6.453375000000051,
+      "request_bytes": 152,
+      "response_bytes": 251
+    },
+    {
+      "name": "backspace-default",
+      "sample": 0,
+      "passed": false,
+      "visibility": "hidden",
+      "commands": [
+        {
+          "action": "press",
+          "request_bytes": 161,
+          "response_bytes": 260,
+          "ms": 5.682458000000224,
+          "measured": true
+        },
+        {
+          "action": "press",
+          "request_bytes": 155,
+          "response_bytes": 254,
+          "ms": 3.7267080000001442,
+          "measured": true
+        }
+      ],
+      "ms": 9.409166000000369,
+      "request_bytes": 316,
+      "response_bytes": 514
+    },
+    {
+      "name": "held-shift",
+      "sample": 0,
+      "passed": false,
+      "visibility": "hidden",
+      "commands": [
+        {
+          "action": "key-down",
+          "request_bytes": 154,
+          "response_bytes": 256,
+          "ms": 4.531667000000198,
+          "measured": true
+        },
+        {
+          "action": "press",
+          "request_bytes": 156,
+          "response_bytes": 255,
+          "ms": 3.861166000000594,
+          "measured": true
+        },
+        {
+          "action": "key-up",
+          "request_bytes": 152,
+          "response_bytes": 252,
+          "ms": 4.2447919999995065,
+          "measured": true
+        }
+      ],
+      "ms": 12.637625000000298,
+      "request_bytes": 462,
+      "response_bytes": 763
+    },
+    {
+      "name": "move-down-up-focus",
+      "sample": 0,
+      "passed": false,
+      "visibility": "hidden",
+      "commands": [
+        {
+          "action": "mouse-move",
+          "request_bytes": 158,
+          "response_bytes": 264,
+          "ms": 6.4698749999997744,
+          "measured": true
+        },
+        {
+          "action": "mouse-down",
+          "request_bytes": 158,
+          "response_bytes": 262,
+          "ms": 6.966459000000214,
+          "measured": true
+        },
+        {
+          "action": "mouse-up",
+          "request_bytes": 156,
+          "response_bytes": 258,
+          "ms": 5.224959000000126,
+          "measured": true
+        }
+      ],
+      "ms": 18.661293000000114,
+      "request_bytes": 472,
+      "response_bytes": 784
+    },
+    {
+      "name": "type-trusted",
+      "sample": 0,
+      "passed": false,
+      "visibility": "hidden",
+      "commands": [
+        {
+          "action": "type",
+          "request_bytes": 172,
+          "response_bytes": 267,
+          "ms": 7.6287499999998545,
+          "measured": true
+        }
+      ],
+      "ms": 7.6287499999998545,
+      "request_bytes": 172,
+      "response_bytes": 267
+    },
+    {
+      "name": "scroll-after-move",
+      "sample": 0,
+      "passed": true,
+      "visibility": "hidden",
+      "commands": [
+        {
+          "action": "mouse-move",
+          "request_bytes": 158,
+          "response_bytes": 264,
+          "ms": 5.244666999999936,
+          "measured": true
+        },
+        {
+          "action": "scroll",
+          "request_bytes": 154,
+          "response_bytes": 288,
+          "ms": 4.866750000000138,
+          "measured": true
+        }
+      ],
+      "ms": 10.111417000000074,
+      "request_bytes": 312,
+      "response_bytes": 552
+    },
+    {
+      "name": "mouse-focus",
+      "sample": 1,
+      "passed": false,
+      "visibility": "hidden",
+      "commands": [
+        {
+          "action": "mouse-click",
+          "request_bytes": 185,
+          "response_bytes": 296,
+          "ms": 14.63537499999984,
+          "measured": true
+        }
+      ],
+      "ms": 14.63537499999984,
+      "request_bytes": 185,
+      "response_bytes": 296
+    },
+    {
+      "name": "tab-default",
+      "sample": 1,
+      "passed": false,
+      "visibility": "hidden",
+      "commands": [
+        {
+          "action": "press",
+          "request_bytes": 149,
+          "response_bytes": 248,
+          "ms": 7.221875000000182,
+          "measured": true
+        }
+      ],
+      "ms": 7.221875000000182,
+      "request_bytes": 149,
+      "response_bytes": 248
+    },
+    {
+      "name": "select-all",
+      "sample": 1,
+      "passed": false,
+      "visibility": "hidden",
+      "commands": [
+        {
+          "action": "press",
+          "request_bytes": 152,
+          "response_bytes": 251,
+          "ms": 4.166041000000405,
+          "measured": true
+        }
+      ],
+      "ms": 4.166041000000405,
+      "request_bytes": 152,
+      "response_bytes": 251
+    },
+    {
+      "name": "backspace-default",
+      "sample": 1,
+      "passed": false,
+      "visibility": "hidden",
+      "commands": [
+        {
+          "action": "press",
+          "request_bytes": 161,
+          "response_bytes": 260,
+          "ms": 3.265124999999898,
+          "measured": true
+        },
+        {
+          "action": "press",
+          "request_bytes": 155,
+          "response_bytes": 254,
+          "ms": 4.23279199999979,
+          "measured": true
+        }
+      ],
+      "ms": 7.497916999999688,
+      "request_bytes": 316,
+      "response_bytes": 514
+    },
+    {
+      "name": "held-shift",
+      "sample": 1,
+      "passed": false,
+      "visibility": "hidden",
+      "commands": [
+        {
+          "action": "key-down",
+          "request_bytes": 154,
+          "response_bytes": 256,
+          "ms": 3.604290999999648,
+          "measured": true
+        },
+        {
+          "action": "press",
+          "request_bytes": 156,
+          "response_bytes": 255,
+          "ms": 4.15166599999975,
+          "measured": true
+        },
+        {
+          "action": "key-up",
+          "request_bytes": 152,
+          "response_bytes": 252,
+          "ms": 4.179917000000387,
+          "measured": true
+        }
+      ],
+      "ms": 11.935873999999785,
+      "request_bytes": 462,
+      "response_bytes": 763
+    },
+    {
+      "name": "move-down-up-focus",
+      "sample": 1,
+      "passed": false,
+      "visibility": "hidden",
+      "commands": [
+        {
+          "action": "mouse-move",
+          "request_bytes": 158,
+          "response_bytes": 264,
+          "ms": 6.220833999999741,
+          "measured": true
+        },
+        {
+          "action": "mouse-down",
+          "request_bytes": 158,
+          "response_bytes": 262,
+          "ms": 5.106958999999733,
+          "measured": true
+        },
+        {
+          "action": "mouse-up",
+          "request_bytes": 156,
+          "response_bytes": 258,
+          "ms": 3.4669169999997393,
+          "measured": true
+        }
+      ],
+      "ms": 14.794709999999213,
+      "request_bytes": 472,
+      "response_bytes": 784
+    },
+    {
+      "name": "type-trusted",
+      "sample": 1,
+      "passed": false,
+      "visibility": "hidden",
+      "commands": [
+        {
+          "action": "type",
+          "request_bytes": 172,
+          "response_bytes": 267,
+          "ms": 4.780999999999949,
+          "measured": true
+        }
+      ],
+      "ms": 4.780999999999949,
+      "request_bytes": 172,
+      "response_bytes": 267
+    },
+    {
+      "name": "scroll-after-move",
+      "sample": 1,
+      "passed": true,
+      "visibility": "hidden",
+      "commands": [
+        {
+          "action": "mouse-move",
+          "request_bytes": 158,
+          "response_bytes": 264,
+          "ms": 4.955915999999888,
+          "measured": true
+        },
+        {
+          "action": "scroll",
+          "request_bytes": 154,
+          "response_bytes": 288,
+          "ms": 3.49212499999976,
+          "measured": true
+        }
+      ],
+      "ms": 8.448040999999648,
+      "request_bytes": 312,
+      "response_bytes": 552
+    },
+    {
+      "name": "mouse-focus",
+      "sample": 2,
+      "passed": false,
+      "visibility": "hidden",
+      "commands": [
+        {
+          "action": "mouse-click",
+          "request_bytes": 185,
+          "response_bytes": 296,
+          "ms": 14.793042000000241,
+          "measured": true
+        }
+      ],
+      "ms": 14.793042000000241,
+      "request_bytes": 185,
+      "response_bytes": 296
+    },
+    {
+      "name": "tab-default",
+      "sample": 2,
+      "passed": false,
+      "visibility": "hidden",
+      "commands": [
+        {
+          "action": "press",
+          "request_bytes": 149,
+          "response_bytes": 248,
+          "ms": 5.969291000000339,
+          "measured": true
+        }
+      ],
+      "ms": 5.969291000000339,
+      "request_bytes": 149,
+      "response_bytes": 248
+    },
+    {
+      "name": "select-all",
+      "sample": 2,
+      "passed": false,
+      "visibility": "hidden",
+      "commands": [
+        {
+          "action": "press",
+          "request_bytes": 152,
+          "response_bytes": 251,
+          "ms": 7.703540999999859,
+          "measured": true
+        }
+      ],
+      "ms": 7.703540999999859,
+      "request_bytes": 152,
+      "response_bytes": 251
+    },
+    {
+      "name": "backspace-default",
+      "sample": 2,
+      "passed": false,
+      "visibility": "hidden",
+      "commands": [
+        {
+          "action": "press",
+          "request_bytes": 161,
+          "response_bytes": 260,
+          "ms": 5.313874999999825,
+          "measured": true
+        },
+        {
+          "action": "press",
+          "request_bytes": 155,
+          "response_bytes": 254,
+          "ms": 5.006333999999697,
+          "measured": true
+        }
+      ],
+      "ms": 10.320208999999522,
+      "request_bytes": 316,
+      "response_bytes": 514
+    },
+    {
+      "name": "held-shift",
+      "sample": 2,
+      "passed": false,
+      "visibility": "hidden",
+      "commands": [
+        {
+          "action": "key-down",
+          "request_bytes": 154,
+          "response_bytes": 256,
+          "ms": 6.561208000000079,
+          "measured": true
+        },
+        {
+          "action": "press",
+          "request_bytes": 156,
+          "response_bytes": 255,
+          "ms": 4.2771670000001905,
+          "measured": true
+        },
+        {
+          "action": "key-up",
+          "request_bytes": 152,
+          "response_bytes": 252,
+          "ms": 5.406874999999673,
+          "measured": true
+        }
+      ],
+      "ms": 16.245249999999942,
+      "request_bytes": 462,
+      "response_bytes": 763
+    },
+    {
+      "name": "move-down-up-focus",
+      "sample": 2,
+      "passed": false,
+      "visibility": "hidden",
+      "commands": [
+        {
+          "action": "mouse-move",
+          "request_bytes": 158,
+          "response_bytes": 264,
+          "ms": 17.525041999999303,
+          "measured": true
+        },
+        {
+          "action": "mouse-down",
+          "request_bytes": 158,
+          "response_bytes": 262,
+          "ms": 7.878917000000001,
+          "measured": true
+        },
+        {
+          "action": "mouse-up",
+          "request_bytes": 156,
+          "response_bytes": 258,
+          "ms": 6.309249999999338,
+          "measured": true
+        }
+      ],
+      "ms": 31.713208999998642,
+      "request_bytes": 472,
+      "response_bytes": 784
+    },
+    {
+      "name": "type-trusted",
+      "sample": 2,
+      "passed": false,
+      "visibility": "hidden",
+      "commands": [
+        {
+          "action": "type",
+          "request_bytes": 172,
+          "response_bytes": 267,
+          "ms": 5.858374999999796,
+          "measured": true
+        }
+      ],
+      "ms": 5.858374999999796,
+      "request_bytes": 172,
+      "response_bytes": 267
+    },
+    {
+      "name": "scroll-after-move",
+      "sample": 2,
+      "passed": true,
+      "visibility": "hidden",
+      "commands": [
+        {
+          "action": "mouse-move",
+          "request_bytes": 158,
+          "response_bytes": 264,
+          "ms": 6.837625000000116,
+          "measured": true
+        },
+        {
+          "action": "scroll",
+          "request_bytes": 154,
+          "response_bytes": 288,
+          "ms": 4.916000000000167,
+          "measured": true
+        }
+      ],
+      "ms": 11.753625000000284,
+      "request_bytes": 312,
+      "response_bytes": 552
+    }
+  ],
+  "measurement": "Actual newline-terminated daemon request/response UTF-8 bytes. Setup and observation requests are reported separately; no model or real Agent tool calls/tokens are measured. No retries. CLI status/path discovery and final close are excluded from all_requests."
+}

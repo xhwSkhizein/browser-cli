@@ -22,6 +22,18 @@ const stateFor = tabId => {
 };
 export function forgetInputState(tabId) { states.delete(tabId); }
 
+// Chrome ignores default keyboard/mouse actions in an unfocused background page.
+export async function withInputFocus(tabId, action) {
+  await sendCommand(tabId,'Emulation.setFocusEmulationEnabled',{enabled:true});
+  let failed=false;
+  try { return await action(); }
+  catch(error) { failed=true; throw error; }
+  finally {
+    try { await chrome.debugger.sendCommand({tabId},'Emulation.setFocusEmulationEnabled',{enabled:false}); }
+    catch(error) { if(!failed) throw error; }
+  }
+}
+
 async function definition(key) {
   if (key==='ControlOrMeta') key=(await isMac()) ? 'Meta' : 'Control';
   const result=keys.get(key);
