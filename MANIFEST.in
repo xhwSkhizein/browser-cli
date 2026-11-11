@@ -1,6 +1,9 @@
 recursive-include skills *
 recursive-include node *.mjs *.json
 recursive-include browser-cli-extension *.js *.html *.css *.json
+include browser-cli-extension/PLAYWRIGHT-LICENSE.txt
+include browser-cli-extension/PLAYWRIGHT-NOTICE.txt
+recursive-include third_party/playwright *
 recursive-include tests *.py
 include docs/automation-api-zh.md
 include scripts/smoke_installed_wheel.py

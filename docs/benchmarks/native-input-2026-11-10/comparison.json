@@ -1,0 +1,44 @@
+{
+  "before": {
+    "passed": 3,
+    "total": 24,
+    "success_rate": 0.125,
+    "input_total_ms": 272.7762929999981,
+    "median_command_ms": 5.279270999999881,
+    "input_commands": {
+      "calls": 42,
+      "request_bytes": 6660,
+      "response_bytes": 11025
+    },
+    "all_requests": {
+      "calls": 96,
+      "request_bytes": 29512,
+      "response_bytes": 25766
+    }
+  },
+  "after": {
+    "passed": 24,
+    "total": 24,
+    "success_rate": 1.0,
+    "input_total_ms": 1453.7296219999998,
+    "median_command_ms": 22.30899999999974,
+    "input_commands": {
+      "calls": 42,
+      "request_bytes": 6660,
+      "response_bytes": 11025
+    },
+    "all_requests": {
+      "calls": 96,
+      "request_bytes": 29512,
+      "response_bytes": 25745
+    }
+  },
+  "harness_sha256": "c6634ed342a300b89aa80a87b7eece335176f0b08f4fccfa8af22109c965c910",
+  "same_harness": true,
+  "same_environment": true,
+  "input_wire_sizes_identical": true,
+  "post_input_hidden": true,
+  "model_tokens": null,
+  "agent_model_tool_calls": null,
+  "scope": "Live logged-in x.com, extension driver, 8 cases x 3 samples. Actual action round-trip time, no setup/waits/observation/cleanup time in input_total_ms. all_requests includes setup/observation through report creation, excludes CLI preflight and final close. No retries; this is a host script, not a model benchmark."
+}

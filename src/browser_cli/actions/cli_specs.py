@@ -647,8 +647,8 @@ def _add_scroll_arguments(parser: ArgumentParser) -> None:
 
 
 def _add_mouse_click_arguments(parser: ArgumentParser) -> None:
-    parser.add_argument("x", type=int, help="Viewport X coordinate.")
-    parser.add_argument("y", type=int, help="Viewport Y coordinate.")
+    parser.add_argument("x", type=int, help="Viewport X coordinate in CSS pixels.")
+    parser.add_argument("y", type=int, help="Viewport Y coordinate in CSS pixels.")
     parser.add_argument(
         "--button", default="left", choices=["left", "right", "middle"], help="Mouse button."
     )
@@ -656,15 +656,15 @@ def _add_mouse_click_arguments(parser: ArgumentParser) -> None:
 
 
 def _add_mouse_move_arguments(parser: ArgumentParser) -> None:
-    parser.add_argument("x", type=int, help="Viewport X coordinate.")
-    parser.add_argument("y", type=int, help="Viewport Y coordinate.")
+    parser.add_argument("x", type=int, help="Viewport X coordinate in CSS pixels.")
+    parser.add_argument("y", type=int, help="Viewport Y coordinate in CSS pixels.")
 
 
 def _add_mouse_drag_arguments(parser: ArgumentParser) -> None:
-    parser.add_argument("x1", type=int, help="Start X coordinate.")
-    parser.add_argument("y1", type=int, help="Start Y coordinate.")
-    parser.add_argument("x2", type=int, help="End X coordinate.")
-    parser.add_argument("y2", type=int, help="End Y coordinate.")
+    parser.add_argument("x1", type=int, help="Start X coordinate in CSS viewport pixels.")
+    parser.add_argument("y1", type=int, help="Start Y coordinate in CSS viewport pixels.")
+    parser.add_argument("x2", type=int, help="End X coordinate in CSS viewport pixels.")
+    parser.add_argument("y2", type=int, help="End Y coordinate in CSS viewport pixels.")
 
 
 def _add_mouse_button_arguments(parser: ArgumentParser) -> None:

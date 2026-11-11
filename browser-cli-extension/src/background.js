@@ -20,6 +20,7 @@ import { createTraceHandlers } from './background/trace_actions.js';
 import { createVideoHandlers } from './background/video_actions.js';
 import { createWorkspaceHandlers } from './background/workspace.js';
 import { createWorkspaceBinding } from './background/workspace_binding.js';
+import {forgetInputState} from './native_input.js';
 import {assertRuntimeApis, createRuntimeRecovery, queryRuntimeTabs} from './runtime_health.js';
 
 const RECONNECT_ALARM = 'browser-cli-bridge-reconnect';
@@ -362,6 +363,7 @@ function pageIdForTab(tabId) {
 
 /** Drop a removed tab's in-memory resources and persist cleanup in mutation order. */
 async function untrackTab(tabId) {
+  forgetInputState(tabId);
   const wasManaged = state.managedTabIds.has(tabId);
   state.managedTabIds.delete(tabId);
   if (state.bootstrapTabId === tabId) state.bootstrapTabId = null;
@@ -518,5 +520,5 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   return false;
 });
 
-registerDebuggerListeners();
+registerDebuggerListeners(forgetInputState);
 void connect();

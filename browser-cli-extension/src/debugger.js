@@ -957,8 +957,9 @@ export async function handleJavascriptDialog(tabId, { accept = true, promptText 
   });
 }
 
-export function registerDebuggerListeners() {
+export function registerDebuggerListeners(onInputReset = () => {}) {
   chrome.tabs.onRemoved.addListener((tabId) => {
+    onInputReset(tabId);
     void stopScreencastRendering(tabId);
     attached.delete(tabId);
     viewportOverrides.delete(tabId);
@@ -972,6 +973,7 @@ export function registerDebuggerListeners() {
   });
   chrome.debugger.onDetach.addListener((source) => {
     if (source.tabId) {
+      onInputReset(source.tabId);
       void stopScreencastRendering(source.tabId);
       attached.delete(source.tabId);
       viewportOverrides.delete(source.tabId);
